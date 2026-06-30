@@ -3,7 +3,7 @@ from __future__ import annotations
 import ast
 import sys
 
-from engines.base import BaseEngine, EngineFinding
+from engines.base import BaseEngine, EngineDiagnostic, EngineFinding
 from engines.decomposition_engine import DecompositionEngine
 
 
@@ -74,6 +74,14 @@ class HazardsEngine(BaseEngine):
                         summary="Global mutation hazard",
                         details="Global statements increase coupling across generated paths.",
                         metrics={"global_names": [global_name]},
+                        diagnostic=EngineDiagnostic(
+                            violation="GLOBAL_MUTATION",
+                            actual=global_name,
+                            location="global statement",
+                            recommended_refactor=(
+                                "Remove the global statement and pass state through explicit function arguments or return values."
+                            ),
+                        ),
                 )
             )
 
@@ -86,6 +94,15 @@ class HazardsEngine(BaseEngine):
                     summary="External dependency usage",
                     details="Generated Python source imports modules outside the standard library allowlist.",
                     metrics={"imports": external_imports},
+                    diagnostic=EngineDiagnostic(
+                        violation="EXTERNAL_DEPENDENCY",
+                        threshold="standard library only",
+                        actual=", ".join(external_imports),
+                        location="import statement",
+                        recommended_refactor=(
+                            "Remove third-party imports and implement the required behavior with standard-library modules or local helpers."
+                        ),
+                    ),
                 )
             )
 
@@ -97,6 +114,14 @@ class HazardsEngine(BaseEngine):
                     summary="Module-level container mutation hazard",
                     details="Module-scope containers are being mutated through method calls.",
                     metrics={"container_names": sorted(container_mutations)},
+                    diagnostic=EngineDiagnostic(
+                        violation="MODULE_STATE_MUTATION",
+                        actual=", ".join(sorted(container_mutations)),
+                        location="module-level container method call",
+                        recommended_refactor=(
+                            "Move mutable state into local scope, pass it as an explicit argument, or return a new value instead of mutating module state."
+                        ),
+                    ),
                 )
             )
         if subscript_mutations:
@@ -107,6 +132,14 @@ class HazardsEngine(BaseEngine):
                     summary="Module-level subscript mutation hazard",
                     details="Module-scope containers are being mutated through indexed assignment.",
                     metrics={"container_names": sorted(subscript_mutations)},
+                    diagnostic=EngineDiagnostic(
+                        violation="MODULE_STATE_MUTATION",
+                        actual=", ".join(sorted(subscript_mutations)),
+                        location="module-level subscript assignment",
+                        recommended_refactor=(
+                            "Replace indexed mutation of module state with local data construction and explicit return values."
+                        ),
+                    ),
                 )
             )
         if findings:

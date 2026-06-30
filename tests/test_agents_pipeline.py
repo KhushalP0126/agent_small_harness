@@ -176,6 +176,25 @@ class RepairStrategyTests(unittest.TestCase):
         self.assertNotIn("snake", instructions.lower())
         self.assertNotIn("calculate_new_head", instructions)
 
+    def test_repair_strategy_consumes_engine_diagnostic_refactor(self) -> None:
+        violation = Violation(
+            kind="cyclomatic_complexity",
+            engine="engine-3-branching",
+            severity="High",
+            summary="Cyclomatic complexity 8",
+            rationale="too many paths",
+            current_value="8",
+            allowed_value="<= 7",
+            repair_hint="split_function",
+            evidence={
+                "diagnostic": {
+                    "recommended_refactor": "Extract branch-heavy decisions into helper functions.",
+                }
+            },
+        )
+        decision = RepairStrategyAgent().decide("def analyze(x):\n    return x\n", violations=[violation])
+        self.assertIn("Extract branch-heavy decisions", "\n".join(decision.repair_instructions))
+
 
 class BehaviorSpecTests(unittest.TestCase):
     def test_for_source_maps_scoring_matrix(self) -> None:
@@ -296,6 +315,7 @@ class ControllerIntegrationTests(unittest.TestCase):
         def repair_supplier(_draft: str, retry_prompt: str) -> str:
             self.assertIn("TARGETED REPAIR INSTRUCTIONS:", retry_prompt)
             self.assertIn("standard-library", retry_prompt)
+            self.assertIn("Remove third-party imports", retry_prompt)
             self.assertNotIn("snake", retry_prompt.lower())
             return repaired_source
 

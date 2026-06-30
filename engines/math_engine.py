@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import ast
 
-from engines.base import BaseEngine, EngineFinding
+from engines.base import BaseEngine, EngineDiagnostic, EngineFinding
 from engines.decomposition_engine import DecompositionEngine
 
 
@@ -18,6 +18,17 @@ class MathEngine(BaseEngine):
             "max_loop_depth": max_depth,
             "loop_types": deepest_loop_types,
         }
+        diagnostic = EngineDiagnostic(
+            violation="LOOP_DEPTH_EXCEEDED" if max_depth > 2 else "",
+            threshold="<= 2",
+            actual=str(max_depth),
+            location=f"line {deepest_loop.line}" if deepest_loop else "",
+            recommended_refactor=(
+                "Extract inner-loop work into helper functions or precompute lookup structures to keep nesting at depth 2 or less."
+                if max_depth > 2
+                else ""
+            ),
+        )
         if max_depth >= 3:
             severity = "High"
         elif max_depth == 2:
@@ -36,6 +47,7 @@ class MathEngine(BaseEngine):
                         "structure can be flattened or precomputed."
                     ),
                     metrics=metrics,
+                    diagnostic=diagnostic,
                 )
             ]
         return [
@@ -45,5 +57,6 @@ class MathEngine(BaseEngine):
                 summary=f"Loop nesting depth {max_depth} detected",
                 details="Control flow is compatible with linear benchmarking assumptions.",
                 metrics=metrics,
+                diagnostic=diagnostic,
             )
         ]

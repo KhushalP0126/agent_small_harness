@@ -38,6 +38,12 @@ def _behavior_issue_count(behavior_issues: Iterable[Any]) -> int:
     return sum(1 for _issue in behavior_issues or [])
 
 
+def _diagnostic_refactor(violation: Any) -> str:
+    evidence = violation.get("evidence", {}) if isinstance(violation, dict) else getattr(violation, "evidence", {})
+    diagnostic = evidence.get("diagnostic", {}) if isinstance(evidence, dict) else {}
+    return diagnostic.get("recommended_refactor", "") if isinstance(diagnostic, dict) else ""
+
+
 class RepairStrategyAgent:
     """Decides how to repair a draft.
 
@@ -73,6 +79,10 @@ class RepairStrategyAgent:
         """Translate policy failures into concrete, task-agnostic repair instructions."""
         kinds = _violation_kinds(violations or [])
         instructions: list[str] = []
+        for violation in violations or []:
+            refactor = _diagnostic_refactor(violation)
+            if refactor:
+                instructions.append(f"REPAIR_INSTRUCTION: {refactor}")
         if "parse_error" in kinds:
             instructions.append(
                 f"REPAIR_INSTRUCTION: Return syntactically valid {language} source only. Remove markdown fences, prose, partial code, and unresolved placeholders."

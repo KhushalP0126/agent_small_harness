@@ -79,6 +79,55 @@ class BenchmarkerTests(unittest.TestCase):
         self.assertEqual(finding.metrics["cyclomatic_complexity"], 6)
         self.assertEqual(finding.metrics["risk_level"], "medium")
 
+    def test_branching_boundary_at_policy_limit_passes(self) -> None:
+        source = """
+def analyze(value):
+    if value == 0:
+        return 0
+    if value == 1:
+        return 1
+    if value == 2:
+        return 2
+    if value == 3:
+        return 3
+    if value == 4:
+        return 4
+    if value == 5:
+        return 5
+    return 6
+"""
+        finding = BranchingEngine().scan(source)[0]
+        result = validate_findings([finding], policy={"max_cyclomatic_complexity": 7})
+        self.assertEqual(finding.metrics["cyclomatic_complexity"], 7)
+        self.assertTrue(result.is_compliant)
+
+    def test_branching_boundary_above_policy_limit_reports_diagnostic(self) -> None:
+        source = """
+def analyze(value):
+    if value == 0:
+        return 0
+    if value == 1:
+        return 1
+    if value == 2:
+        return 2
+    if value == 3:
+        return 3
+    if value == 4:
+        return 4
+    if value == 5:
+        return 5
+    if value == 6:
+        return 6
+    return 7
+"""
+        finding = BranchingEngine().scan(source)[0]
+        result = validate_findings([finding], policy={"max_cyclomatic_complexity": 7})
+        self.assertEqual(finding.metrics["cyclomatic_complexity"], 8)
+        self.assertFalse(result.is_compliant)
+        diagnostic = result.violations[0].evidence["diagnostic"]
+        self.assertEqual(diagnostic["violation"], "CYCLOMATIC_COMPLEXITY_EXCEEDED")
+        self.assertIn("lookup tables", diagnostic["recommended_refactor"])
+
     def test_decomposition_engine_extracts_shared_ir(self) -> None:
         source = (ROOT / "data" / "snippets" / "mixed_hard_case.py").read_text(encoding="utf-8")
         ir = DecompositionEngine().decompose(source)

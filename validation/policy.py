@@ -15,6 +15,13 @@ DEFAULT_POLICY = {
 }
 
 
+def _evidence(finding: EngineFinding) -> dict:
+    return {
+        "metrics": finding.metrics,
+        "diagnostic": asdict(finding.diagnostic),
+    }
+
+
 def validate_findings(
     findings: list[EngineFinding],
     policy: dict | None = None,
@@ -37,7 +44,8 @@ def validate_findings(
                         current_value=str(max_depth),
                         allowed_value=f"<= {policy['max_loop_depth']}",
                         repair_hint="reduce_nesting",
-                        evidence={"metrics": metrics},
+                        location=finding.diagnostic.location,
+                        evidence=_evidence(finding),
                     )
                 )
         elif finding.engine == "engine-3-branching":
@@ -53,7 +61,8 @@ def validate_findings(
                         current_value=str(complexity),
                         allowed_value=f"<= {policy['max_cyclomatic_complexity']}",
                         repair_hint="split_function",
-                        evidence={"metrics": metrics},
+                        location=finding.diagnostic.location,
+                        evidence=_evidence(finding),
                     )
                 )
         elif finding.engine == "engine-2-hazards":
@@ -68,7 +77,8 @@ def validate_findings(
                         current_value=", ".join(metrics.get("global_names", [])) or "global state",
                         allowed_value="no explicit globals",
                         repair_hint="remove_global_access",
-                        evidence={"metrics": metrics},
+                        location=finding.diagnostic.location,
+                        evidence=_evidence(finding),
                     )
                 )
             elif finding.summary in {
@@ -85,7 +95,8 @@ def validate_findings(
                         current_value=", ".join(metrics.get("container_names", [])) or "module state",
                         allowed_value="no module-level container mutation",
                         repair_hint="pass_state_as_argument",
-                        evidence={"metrics": metrics},
+                        location=finding.diagnostic.location,
+                        evidence=_evidence(finding),
                     )
                 )
             elif finding.summary == "Unsafe API usage" and not policy["allow_unsafe_calls"]:
@@ -99,7 +110,8 @@ def validate_findings(
                         current_value=", ".join(metrics.get("unsafe_calls", [])) or "unsafe call",
                         allowed_value="no unsafe API calls",
                         repair_hint="remove_unsafe_call",
-                        evidence={"metrics": metrics},
+                        location=finding.diagnostic.location,
+                        evidence=_evidence(finding),
                     )
                 )
             elif finding.summary == "External dependency usage" and not policy["allow_external_dependencies"]:
@@ -113,7 +125,8 @@ def validate_findings(
                         current_value=", ".join(metrics.get("imports", [])) or "external dependency",
                         allowed_value="standard library imports only",
                         repair_hint="use_standard_library",
-                        evidence={"metrics": metrics},
+                        location=finding.diagnostic.location,
+                        evidence=_evidence(finding),
                     )
                 )
         elif finding.engine == "engine-parse-contract":
@@ -127,7 +140,8 @@ def validate_findings(
                     current_value=f"line {metrics.get('line', 0)}",
                     allowed_value="valid Python syntax",
                     repair_hint="return_valid_python",
-                    evidence={"metrics": metrics},
+                    location=finding.diagnostic.location,
+                    evidence=_evidence(finding),
                 )
             )
 

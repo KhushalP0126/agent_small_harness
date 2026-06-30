@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import ast
 
-from engines.base import BaseEngine, EngineFinding
+from engines.base import BaseEngine, EngineDiagnostic, EngineFinding
 from engines.decomposition_engine import DecompositionEngine
 
 
@@ -35,6 +35,17 @@ class BranchingEngine(BaseEngine):
         else:
             severity = "Low"
             risk_level = "low"
+        diagnostic = EngineDiagnostic(
+            violation="CYCLOMATIC_COMPLEXITY_EXCEEDED" if complexity > 7 else "",
+            threshold="<= 7",
+            actual=str(complexity),
+            location=f"{branch_count} conditional branches",
+            recommended_refactor=(
+                "Extract branch-heavy decisions into small helper functions and replace repeated if/elif chains with lookup tables or guard clauses."
+                if complexity > 7
+                else ""
+            ),
+        )
         return [
             EngineFinding(
                 engine=self.name,
@@ -46,5 +57,6 @@ class BranchingEngine(BaseEngine):
                     "conditional_branch_count": branch_count,
                     "risk_level": risk_level,
                 },
+                diagnostic=diagnostic,
             )
         ]
