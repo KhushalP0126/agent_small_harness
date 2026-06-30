@@ -1,0 +1,29 @@
+{
+  "specs": {
+    "scoring_matrix": {
+      "function_name": "analyze",
+      "cases": [
+        {
+          "name": "empty matrix",
+          "args": [[]],
+          "expected": 0
+        },
+        {
+          "name": "skips empty rows",
+          "args": [[[], []]],
+          "expected": 0
+        },
+        {
+          "name": "covers all value classes",
+          "args": [[[], [-1, 0, 4, 10, 99, 100]]],
+          "expected": 19
+        },
+        {
+          "name": "mixed rows",
+          "args": [[[1, 2, 3], [10, 0, -5]]],
+          "expected": 16
+        }
+      ]
+    }
+  }
+}

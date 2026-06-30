@@ -1,0 +1,174 @@
+from __future__ import annotations
+
+import ast
+from copy import deepcopy
+from dataclasses import asdict, dataclass, field
+from typing import Any
+
+
+BLOCKED_CALL_NAMES = {"__import__", "compile", "eval", "exec", "input", "open"}
+BLOCKED_NODES = (ast.AsyncFunctionDef, ast.AsyncFor, ast.AsyncWith, ast.ClassDef, ast.Import, ast.ImportFrom)
+SAFE_BUILTINS = {
+    "abs": abs,
+    "all": all,
+    "any": any,
+    "bool": bool,
+    "dict": dict,
+    "enumerate": enumerate,
+    "float": float,
+    "int": int,
+    "len": len,
+    "list": list,
+    "max": max,
+    "min": min,
+    "range": range,
+    "set": set,
+    "sum": sum,
+    "tuple": tuple,
+}
+
+
+@dataclass(frozen=True)
+class BehaviorCase:
+    name: str
+    args: tuple[Any, ...]
+    expected: Any
+    kwargs: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class FunctionBehaviorSpec:
+    function_name: str
+    cases: list[BehaviorCase]
+
+
+@dataclass
+class BehaviorIssue:
+    case: str
+    expected: str
+    actual: str
+    details: str
+
+
+@dataclass
+class BehaviorResult:
+    is_compliant: bool
+    issues: list[BehaviorIssue] = field(default_factory=list)
+
+
+def format_behavior_spec(spec: FunctionBehaviorSpec) -> str:
+    lines = [
+        "Behavioral Unit Test Specification:",
+        f"- Function under test: {spec.function_name}",
+    ]
+    for case in spec.cases:
+        args = ", ".join(repr(arg) for arg in case.args)
+        kwargs = ", ".join(f"{key}={value!r}" for key, value in case.kwargs.items())
+        call_args = ", ".join(item for item in [args, kwargs] if item)
+        lines.append(f"- {spec.function_name}({call_args}) == {case.expected!r}  # {case.name}")
+    return "\n".join(lines)
+
+
+def serialize_behavior_result(result: BehaviorResult) -> dict[str, Any]:
+    return {
+        "is_compliant": result.is_compliant,
+        "issues": [asdict(issue) for issue in result.issues],
+    }
+
+
+def mixed_hard_case_spec() -> FunctionBehaviorSpec:
+    return FunctionBehaviorSpec(
+        function_name="analyze",
+        cases=[
+            BehaviorCase(name="empty matrix", args=([],), expected=0),
+            BehaviorCase(name="skips empty rows", args=([[], []],), expected=0),
+            BehaviorCase(name="covers all value classes", args=([[], [-1, 0, 4, 10, 99, 100]],), expected=19),
+            BehaviorCase(name="mixed rows", args=([[1, 2, 3], [10, 0, -5]],), expected=16),
+        ],
+    )
+
+
+def validate_function_behavior(source: str, spec: FunctionBehaviorSpec) -> BehaviorResult:
+    issues: list[BehaviorIssue] = []
+    try:
+        tree = ast.parse(source)
+        _validate_runtime_ast(tree)
+        tree = _strip_annotations(tree)
+        namespace: dict[str, Any] = {"__builtins__": SAFE_BUILTINS, "__name__": "__behavior_check__"}
+        exec(compile(tree, "<behavior-check>", "exec"), namespace)
+    except Exception as exc:
+        return BehaviorResult(
+            is_compliant=False,
+            issues=[
+                BehaviorIssue(
+                    case="load",
+                    expected="valid executable Python",
+                    actual=exc.__class__.__name__,
+                    details=str(exc),
+                )
+            ],
+        )
+
+    candidate = namespace.get(spec.function_name)
+    if not callable(candidate):
+        return BehaviorResult(
+            is_compliant=False,
+            issues=[
+                BehaviorIssue(
+                    case="function lookup",
+                    expected=f"callable {spec.function_name}",
+                    actual=type(candidate).__name__,
+                    details=f"Generated code did not define {spec.function_name}.",
+                )
+            ],
+        )
+
+    for case in spec.cases:
+        try:
+            actual = candidate(*deepcopy(case.args), **deepcopy(case.kwargs))
+        except Exception as exc:
+            issues.append(
+                BehaviorIssue(
+                    case=case.name,
+                    expected=repr(case.expected),
+                    actual=exc.__class__.__name__,
+                    details=str(exc),
+                )
+            )
+            continue
+        if actual != case.expected:
+            issues.append(
+                BehaviorIssue(
+                    case=case.name,
+                    expected=repr(case.expected),
+                    actual=repr(actual),
+                    details="Return value did not match the behavior spec.",
+                )
+            )
+
+    return BehaviorResult(is_compliant=not issues, issues=issues)
+
+
+def _validate_runtime_ast(tree: ast.AST) -> None:
+    for node in ast.walk(tree):
+        if isinstance(node, BLOCKED_NODES):
+            raise ValueError(f"Unsupported runtime node: {node.__class__.__name__}")
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            if node.func.id in BLOCKED_CALL_NAMES:
+                raise ValueError(f"Blocked call: {node.func.id}")
+
+
+def _strip_annotations(tree: ast.AST) -> ast.AST:
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.Lambda)):
+            node.returns = None
+            for arg in [*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs]:
+                arg.annotation = None
+            if node.args.vararg:
+                node.args.vararg.annotation = None
+            if node.args.kwarg:
+                node.args.kwarg.annotation = None
+        elif isinstance(node, ast.AnnAssign):
+            node.annotation = ast.Constant(value=None)
+    ast.fix_missing_locations(tree)
+    return tree

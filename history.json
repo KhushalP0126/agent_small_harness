@@ -1,0 +1,1253 @@
+{
+  "schema_version": "1.0",
+  "lessons_learned": [
+    {
+      "id": "seed-linear-scan",
+      "gen_id": "day1-bootstrap",
+      "category": "performance",
+      "pattern": "Linear traversal for bounded single-pass work",
+      "lesson": "Prefer single-pass iteration and benchmark scaling before introducing abstraction.",
+      "applies_to": [
+        "benchmarker",
+        "math-engine"
+      ],
+      "created_at": "2026-06-24T00:00:00Z",
+      "success_count": 1
+    }
+  ],
+  "generations": [
+    {
+      "gen_id": "day1-bootstrap",
+      "goal": "Setup engines directory and verify linear growth rate.",
+      "benchmark": {
+        "function_name": "linear_scan",
+        "classification": "linear",
+        "relative_spread": 0.0812636742000779,
+        "samples": [
+          {
+            "size": 2000,
+            "seconds": 4.8959002015180886e-05
+          },
+          {
+            "size": 4000,
+            "seconds": 9.349999891128391e-05
+          },
+          {
+            "size": 8000,
+            "seconds": 0.00019629199960036203
+          },
+          {
+            "size": 16000,
+            "seconds": 0.0004290830038371496
+          }
+        ]
+      },
+      "engine_findings": [
+        {
+          "engine": "engine-1-math",
+          "severity": "Low",
+          "summary": "No nested loop growth detected",
+          "details": "Control flow is compatible with linear benchmarking assumptions."
+        },
+        {
+          "engine": "engine-2-hazards",
+          "severity": "Low",
+          "summary": "No global mutation hazard detected",
+          "details": "Generated source does not declare global variables."
+        },
+        {
+          "engine": "engine-3-branching",
+          "severity": "Low",
+          "summary": "1 conditional branches detected",
+          "details": "High branch density can hide complexity drift and prediction costs."
+        }
+      ]
+    },
+    {
+      "gen_id": "day1-bootstrap",
+      "goal": "Setup engines directory and verify linear growth rate.",
+      "benchmark": {
+        "function_name": "linear_scan",
+        "classification": "linear",
+        "relative_spread": 0.011180555836338552,
+        "samples": [
+          {
+            "size": 2000,
+            "seconds": 4.604199784807861e-05
+          },
+          {
+            "size": 4000,
+            "seconds": 9.387500176671892e-05
+          },
+          {
+            "size": 8000,
+            "seconds": 0.0001862920034909621
+          },
+          {
+            "size": 16000,
+            "seconds": 0.00037358299596235156
+          }
+        ]
+      },
+      "engine_findings": [
+        {
+          "engine": "engine-1-math",
+          "severity": "Low",
+          "summary": "No nested loop growth detected",
+          "details": "Control flow is compatible with linear benchmarking assumptions."
+        },
+        {
+          "engine": "engine-2-hazards",
+          "severity": "Low",
+          "summary": "No global mutation hazard detected",
+          "details": "Generated source does not declare global variables."
+        },
+        {
+          "engine": "engine-3-branching",
+          "severity": "Low",
+          "summary": "1 conditional branches detected",
+          "details": "High branch density can hide complexity drift and prediction costs."
+        }
+      ]
+    },
+    {
+      "gen_id": "day1-bootstrap",
+      "goal": "Setup engines directory and verify linear growth rate.",
+      "benchmark": {
+        "function_name": "linear_scan",
+        "classification": "linear",
+        "relative_spread": 0.15660036286588713,
+        "samples": [
+          {
+            "size": 2000,
+            "seconds": 5.3499999921768904e-05
+          },
+          {
+            "size": 4000,
+            "seconds": 0.00010795799607876688
+          },
+          {
+            "size": 8000,
+            "seconds": 0.0002740419949986972
+          },
+          {
+            "size": 16000,
+            "seconds": 0.0004875840022577904
+          }
+        ]
+      },
+      "engine_findings": [
+        {
+          "engine": "engine-1-math",
+          "severity": "Low",
+          "summary": "Loop nesting depth 1 detected",
+          "details": "Control flow is compatible with linear benchmarking assumptions.",
+          "metrics": {
+            "max_loop_depth": 1,
+            "loop_types": [
+              "for"
+            ]
+          }
+        },
+        {
+          "engine": "engine-2-hazards",
+          "severity": "Low",
+          "summary": "No global mutation hazard detected",
+          "details": "Generated source does not declare global variables.",
+          "metrics": {
+            "module_state_names": []
+          }
+        },
+        {
+          "engine": "engine-3-branching",
+          "severity": "High",
+          "summary": "Cyclomatic complexity 12 with 1 conditional branches",
+          "details": "Decision density estimates how many independent paths the code exposes.",
+          "metrics": {
+            "cyclomatic_complexity": 12,
+            "conditional_branch_count": 1,
+            "risk_level": "high"
+          }
+        }
+      ],
+      "engine_evaluation": {
+        "engine_scores": [
+          {
+            "engine": "engine-1-math",
+            "cases_run": 5,
+            "cases_matched": 5,
+            "total_findings": 7,
+            "weighted_severity": 18,
+            "recall": 1.0
+          },
+          {
+            "engine": "engine-2-hazards",
+            "cases_run": 5,
+            "cases_matched": 5,
+            "total_findings": 8,
+            "weighted_severity": 36,
+            "recall": 1.0
+          },
+          {
+            "engine": "engine-3-branching",
+            "cases_run": 5,
+            "cases_matched": 5,
+            "total_findings": 7,
+            "weighted_severity": 23,
+            "recall": 1.0
+          }
+        ],
+        "case_results": [
+          {
+            "case": "linear-safe-function",
+            "path": "/Users/khushalpandala/khush_fun/agent-coder_structure/data/snippets/linear_safe.py",
+            "engines": [
+              {
+                "engine": "engine-1-math",
+                "matched_expectation": true,
+                "expected_summaries": [
+                  "Loop nesting depth 1 detected"
+                ],
+                "findings": [
+                  {
+                    "engine": "engine-1-math",
+                    "severity": "Low",
+                    "summary": "Loop nesting depth 1 detected",
+                    "details": "Control flow is compatible with linear benchmarking assumptions.",
+                    "metrics": {
+                      "max_loop_depth": 1,
+                      "loop_types": [
+                        "for"
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "engine": "engine-2-hazards",
+                "matched_expectation": true,
+                "expected_summaries": [
+                  "No global mutation hazard detected"
+                ],
+                "findings": [
+                  {
+                    "engine": "engine-2-hazards",
+                    "severity": "Low",
+                    "summary": "No global mutation hazard detected",
+                    "details": "Generated source does not declare global variables.",
+                    "metrics": {
+                      "module_state_names": []
+                    }
+                  }
+                ]
+              },
+              {
+                "engine": "engine-3-branching",
+                "matched_expectation": true,
+                "expected_summaries": [
+                  "Cyclomatic complexity 2 with 0 conditional branches"
+                ],
+                "findings": [
+                  {
+                    "engine": "engine-3-branching",
+                    "severity": "Low",
+                    "summary": "Cyclomatic complexity 2 with 0 conditional branches",
+                    "details": "Decision density estimates how many independent paths the code exposes.",
+                    "metrics": {
+                      "cyclomatic_complexity": 2,
+                      "conditional_branch_count": 0,
+                      "risk_level": "low"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "case": "nested-loop-function",
+            "path": "/Users/khushalpandala/khush_fun/agent-coder_structure/data/snippets/nested_loop.py",
+            "engines": [
+              {
+                "engine": "engine-1-math",
+                "matched_expectation": true,
+                "expected_summaries": [
+                  "Loop nesting depth 2 detected"
+                ],
+                "findings": [
+                  {
+                    "engine": "engine-1-math",
+                    "severity": "Medium",
+                    "summary": "Loop nesting depth 2 detected",
+                    "details": "Nested iteration increases growth risk. Review whether the loop structure can be flattened or precomputed.",
+                    "metrics": {
+                      "max_loop_depth": 2,
+                      "loop_types": [
+                        "for",
+                        "for"
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "engine": "engine-2-hazards",
+                "matched_expectation": true,
+                "expected_summaries": [],
+                "findings": [
+                  {
+                    "engine": "engine-2-hazards",
+                    "severity": "Low",
+                    "summary": "No global mutation hazard detected",
+                    "details": "Generated source does not declare global variables.",
+                    "metrics": {
+                      "module_state_names": []
+                    }
+                  }
+                ]
+              },
+              {
+                "engine": "engine-3-branching",
+                "matched_expectation": true,
+                "expected_summaries": [],
+                "findings": [
+                  {
+                    "engine": "engine-3-branching",
+                    "severity": "Low",
+                    "summary": "Cyclomatic complexity 3 with 0 conditional branches",
+                    "details": "Decision density estimates how many independent paths the code exposes.",
+                    "metrics": {
+                      "cyclomatic_complexity": 3,
+                      "conditional_branch_count": 0,
+                      "risk_level": "low"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "case": "global-and-branch-heavy",
+            "path": "/Users/khushalpandala/khush_fun/agent-coder_structure/data/snippets/global_and_branch_heavy.py",
+            "engines": [
+              {
+                "engine": "engine-1-math",
+                "matched_expectation": true,
+                "expected_summaries": [],
+                "findings": [
+                  {
+                    "engine": "engine-1-math",
+                    "severity": "Low",
+                    "summary": "Loop nesting depth 1 detected",
+                    "details": "Control flow is compatible with linear benchmarking assumptions.",
+                    "metrics": {
+                      "max_loop_depth": 1,
+                      "loop_types": [
+                        "for"
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "engine": "engine-2-hazards",
+                "matched_expectation": true,
+                "expected_summaries": [
+                  "Global mutation hazard"
+                ],
+                "findings": [
+                  {
+                    "engine": "engine-2-hazards",
+                    "severity": "High",
+                    "summary": "Global mutation hazard",
+                    "details": "Global statements increase coupling across generated paths.",
+                    "metrics": {
+                      "global_names": [
+                        "STATE"
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "engine": "engine-3-branching",
+                "matched_expectation": true,
+                "expected_summaries": [
+                  "Cyclomatic complexity 8 with 6 conditional branches"
+                ],
+                "findings": [
+                  {
+                    "engine": "engine-3-branching",
+                    "severity": "High",
+                    "summary": "Cyclomatic complexity 8 with 6 conditional branches",
+                    "details": "Decision density estimates how many independent paths the code exposes.",
+                    "metrics": {
+                      "cyclomatic_complexity": 8,
+                      "conditional_branch_count": 6,
+                      "risk_level": "high"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "case": "branchy-but-safe",
+            "path": "/Users/khushalpandala/khush_fun/agent-coder_structure/data/snippets/branchy_but_safe.py",
+            "engines": [
+              {
+                "engine": "engine-1-math",
+                "matched_expectation": true,
+                "expected_summaries": [
+                  "Loop nesting depth 1 detected"
+                ],
+                "findings": [
+                  {
+                    "engine": "engine-1-math",
+                    "severity": "Low",
+                    "summary": "Loop nesting depth 1 detected",
+                    "details": "Control flow is compatible with linear benchmarking assumptions.",
+                    "metrics": {
+                      "max_loop_depth": 1,
+                      "loop_types": [
+                        "for"
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "engine": "engine-2-hazards",
+                "matched_expectation": true,
+                "expected_summaries": [
+                  "No global mutation hazard detected"
+                ],
+                "findings": [
+                  {
+                    "engine": "engine-2-hazards",
+                    "severity": "Low",
+                    "summary": "No global mutation hazard detected",
+                    "details": "Generated source does not declare global variables.",
+                    "metrics": {
+                      "module_state_names": []
+                    }
+                  }
+                ]
+              },
+              {
+                "engine": "engine-3-branching",
+                "matched_expectation": true,
+                "expected_summaries": [
+                  "Cyclomatic complexity 6 with 4 conditional branches"
+                ],
+                "findings": [
+                  {
+                    "engine": "engine-3-branching",
+                    "severity": "Medium",
+                    "summary": "Cyclomatic complexity 6 with 4 conditional branches",
+                    "details": "Decision density estimates how many independent paths the code exposes.",
+                    "metrics": {
+                      "cyclomatic_complexity": 6,
+                      "conditional_branch_count": 4,
+                      "risk_level": "medium"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "case": "triple-nested",
+            "path": "/Users/khushalpandala/khush_fun/agent-coder_structure/data/snippets/triple_nested.py",
+            "engines": [
+              {
+                "engine": "engine-1-math",
+                "matched_expectation": true,
+                "expected_summaries": [
+                  "Loop nesting depth 3 detected"
+                ],
+                "findings": [
+                  {
+                    "engine": "engine-1-math",
+                    "severity": "High",
+                    "summary": "Loop nesting depth 3 detected",
+                    "details": "Nested iteration increases growth risk. Review whether the loop structure can be flattened or precomputed.",
+                    "metrics": {
+                      "max_loop_depth": 3,
+                      "loop_types": [
+                        "for",
+                        "for",
+                        "for"
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "engine": "engine-2-hazards",
+                "matched_expectation": true,
+                "expected_summaries": [],
+                "findings": [
+                  {
+                    "engine": "engine-2-hazards",
+                    "severity": "Low",
+                    "summary": "No global mutation hazard detected",
+                    "details": "Generated source does not declare global variables.",
+                    "metrics": {
+                      "module_state_names": []
+                    }
+                  }
+                ]
+              },
+              {
+                "engine": "engine-3-branching",
+                "matched_expectation": true,
+                "expected_summaries": [],
+                "findings": [
+                  {
+                    "engine": "engine-3-branching",
+                    "severity": "Low",
+                    "summary": "Cyclomatic complexity 4 with 0 conditional branches",
+                    "details": "Decision density estimates how many independent paths the code exposes.",
+                    "metrics": {
+                      "cyclomatic_complexity": 4,
+                      "conditional_branch_count": 0,
+                      "risk_level": "low"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "case": "global-in-helper",
+            "path": "/Users/khushalpandala/khush_fun/agent-coder_structure/data/snippets/global_in_helper.py",
+            "engines": [
+              {
+                "engine": "engine-1-math",
+                "matched_expectation": true,
+                "expected_summaries": [],
+                "findings": [
+                  {
+                    "engine": "engine-1-math",
+                    "severity": "Low",
+                    "summary": "Loop nesting depth 1 detected",
+                    "details": "Control flow is compatible with linear benchmarking assumptions.",
+                    "metrics": {
+                      "max_loop_depth": 1,
+                      "loop_types": [
+                        "for"
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "engine": "engine-2-hazards",
+                "matched_expectation": true,
+                "expected_summaries": [
+                  "Global mutation hazard"
+                ],
+                "findings": [
+                  {
+                    "engine": "engine-2-hazards",
+                    "severity": "High",
+                    "summary": "Global mutation hazard",
+                    "details": "Global statements increase coupling across generated paths.",
+                    "metrics": {
+                      "global_names": [
+                        "COUNTER"
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "engine": "engine-3-branching",
+                "matched_expectation": true,
+                "expected_summaries": [
+                  "Cyclomatic complexity 3 with 1 conditional branches"
+                ],
+                "findings": [
+                  {
+                    "engine": "engine-3-branching",
+                    "severity": "Low",
+                    "summary": "Cyclomatic complexity 3 with 1 conditional branches",
+                    "details": "Decision density estimates how many independent paths the code exposes.",
+                    "metrics": {
+                      "cyclomatic_complexity": 3,
+                      "conditional_branch_count": 1,
+                      "risk_level": "low"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "case": "mixed-hard-case",
+            "path": "/Users/khushalpandala/khush_fun/agent-coder_structure/data/snippets/mixed_hard_case.py",
+            "engines": [
+              {
+                "engine": "engine-1-math",
+                "matched_expectation": true,
+                "expected_summaries": [
+                  "Loop nesting depth 2 detected"
+                ],
+                "findings": [
+                  {
+                    "engine": "engine-1-math",
+                    "severity": "Medium",
+                    "summary": "Loop nesting depth 2 detected",
+                    "details": "Nested iteration increases growth risk. Review whether the loop structure can be flattened or precomputed.",
+                    "metrics": {
+                      "max_loop_depth": 2,
+                      "loop_types": [
+                        "for",
+                        "for"
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "engine": "engine-2-hazards",
+                "matched_expectation": true,
+                "expected_summaries": [
+                  "Module-level subscript mutation hazard"
+                ],
+                "findings": [
+                  {
+                    "engine": "engine-2-hazards",
+                    "severity": "High",
+                    "summary": "Global mutation hazard",
+                    "details": "Global statements increase coupling across generated paths.",
+                    "metrics": {
+                      "global_names": [
+                        "STATE"
+                      ]
+                    }
+                  },
+                  {
+                    "engine": "engine-2-hazards",
+                    "severity": "High",
+                    "summary": "Module-level subscript mutation hazard",
+                    "details": "Module-scope containers are being mutated through indexed assignment.",
+                    "metrics": {
+                      "container_names": [
+                        "STATE"
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "engine": "engine-3-branching",
+                "matched_expectation": true,
+                "expected_summaries": [
+                  "Cyclomatic complexity 8 with 5 conditional branches"
+                ],
+                "findings": [
+                  {
+                    "engine": "engine-3-branching",
+                    "severity": "High",
+                    "summary": "Cyclomatic complexity 8 with 5 conditional branches",
+                    "details": "Decision density estimates how many independent paths the code exposes.",
+                    "metrics": {
+                      "cyclomatic_complexity": 8,
+                      "conditional_branch_count": 5,
+                      "risk_level": "high"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "overall_recall": 1.0,
+        "overall_weighted_severity": 77
+      },
+      "coder_prompt": "GOAL: Setup engines directory and verify linear growth rate.\n\nSTRUCTURAL CONSTRAINTS:\n  - Max loop nesting: 1\n  - Deepest loop path: for:value > for:_ > for:size\n  - Loop mutation targets: data, durations, normalized_costs, samples, seconds, start, time, total\n  - Cyclomatic complexity target: <= 12\n  - Conditional branch count: 1\n  - Branch risk level: high\n  - Dominant conditions: __name__ == \"__main__\"\n  - Explicit globals in scope: none\n  - Module-level mutation targets: none\n  - Shared module containers: none\n\nCONVENTIONS:\n  - Only write code that satisfies the current gen_id.\n  - Prefer O(N) or O(log N) approaches.\n  - Refactor when high-severity findings appear.\n\nLESSONS LEARNED:\n  - Prefer single-pass iteration and benchmark scaling before introducing abstraction.\n\nDEPENDENCY CONTEXT:\n  - No external dependencies required for Day 1 scaffold.\n  - Keep shared mutable globals out of generated code paths.\n\nINSTRUCTIONS:\n  - Generate code that satisfies the goal within the constraints above.\n  - Do not introduce additional loop nesting or new global mutations.\n  - Prefer single-pass, cache-friendly code paths where possible."
+    },
+    {
+      "gen_id": "day1-bootstrap",
+      "goal": "Setup engines directory and verify linear growth rate.",
+      "benchmark": {
+        "function_name": "linear_scan",
+        "classification": "linear",
+        "relative_spread": 0.010804196769890098,
+        "samples": [
+          {
+            "size": 2000,
+            "seconds": 4.6499990276061e-05
+          },
+          {
+            "size": 4000,
+            "seconds": 9.458400018047541e-05
+          },
+          {
+            "size": 8000,
+            "seconds": 0.00018841600103769451
+          },
+          {
+            "size": 16000,
+            "seconds": 0.00037708399759139866
+          }
+        ]
+      },
+      "engine_findings": [
+        {
+          "engine": "engine-1-math",
+          "severity": "Low",
+          "summary": "Loop nesting depth 1 detected",
+          "details": "Control flow is compatible with linear benchmarking assumptions.",
+          "metrics": {
+            "max_loop_depth": 1,
+            "loop_types": [
+              "for"
+            ]
+          }
+        },
+        {
+          "engine": "engine-2-hazards",
+          "severity": "Low",
+          "summary": "No global mutation hazard detected",
+          "details": "Generated source does not declare global variables.",
+          "metrics": {
+            "module_state_names": []
+          }
+        },
+        {
+          "engine": "engine-3-branching",
+          "severity": "High",
+          "summary": "Cyclomatic complexity 13 with 1 conditional branches",
+          "details": "Decision density estimates how many independent paths the code exposes.",
+          "metrics": {
+            "cyclomatic_complexity": 13,
+            "conditional_branch_count": 1,
+            "risk_level": "high"
+          }
+        }
+      ],
+      "engine_evaluation": {
+        "engine_scores": [
+          {
+            "engine": "engine-1-math",
+            "cases_run": 5,
+            "cases_matched": 5,
+            "total_findings": 7,
+            "weighted_severity": 18,
+            "recall": 1.0
+          },
+          {
+            "engine": "engine-2-hazards",
+            "cases_run": 5,
+            "cases_matched": 5,
+            "total_findings": 8,
+            "weighted_severity": 36,
+            "recall": 1.0
+          },
+          {
+            "engine": "engine-3-branching",
+            "cases_run": 5,
+            "cases_matched": 5,
+            "total_findings": 7,
+            "weighted_severity": 23,
+            "recall": 1.0
+          }
+        ],
+        "case_results": [
+          {
+            "case": "linear-safe-function",
+            "path": "/Users/khushalpandala/khush_fun/agent-coder_structure/data/snippets/linear_safe.py",
+            "engines": [
+              {
+                "engine": "engine-1-math",
+                "matched_expectation": true,
+                "expected_summaries": [
+                  "Loop nesting depth 1 detected"
+                ],
+                "findings": [
+                  {
+                    "engine": "engine-1-math",
+                    "severity": "Low",
+                    "summary": "Loop nesting depth 1 detected",
+                    "details": "Control flow is compatible with linear benchmarking assumptions.",
+                    "metrics": {
+                      "max_loop_depth": 1,
+                      "loop_types": [
+                        "for"
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "engine": "engine-2-hazards",
+                "matched_expectation": true,
+                "expected_summaries": [
+                  "No global mutation hazard detected"
+                ],
+                "findings": [
+                  {
+                    "engine": "engine-2-hazards",
+                    "severity": "Low",
+                    "summary": "No global mutation hazard detected",
+                    "details": "Generated source does not declare global variables.",
+                    "metrics": {
+                      "module_state_names": []
+                    }
+                  }
+                ]
+              },
+              {
+                "engine": "engine-3-branching",
+                "matched_expectation": true,
+                "expected_summaries": [
+                  "Cyclomatic complexity 2 with 0 conditional branches"
+                ],
+                "findings": [
+                  {
+                    "engine": "engine-3-branching",
+                    "severity": "Low",
+                    "summary": "Cyclomatic complexity 2 with 0 conditional branches",
+                    "details": "Decision density estimates how many independent paths the code exposes.",
+                    "metrics": {
+                      "cyclomatic_complexity": 2,
+                      "conditional_branch_count": 0,
+                      "risk_level": "low"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "case": "nested-loop-function",
+            "path": "/Users/khushalpandala/khush_fun/agent-coder_structure/data/snippets/nested_loop.py",
+            "engines": [
+              {
+                "engine": "engine-1-math",
+                "matched_expectation": true,
+                "expected_summaries": [
+                  "Loop nesting depth 2 detected"
+                ],
+                "findings": [
+                  {
+                    "engine": "engine-1-math",
+                    "severity": "Medium",
+                    "summary": "Loop nesting depth 2 detected",
+                    "details": "Nested iteration increases growth risk. Review whether the loop structure can be flattened or precomputed.",
+                    "metrics": {
+                      "max_loop_depth": 2,
+                      "loop_types": [
+                        "for",
+                        "for"
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "engine": "engine-2-hazards",
+                "matched_expectation": true,
+                "expected_summaries": [],
+                "findings": [
+                  {
+                    "engine": "engine-2-hazards",
+                    "severity": "Low",
+                    "summary": "No global mutation hazard detected",
+                    "details": "Generated source does not declare global variables.",
+                    "metrics": {
+                      "module_state_names": []
+                    }
+                  }
+                ]
+              },
+              {
+                "engine": "engine-3-branching",
+                "matched_expectation": true,
+                "expected_summaries": [],
+                "findings": [
+                  {
+                    "engine": "engine-3-branching",
+                    "severity": "Low",
+                    "summary": "Cyclomatic complexity 3 with 0 conditional branches",
+                    "details": "Decision density estimates how many independent paths the code exposes.",
+                    "metrics": {
+                      "cyclomatic_complexity": 3,
+                      "conditional_branch_count": 0,
+                      "risk_level": "low"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "case": "global-and-branch-heavy",
+            "path": "/Users/khushalpandala/khush_fun/agent-coder_structure/data/snippets/global_and_branch_heavy.py",
+            "engines": [
+              {
+                "engine": "engine-1-math",
+                "matched_expectation": true,
+                "expected_summaries": [],
+                "findings": [
+                  {
+                    "engine": "engine-1-math",
+                    "severity": "Low",
+                    "summary": "Loop nesting depth 1 detected",
+                    "details": "Control flow is compatible with linear benchmarking assumptions.",
+                    "metrics": {
+                      "max_loop_depth": 1,
+                      "loop_types": [
+                        "for"
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "engine": "engine-2-hazards",
+                "matched_expectation": true,
+                "expected_summaries": [
+                  "Global mutation hazard"
+                ],
+                "findings": [
+                  {
+                    "engine": "engine-2-hazards",
+                    "severity": "High",
+                    "summary": "Global mutation hazard",
+                    "details": "Global statements increase coupling across generated paths.",
+                    "metrics": {
+                      "global_names": [
+                        "STATE"
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "engine": "engine-3-branching",
+                "matched_expectation": true,
+                "expected_summaries": [
+                  "Cyclomatic complexity 8 with 6 conditional branches"
+                ],
+                "findings": [
+                  {
+                    "engine": "engine-3-branching",
+                    "severity": "High",
+                    "summary": "Cyclomatic complexity 8 with 6 conditional branches",
+                    "details": "Decision density estimates how many independent paths the code exposes.",
+                    "metrics": {
+                      "cyclomatic_complexity": 8,
+                      "conditional_branch_count": 6,
+                      "risk_level": "high"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "case": "branchy-but-safe",
+            "path": "/Users/khushalpandala/khush_fun/agent-coder_structure/data/snippets/branchy_but_safe.py",
+            "engines": [
+              {
+                "engine": "engine-1-math",
+                "matched_expectation": true,
+                "expected_summaries": [
+                  "Loop nesting depth 1 detected"
+                ],
+                "findings": [
+                  {
+                    "engine": "engine-1-math",
+                    "severity": "Low",
+                    "summary": "Loop nesting depth 1 detected",
+                    "details": "Control flow is compatible with linear benchmarking assumptions.",
+                    "metrics": {
+                      "max_loop_depth": 1,
+                      "loop_types": [
+                        "for"
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "engine": "engine-2-hazards",
+                "matched_expectation": true,
+                "expected_summaries": [
+                  "No global mutation hazard detected"
+                ],
+                "findings": [
+                  {
+                    "engine": "engine-2-hazards",
+                    "severity": "Low",
+                    "summary": "No global mutation hazard detected",
+                    "details": "Generated source does not declare global variables.",
+                    "metrics": {
+                      "module_state_names": []
+                    }
+                  }
+                ]
+              },
+              {
+                "engine": "engine-3-branching",
+                "matched_expectation": true,
+                "expected_summaries": [
+                  "Cyclomatic complexity 6 with 4 conditional branches"
+                ],
+                "findings": [
+                  {
+                    "engine": "engine-3-branching",
+                    "severity": "Medium",
+                    "summary": "Cyclomatic complexity 6 with 4 conditional branches",
+                    "details": "Decision density estimates how many independent paths the code exposes.",
+                    "metrics": {
+                      "cyclomatic_complexity": 6,
+                      "conditional_branch_count": 4,
+                      "risk_level": "medium"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "case": "triple-nested",
+            "path": "/Users/khushalpandala/khush_fun/agent-coder_structure/data/snippets/triple_nested.py",
+            "engines": [
+              {
+                "engine": "engine-1-math",
+                "matched_expectation": true,
+                "expected_summaries": [
+                  "Loop nesting depth 3 detected"
+                ],
+                "findings": [
+                  {
+                    "engine": "engine-1-math",
+                    "severity": "High",
+                    "summary": "Loop nesting depth 3 detected",
+                    "details": "Nested iteration increases growth risk. Review whether the loop structure can be flattened or precomputed.",
+                    "metrics": {
+                      "max_loop_depth": 3,
+                      "loop_types": [
+                        "for",
+                        "for",
+                        "for"
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "engine": "engine-2-hazards",
+                "matched_expectation": true,
+                "expected_summaries": [],
+                "findings": [
+                  {
+                    "engine": "engine-2-hazards",
+                    "severity": "Low",
+                    "summary": "No global mutation hazard detected",
+                    "details": "Generated source does not declare global variables.",
+                    "metrics": {
+                      "module_state_names": []
+                    }
+                  }
+                ]
+              },
+              {
+                "engine": "engine-3-branching",
+                "matched_expectation": true,
+                "expected_summaries": [],
+                "findings": [
+                  {
+                    "engine": "engine-3-branching",
+                    "severity": "Low",
+                    "summary": "Cyclomatic complexity 4 with 0 conditional branches",
+                    "details": "Decision density estimates how many independent paths the code exposes.",
+                    "metrics": {
+                      "cyclomatic_complexity": 4,
+                      "conditional_branch_count": 0,
+                      "risk_level": "low"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "case": "global-in-helper",
+            "path": "/Users/khushalpandala/khush_fun/agent-coder_structure/data/snippets/global_in_helper.py",
+            "engines": [
+              {
+                "engine": "engine-1-math",
+                "matched_expectation": true,
+                "expected_summaries": [],
+                "findings": [
+                  {
+                    "engine": "engine-1-math",
+                    "severity": "Low",
+                    "summary": "Loop nesting depth 1 detected",
+                    "details": "Control flow is compatible with linear benchmarking assumptions.",
+                    "metrics": {
+                      "max_loop_depth": 1,
+                      "loop_types": [
+                        "for"
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "engine": "engine-2-hazards",
+                "matched_expectation": true,
+                "expected_summaries": [
+                  "Global mutation hazard"
+                ],
+                "findings": [
+                  {
+                    "engine": "engine-2-hazards",
+                    "severity": "High",
+                    "summary": "Global mutation hazard",
+                    "details": "Global statements increase coupling across generated paths.",
+                    "metrics": {
+                      "global_names": [
+                        "COUNTER"
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "engine": "engine-3-branching",
+                "matched_expectation": true,
+                "expected_summaries": [
+                  "Cyclomatic complexity 3 with 1 conditional branches"
+                ],
+                "findings": [
+                  {
+                    "engine": "engine-3-branching",
+                    "severity": "Low",
+                    "summary": "Cyclomatic complexity 3 with 1 conditional branches",
+                    "details": "Decision density estimates how many independent paths the code exposes.",
+                    "metrics": {
+                      "cyclomatic_complexity": 3,
+                      "conditional_branch_count": 1,
+                      "risk_level": "low"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "case": "mixed-hard-case",
+            "path": "/Users/khushalpandala/khush_fun/agent-coder_structure/data/snippets/mixed_hard_case.py",
+            "engines": [
+              {
+                "engine": "engine-1-math",
+                "matched_expectation": true,
+                "expected_summaries": [
+                  "Loop nesting depth 2 detected"
+                ],
+                "findings": [
+                  {
+                    "engine": "engine-1-math",
+                    "severity": "Medium",
+                    "summary": "Loop nesting depth 2 detected",
+                    "details": "Nested iteration increases growth risk. Review whether the loop structure can be flattened or precomputed.",
+                    "metrics": {
+                      "max_loop_depth": 2,
+                      "loop_types": [
+                        "for",
+                        "for"
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "engine": "engine-2-hazards",
+                "matched_expectation": true,
+                "expected_summaries": [
+                  "Module-level subscript mutation hazard"
+                ],
+                "findings": [
+                  {
+                    "engine": "engine-2-hazards",
+                    "severity": "High",
+                    "summary": "Global mutation hazard",
+                    "details": "Global statements increase coupling across generated paths.",
+                    "metrics": {
+                      "global_names": [
+                        "STATE"
+                      ]
+                    }
+                  },
+                  {
+                    "engine": "engine-2-hazards",
+                    "severity": "High",
+                    "summary": "Module-level subscript mutation hazard",
+                    "details": "Module-scope containers are being mutated through indexed assignment.",
+                    "metrics": {
+                      "container_names": [
+                        "STATE"
+                      ]
+                    }
+                  }
+                ]
+              },
+              {
+                "engine": "engine-3-branching",
+                "matched_expectation": true,
+                "expected_summaries": [
+                  "Cyclomatic complexity 8 with 5 conditional branches"
+                ],
+                "findings": [
+                  {
+                    "engine": "engine-3-branching",
+                    "severity": "High",
+                    "summary": "Cyclomatic complexity 8 with 5 conditional branches",
+                    "details": "Decision density estimates how many independent paths the code exposes.",
+                    "metrics": {
+                      "cyclomatic_complexity": 8,
+                      "conditional_branch_count": 5,
+                      "risk_level": "high"
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "overall_recall": 1.0,
+        "overall_weighted_severity": 77
+      },
+      "validation": {
+        "is_compliant": false,
+        "violations": [
+          {
+            "kind": "cyclomatic_complexity",
+            "engine": "engine-3-branching",
+            "severity": "High",
+            "summary": "Cyclomatic complexity 13 with 1 conditional branches",
+            "rationale": "Decision density estimates how many independent paths the code exposes.",
+            "current_value": "13",
+            "allowed_value": "<= 7",
+            "location": "",
+            "repair_hint": "split_function",
+            "evidence": {
+              "metrics": {
+                "cyclomatic_complexity": 13,
+                "conditional_branch_count": 1,
+                "risk_level": "high"
+              }
+            }
+          }
+        ]
+      },
+      "coder_prompt": "GOAL: Setup engines directory and verify linear growth rate.\n\nSTRUCTURAL CONSTRAINTS:\n  - Max loop nesting: 1\n  - Deepest loop path: for:value\n  - Loop mutation targets: data, durations, normalized_costs, samples, seconds, start, time, total\n  - Cyclomatic complexity target: <= 13\n  - Conditional branch count: 1\n  - Branch risk level: high\n  - Dominant conditions: __name__ == \"__main__\"\n  - Explicit globals in scope: none\n  - Module-level mutation targets: none\n  - Shared module containers: none\n\nCONVENTIONS:\n  - Only write code that satisfies the current gen_id.\n  - Prefer O(N) or O(log N) approaches.\n  - Refactor when high-severity findings appear.\n\nLESSONS LEARNED:\n  - Prefer single-pass iteration and benchmark scaling before introducing abstraction.\n\nDEPENDENCY CONTEXT:\n  - No external dependencies required for Day 1 scaffold.\n  - Keep shared mutable globals out of generated code paths.\n\nINSTRUCTIONS:\n  - Generate code that satisfies the goal within the constraints above.\n  - Do not introduce additional loop nesting or new global mutations.\n  - Prefer single-pass, cache-friendly code paths where possible."
+    }
+  ]
+}
