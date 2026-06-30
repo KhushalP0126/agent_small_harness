@@ -343,6 +343,46 @@ class ControllerIntegrationTests(unittest.TestCase):
         for attempt in result.payload["attempts"]:
             self.assertEqual({finding["engine"] for finding in attempt["findings"]}, expected_engines)
 
+    def test_repeated_violation_records_no_improvement_delta(self) -> None:
+        bad_v1 = """
+def analyze(value):
+    if value == 0:
+        return 0
+    if value == 1:
+        return 1
+    if value == 2:
+        return 2
+    if value == 3:
+        return 3
+    if value == 4:
+        return 4
+    if value == 5:
+        return 5
+    if value == 6:
+        return 6
+    return 7
+"""
+        bad_v2 = bad_v1.replace("return 7", "return value")
+        repaired = LINEAR.read_text(encoding="utf-8")
+
+        def repair_supplier(_draft: str, retry_prompt: str) -> str:
+            if "DIAGNOSTIC DELTAS:" in retry_prompt:
+                self.assertIn("no improvement", retry_prompt)
+                self.assertIn("stronger structural rewrite", retry_prompt)
+                return repaired
+            return bad_v2
+
+        controller = GenerationController(
+            max_retries=2,
+            draft_supplier=lambda _prompt: bad_v1,
+            repair_supplier=repair_supplier,
+        )
+        result = controller.run(target="delta-tracking", initial_prompt="generate")
+        self.assertEqual(result.payload["final_status"], "completed")
+        self.assertEqual(result.payload["attempts"][1]["diagnostic_deltas"][0]["kind"], "cyclomatic_complexity")
+        self.assertEqual(result.payload["attempts"][1]["diagnostic_deltas"][0]["delta"], 0)
+        self.assertFalse(result.payload["attempts"][1]["diagnostic_deltas"][0]["improved"])
+
 
 if __name__ == "__main__":
     unittest.main()

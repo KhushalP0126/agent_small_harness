@@ -26,6 +26,7 @@ class GenerationAttempt:
     findings: list[dict]
     validation: dict
     behavior_validation: dict
+    diagnostic_deltas: list[dict] = field(default_factory=list)
     retry_prompt: str = ""
     changed: bool = True
     diff: str = ""
@@ -126,6 +127,83 @@ class GenerationController(BaseAgent):
             )
         return violations
 
+    def _violation_key(self, violation: Violation | dict) -> str:
+        if isinstance(violation, dict):
+            return ":".join(
+                [
+                    str(violation.get("engine", "")),
+                    str(violation.get("kind", "")),
+                    str(violation.get("repair_hint", "")),
+                ]
+            )
+        return ":".join([violation.engine, violation.kind, str(violation.repair_hint)])
+
+    def _numeric_value(self, value: object) -> float | None:
+        try:
+            return float(str(value).strip())
+        except (TypeError, ValueError):
+            return None
+
+    def _diagnostic_deltas(
+        self,
+        previous_attempt: GenerationAttempt | None,
+        current_violations: list[Violation],
+    ) -> list[dict]:
+        if previous_attempt is None:
+            return []
+        prior_by_key = {
+            self._violation_key(violation): violation
+            for violation in previous_attempt.validation.get("violations", [])
+        }
+        deltas: list[dict] = []
+        for violation in current_violations:
+            prior = prior_by_key.get(self._violation_key(violation))
+            if prior is None:
+                continue
+            prior_actual = prior.get("current_value", "")
+            current_actual = violation.current_value
+            prior_number = self._numeric_value(prior_actual)
+            current_number = self._numeric_value(current_actual)
+            numeric_delta = (
+                None if prior_number is None or current_number is None else current_number - prior_number
+            )
+            diagnostic = violation.evidence.get("diagnostic", {})
+            deltas.append(
+                {
+                    "kind": violation.kind,
+                    "engine": violation.engine,
+                    "prior_actual": prior_actual,
+                    "current_actual": current_actual,
+                    "delta": numeric_delta,
+                    "improved": numeric_delta is not None and numeric_delta < 0,
+                    "repeated": True,
+                    "location": violation.location,
+                    "recommended_refactor": diagnostic.get("recommended_refactor", ""),
+                }
+            )
+        return deltas
+
+    def _delta_context(self, deltas: list[dict]) -> str:
+        if not deltas:
+            return ""
+        lines = ["DIAGNOSTIC DELTAS:"]
+        for delta in deltas:
+            if delta["delta"] is None:
+                change = "non-numeric comparison"
+            elif delta["delta"] < 0:
+                change = f"improved by {abs(delta['delta']):g}"
+            elif delta["delta"] > 0:
+                change = f"worsened by {delta['delta']:g}"
+            else:
+                change = "no improvement"
+            lines.append(
+                f"- {delta['kind']}: prior {delta['prior_actual']} -> current {delta['current_actual']} ({change})."
+            )
+            if delta.get("recommended_refactor"):
+                lines.append(f"  Required next move: {delta['recommended_refactor']}")
+        lines.append("A repeated violation with no improvement requires a stronger structural rewrite.")
+        return "\n".join(lines)
+
     def run(self, target: str, initial_prompt: str) -> AgentResult:
         initial_draft = self.draft_supplier(initial_prompt)
         initial_findings = self._scan(initial_draft)
@@ -149,6 +227,10 @@ class GenerationController(BaseAgent):
             force_manual_review = False
             changed = attempt_index == 0 or not self._is_stagnant(previous_draft, draft)
             diff_text = self._diff_text(previous_draft, draft) if attempt_index > 0 else ""
+            diagnostic_deltas = self._diagnostic_deltas(
+                failed_attempts[-1] if failed_attempts else None,
+                validation_result.violations,
+            )
             if is_complete:
                 self._debug_print(f"Iteration {attempt_index}: draft is static and behavior compliant.")
             elif validation_result.is_compliant:
@@ -203,6 +285,9 @@ class GenerationController(BaseAgent):
                     retry_prompt = f"{initial_prompt.strip()}\n\nENGINE FEEDBACK:\n{retry_prompt}"
                 if feedback_context:
                     retry_prompt = f"{retry_prompt}\n\n{feedback_context}"
+                delta_context = self._delta_context(diagnostic_deltas)
+                if delta_context:
+                    retry_prompt = f"{retry_prompt}\n\n{delta_context}"
                 self._debug_print("Sending repair prompt to model.")
             attempt = GenerationAttempt(
                 attempt=attempt_index,
@@ -210,6 +295,7 @@ class GenerationController(BaseAgent):
                 findings=[asdict(finding) for finding in findings],
                 validation=serialize_validation_result(validation_result),
                 behavior_validation=behavior_validation,
+                diagnostic_deltas=diagnostic_deltas,
                 retry_prompt=retry_prompt,
                 changed=changed,
                 diff=diff_text,
