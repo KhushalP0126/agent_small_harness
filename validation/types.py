@@ -10,6 +10,7 @@ ViolationKind = Literal[
     "module_state_mutation",
     "parse_error",
     "behavior_mismatch",
+    "external_dependency",
     "unsafe_call",
 ]
 
@@ -20,6 +21,7 @@ RepairHint = Literal[
     "pass_state_as_argument",
     "return_valid_python",
     "preserve_behavior",
+    "use_standard_library",
     "remove_unsafe_call",
 ]
 

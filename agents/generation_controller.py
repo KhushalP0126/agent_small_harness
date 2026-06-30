@@ -192,6 +192,12 @@ class GenerationController(BaseAgent):
                         )
                     else:
                         self._debug_print(f"Repair strategy selected model-only repair: {decision.rationale}")
+                    if decision.repair_instructions:
+                        retry_prompt = (
+                            f"{retry_prompt}\n\n"
+                            "TARGETED REPAIR INSTRUCTIONS:\n"
+                            + "\n".join(f"- {instruction}" for instruction in decision.repair_instructions)
+                        )
                 feedback_context = self._feedback_context(failed_attempts)
                 if initial_prompt.strip():
                     retry_prompt = f"{initial_prompt.strip()}\n\nENGINE FEEDBACK:\n{retry_prompt}"

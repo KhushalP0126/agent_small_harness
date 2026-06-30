@@ -10,6 +10,7 @@ DEFAULT_POLICY = {
     "max_cyclomatic_complexity": 7,
     "allow_explicit_globals": False,
     "allow_module_state_mutation": False,
+    "allow_external_dependencies": False,
     "allow_unsafe_calls": False,
 }
 
@@ -98,6 +99,20 @@ def validate_findings(
                         current_value=", ".join(metrics.get("unsafe_calls", [])) or "unsafe call",
                         allowed_value="no unsafe API calls",
                         repair_hint="remove_unsafe_call",
+                        evidence={"metrics": metrics},
+                    )
+                )
+            elif finding.summary == "External dependency usage" and not policy["allow_external_dependencies"]:
+                violations.append(
+                    Violation(
+                        kind="external_dependency",
+                        engine=finding.engine,
+                        severity=finding.severity,
+                        summary=finding.summary,
+                        rationale=finding.details,
+                        current_value=", ".join(metrics.get("imports", [])) or "external dependency",
+                        allowed_value="standard library imports only",
+                        repair_hint="use_standard_library",
                         evidence={"metrics": metrics},
                     )
                 )

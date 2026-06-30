@@ -93,6 +93,24 @@ class EngineRegistryTests(unittest.TestCase):
         self.assertEqual([engine.name for engine in registry.engines_for("python")], ["engine-1-math"])
 
 
+class PythonHazardPolicyTests(unittest.TestCase):
+    def test_read_only_module_mapping_is_not_mutation(self) -> None:
+        source = "LOOKUP = {'a': 1}\n\ndef analyze(value):\n    return LOOKUP.get(value, 0)\n"
+        findings = HazardsEngine().scan(source)
+        summaries = {finding.summary for finding in findings}
+        self.assertNotIn("Module-level container mutation hazard", summaries)
+        self.assertTrue(validate_findings(findings).is_compliant)
+
+    def test_external_dependency_becomes_policy_violation(self) -> None:
+        source = "import numpy\n\ndef analyze(values):\n    return values\n"
+        findings = HazardsEngine().scan(source)
+        summaries = {finding.summary for finding in findings}
+        self.assertIn("External dependency usage", summaries)
+        violations = validate_findings(findings).violations
+        self.assertEqual(violations[0].kind, "external_dependency")
+        self.assertEqual(violations[0].repair_hint, "use_standard_library")
+
+
 class RepairStrategyTests(unittest.TestCase):
     def test_selects_scoring_matrix_template(self) -> None:
         name, code = RepairStrategyAgent().select_initial_template(MIXED.read_text(encoding="utf-8"))
@@ -127,6 +145,36 @@ class RepairStrategyTests(unittest.TestCase):
             behavior_issues=[],
         )
         self.assertEqual(decision.mode, MANUAL_REVIEW)
+
+    def test_repair_instructions_are_violation_based_not_task_specific(self) -> None:
+        violations = [
+            Violation(
+                kind="cyclomatic_complexity",
+                engine="engine-3-branching",
+                severity="High",
+                summary="Cyclomatic complexity 12",
+                rationale="too many paths",
+                current_value="12",
+                allowed_value="<= 7",
+                repair_hint="split_function",
+            ),
+            Violation(
+                kind="external_dependency",
+                engine="engine-2-hazards",
+                severity="High",
+                summary="External dependency usage",
+                rationale="external import",
+                current_value="numpy",
+                allowed_value="standard library imports only",
+                repair_hint="use_standard_library",
+            ),
+        ]
+        decision = RepairStrategyAgent().decide("import numpy\n", violations=violations)
+        instructions = "\n".join(decision.repair_instructions)
+        self.assertIn("small single-purpose helper functions", instructions)
+        self.assertIn("standard-library", instructions)
+        self.assertNotIn("snake", instructions.lower())
+        self.assertNotIn("calculate_new_head", instructions)
 
 
 class BehaviorSpecTests(unittest.TestCase):
@@ -240,6 +288,40 @@ class ControllerIntegrationTests(unittest.TestCase):
         controller = GenerationController(max_retries=1, draft_supplier=lambda _prompt: source)
         result = controller.run(target="linear", initial_prompt="generate")
         self.assertEqual(result.payload["final_status"], "completed")
+
+    def test_strategy_instructions_are_injected_into_retry_prompt(self) -> None:
+        violating_source = "import numpy\n\ndef analyze(values):\n    return values\n"
+        repaired_source = "def analyze(values):\n    return values\n"
+
+        def repair_supplier(_draft: str, retry_prompt: str) -> str:
+            self.assertIn("TARGETED REPAIR INSTRUCTIONS:", retry_prompt)
+            self.assertIn("standard-library", retry_prompt)
+            self.assertNotIn("snake", retry_prompt.lower())
+            return repaired_source
+
+        controller = GenerationController(
+            max_retries=1,
+            draft_supplier=lambda _prompt: violating_source,
+            repair_supplier=repair_supplier,
+            repair_strategy=RepairStrategyAgent(),
+        )
+        result = controller.run(target="dependency-repair", initial_prompt="generate")
+        self.assertEqual(result.payload["final_status"], "completed")
+
+    def test_each_valid_attempt_runs_full_python_engine_set(self) -> None:
+        violating_source = MIXED.read_text(encoding="utf-8")
+        repaired_source = LINEAR.read_text(encoding="utf-8")
+        controller = GenerationController(
+            max_retries=1,
+            draft_supplier=lambda _prompt: violating_source,
+            repair_supplier=lambda _draft, _retry_prompt: repaired_source,
+        )
+        result = controller.run(target="engine-coverage", initial_prompt="generate")
+        expected_engines = {"engine-1-math", "engine-2-hazards", "engine-3-branching"}
+        self.assertEqual(result.payload["final_status"], "completed")
+        self.assertEqual(len(result.payload["attempts"]), 2)
+        for attempt in result.payload["attempts"]:
+            self.assertEqual({finding["engine"] for finding in attempt["findings"]}, expected_engines)
 
 
 if __name__ == "__main__":

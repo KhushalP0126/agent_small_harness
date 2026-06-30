@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Iterable
 
 from agents.repair_templates import get_repair_template, select_repair_template
@@ -19,6 +19,7 @@ class RepairDecision:
     template_name: str = ""
     template_code: str = ""
     rationale: str = ""
+    repair_instructions: list[str] = field(default_factory=list)
 
 
 def _violation_kinds(violations: Iterable[Any]) -> set[str]:
@@ -31,6 +32,10 @@ def _violation_kinds(violations: Iterable[Any]) -> set[str]:
         if kind:
             kinds.add(kind)
     return kinds
+
+
+def _behavior_issue_count(behavior_issues: Iterable[Any]) -> int:
+    return sum(1 for _issue in behavior_issues or [])
 
 
 class RepairStrategyAgent:
@@ -59,6 +64,41 @@ class RepairStrategyAgent:
         library = library or TemplateLibrary()
         return library.load(task, language) or ""
 
+    def repair_instructions_for(
+        self,
+        violations: Iterable[Any] | None = None,
+        behavior_issues: Iterable[Any] | None = None,
+        language: str = "python",
+    ) -> list[str]:
+        """Translate policy failures into concrete, task-agnostic repair instructions."""
+        kinds = _violation_kinds(violations or [])
+        instructions: list[str] = []
+        if "parse_error" in kinds:
+            instructions.append(
+                f"REPAIR_INSTRUCTION: Return syntactically valid {language} source only. Remove markdown fences, prose, partial code, and unresolved placeholders."
+            )
+        if "cyclomatic_complexity" in kinds:
+            instructions.append(
+                "REPAIR_INSTRUCTION: Reduce cyclomatic complexity by extracting small single-purpose helper functions. Prefer dictionaries, lookup tables, guard clauses, and simple data mappings over long if/elif chains."
+            )
+        if "loop_depth" in kinds:
+            instructions.append(
+                "REPAIR_INSTRUCTION: Reduce nested loop depth. Move inner-loop decisions into helper functions, use generator expressions where behavior stays clear, or precompute simple lookup structures."
+            )
+        if "global_mutation" in kinds or "module_state_mutation" in kinds:
+            instructions.append(
+                "REPAIR_INSTRUCTION: Remove global and module-state mutation. Pass state through function arguments and return updated state explicitly; do not use global statements or mutate module-level containers."
+            )
+        if "external_dependency" in kinds:
+            instructions.append(
+                "REPAIR_INSTRUCTION: Remove non-standard-library imports. Reimplement the required behavior with Python standard-library modules only."
+            )
+        if _behavior_issue_count(behavior_issues or []):
+            instructions.append(
+                "REPAIR_INSTRUCTION: Preserve behavioral parity. Use the failing input/output cases as tests and do not replace logic with constants or hardcoded shortcuts."
+            )
+        return instructions
+
     def decide(
         self,
         source: str,
@@ -77,6 +117,7 @@ class RepairStrategyAgent:
             return RepairDecision(
                 mode=MODEL_ONLY,
                 rationale="Draft failed to parse; request valid code before structural repair.",
+                repair_instructions=self.repair_instructions_for(violations, behavior_issues),
             )
 
         has_issues = bool(violations or behavior_issues)
@@ -91,12 +132,14 @@ class RepairStrategyAgent:
                     f"Detected '{template_name}' pattern; steer the model with the "
                     "pre-validated template skeleton."
                 ),
+                repair_instructions=self.repair_instructions_for(violations, behavior_issues),
             )
 
         if has_issues:
             return RepairDecision(
                 mode=MODEL_ONLY,
                 rationale="Actionable violations remain; iterate with engine feedback.",
+                repair_instructions=self.repair_instructions_for(violations, behavior_issues),
             )
 
         return RepairDecision(
