@@ -103,6 +103,18 @@ class RepairStrategyAgent:
             instructions.append(
                 "REPAIR_INSTRUCTION: Remove non-standard-library imports. Reimplement the required behavior with Python standard-library modules only."
             )
+        if "unknown_api" in kinds:
+            instructions.append(
+                "REPAIR_INSTRUCTION: Use only APIs listed in the registered library schema. Replace invented or misplaced library calls with the documented namespace path supplied by the engine."
+            )
+        if "algorithmic_cost" in kinds:
+            instructions.append(
+                "REPAIR_INSTRUCTION: Remove repeated linear membership checks inside loops. Precompute a set or dictionary lookup before the loop and test against that constant-time structure."
+            )
+        if "lint_error" in kinds:
+            instructions.append(
+                "REPAIR_INSTRUCTION: Fix blocking lint errors. Resolve undefined names, invalid imports, impossible attribute access, bad call signatures, and fatal syntax/module errors without adding external dependencies."
+            )
         if _behavior_issue_count(behavior_issues or []):
             instructions.append(
                 "REPAIR_INSTRUCTION: Preserve behavioral parity. Use the failing input/output cases as tests and do not replace logic with constants or hardcoded shortcuts."

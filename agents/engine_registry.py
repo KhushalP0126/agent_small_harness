@@ -4,7 +4,9 @@ from typing import Callable
 
 from engines.base import BaseEngine, EngineFinding
 from engines.branching_engine import BranchingEngine
+from engines.cost_engine import CostEngine
 from engines.hazards_engine import HazardsEngine
+from engines.lint_engine import LintEngine
 from engines.math_engine import MathEngine
 
 
@@ -13,7 +15,7 @@ PARSE_CONTRACT_ENGINE = "engine-parse-contract"
 
 
 def python_engine_factories() -> list[EngineFactory]:
-    return [MathEngine, HazardsEngine, BranchingEngine]
+    return [MathEngine, HazardsEngine, BranchingEngine, CostEngine, LintEngine]
 
 
 class EngineRegistry:

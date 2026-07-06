@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -106,6 +107,107 @@ class HistorianAgent(BaseAgent):
             if outcome.get("succeeded") and template:
                 counts[template] = counts.get(template, 0) + 1
         return counts
+
+    def build_run_record(
+        self,
+        session: dict,
+        classification: dict | None = None,
+        route_used: str = "",
+        model: str = "",
+        template_name: str = "",
+    ) -> dict:
+        """Create a normalized labeled sample from a controller session."""
+        classification = classification or {}
+        attempts = session.get("attempts", [])
+        failed_engines: list[str] = []
+        failed_kinds: list[str] = []
+        behavior_failures = 0
+        for attempt in attempts:
+            validation = attempt.get("validation", {})
+            for violation in validation.get("violations", []):
+                engine = violation.get("engine")
+                kind = violation.get("kind")
+                if engine:
+                    failed_engines.append(engine)
+                if kind:
+                    failed_kinds.append(kind)
+            behavior_failures += len(attempt.get("behavior_validation", {}).get("issues", []))
+        return {
+            "recorded_at": self._now(),
+            "target": session.get("target", ""),
+            "task_type": classification.get("task_type", "unknown"),
+            "language": classification.get("language", "unknown"),
+            "libraries": classification.get("libraries", []),
+            "route_used": route_used or session.get("route", ""),
+            "model": model,
+            "template": template_name,
+            "repair_attempts": max(0, len(attempts) - 1),
+            "final_status": session.get("final_status", "unknown"),
+            "failed_engines": sorted(set(failed_engines)),
+            "failed_kinds": sorted(set(failed_kinds)),
+            "behavior_failures": behavior_failures,
+            "human_review_reason": (session.get("human_review") or {}).get("reason", ""),
+        }
+
+    def append_run_sample(self, runs_path: Path, run_record: dict) -> None:
+        """Append one raw run sample to a JSONL file."""
+        runs_path.parent.mkdir(parents=True, exist_ok=True)
+        with runs_path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(run_record, sort_keys=True) + "\n")
+
+    def aggregate_run_stats(self, runs_path: Path, stats_path: Path | None = None) -> dict:
+        """Aggregate raw JSONL samples into route stats keyed by task/library/language."""
+        records = self._load_run_samples(runs_path)
+        stats = {"schema_version": "1.0", "groups": {}}
+        grouped: dict[str, list[dict]] = defaultdict(list)
+        for record in records:
+            keys = [
+                f"task_type:{record.get('task_type', 'unknown')}",
+                f"language:{record.get('language', 'unknown')}",
+            ]
+            keys.extend(f"library:{library}" for library in record.get("libraries", []))
+            for key in keys:
+                grouped[key].append(record)
+        for key, group in grouped.items():
+            total = len(group)
+            completed = sum(1 for record in group if record.get("final_status") == "completed")
+            repair_attempts = sum(int(record.get("repair_attempts", 0)) for record in group)
+            failed_engines = Counter(engine for record in group for engine in record.get("failed_engines", []))
+            failed_kinds = Counter(kind for record in group for kind in record.get("failed_kinds", []))
+            routes = Counter(record.get("route_used", "") for record in group if record.get("route_used"))
+            contribution_labels = Counter(
+                record.get("contribution", {}).get("label", "")
+                for record in group
+                if isinstance(record.get("contribution"), dict)
+                and record.get("contribution", {}).get("label")
+            )
+            contribution_scores = [
+                float(record.get("contribution", {}).get("score", 0.0))
+                for record in group
+                if isinstance(record.get("contribution"), dict)
+            ]
+            stats["groups"][key] = {
+                "total_runs": total,
+                "completed_runs": completed,
+                "success_rate": 0.0 if total == 0 else completed / total,
+                "avg_repair_attempts": 0.0 if total == 0 else repair_attempts / total,
+                "avg_contribution_score": (
+                    0.0 if not contribution_scores else sum(contribution_scores) / len(contribution_scores)
+                ),
+                "top_contribution": contribution_labels.most_common(1)[0][0] if contribution_labels else "",
+                "top_failed_engine": failed_engines.most_common(1)[0][0] if failed_engines else "",
+                "top_failure_kind": failed_kinds.most_common(1)[0][0] if failed_kinds else "",
+                "best_observed_route": routes.most_common(1)[0][0] if routes else "",
+            }
+        if stats_path is not None:
+            stats_path.parent.mkdir(parents=True, exist_ok=True)
+            stats_path.write_text(json.dumps(stats, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        return stats
+
+    def _load_run_samples(self, runs_path: Path) -> list[dict]:
+        if not runs_path.exists():
+            return []
+        return [json.loads(line) for line in runs_path.read_text(encoding="utf-8").splitlines() if line.strip()]
 
     def _register_successful_template(
         self,

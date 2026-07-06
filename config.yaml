@@ -1,0 +1,45 @@
+platform:
+  environment: local
+  log_level: INFO
+
+engines:
+  syntax:
+    enabled: true
+    strict_mode: true
+  policy:
+    max_loop_depth: 2
+    max_cyclomatic_complexity: 7
+    allow_explicit_globals: false
+    allow_module_state_mutation: false
+    allow_external_dependencies: false
+    allow_unknown_registered_apis: false
+    allow_unsafe_calls: false
+    allow_algorithmic_hotspots: false
+    allow_lint_errors: false
+  behavior:
+    enabled: true
+    timeout_seconds: 1.0
+  formal:
+    crosshair_enabled: false
+    crosshair_timeout_seconds: 3.0
+
+execution:
+  models:
+    worker_model: qwen2.5-coder:1.5b
+    architect_model: deepseek-v4-pro
+    profiles:
+      tiny: qwen2.5-coder:1.5b
+      small: qwen2.5-coder:3b
+      daily_driver: qwen2.5-coder:7b
+      architect: deepseek-v4-pro
+    difficulty_models:
+      1-2: qwen2.5-coder:1.5b
+      3-5: qwen2.5-coder:3b
+      6+: qwen2.5-coder:7b
+  routing:
+    architect_after_repair_attempts: 1
+    complexity_threshold: 0.7
+  gates:
+    auto_repair: true
+    max_retries: 1
+    manual_review_required: true

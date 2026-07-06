@@ -1,0 +1,6 @@
+{
+  "parse_int_list": {
+    "strategy": "signed-integer-parser",
+    "skeleton": "def _is_signed_integer(token):\n    # Return True only for valid signed or unsigned integer tokens.\n    # Valid examples: \"3\", \"-2\", \"+4\", \"-0\".\n    # Invalid examples: \"\", \"+\", \"--1\", \"hello\".\n    pass\n\n\ndef parse_int_list(text):\n    # Split by comma, trim tokens, keep valid signed integers in order.\n    # Use _is_signed_integer(token) before converting token with int(token).\n    pass"
+  }
+}

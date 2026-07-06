@@ -1,0 +1,42 @@
+[
+  {
+    "name": "syntax_fragments_are_blocked",
+    "prompt": "Create a Python function, but return partial fragments if uncertain.",
+    "draft": "def broken(:\n    return 1\n",
+    "expected_status": "manual_review_required",
+    "expected_failure_kinds": ["parse_error"],
+    "expected_failure_engines": ["engine-parse-contract"]
+  },
+  {
+    "name": "global_state_mutation_is_blocked",
+    "prompt": "Create a counter that stores shared state globally for convenience.",
+    "draft": "STATE = {\"count\": 0}\n\ndef increment(value):\n    global STATE\n    STATE[\"count\"] += value\n    return STATE[\"count\"]\n",
+    "expected_status": "manual_review_required",
+    "expected_failure_kinds": ["global_mutation", "module_state_mutation"],
+    "expected_failure_engines": ["engine-2-hazards"]
+  },
+  {
+    "name": "triple_nested_loop_is_blocked",
+    "prompt": "Create a matrix/cube scanner using as many nested loops as needed.",
+    "draft": "def scan_cube(cube):\n    total = 0\n    for plane in cube:\n        for row in plane:\n            for value in row:\n                total += value\n    return total\n",
+    "expected_status": "manual_review_required",
+    "expected_failure_kinds": ["loop_depth"],
+    "expected_failure_engines": ["engine-1-math"]
+  },
+  {
+    "name": "branch_explosion_is_blocked",
+    "prompt": "Create a classifier with separate branches for every possible case.",
+    "draft": "def classify(value):\n    if value is None:\n        return \"none\"\n    if value < 0:\n        return \"negative\"\n    if value == 0:\n        return \"zero\"\n    if value == 1:\n        return \"one\"\n    if value == 2:\n        return \"two\"\n    if value == 3:\n        return \"three\"\n    if value == 4:\n        return \"four\"\n    return \"many\"\n",
+    "expected_status": "manual_review_required",
+    "expected_failure_kinds": ["cyclomatic_complexity"],
+    "expected_failure_engines": ["engine-3-branching"]
+  },
+  {
+    "name": "linear_membership_hotspot_is_blocked",
+    "prompt": "Create a filter that repeatedly checks membership in a collection.",
+    "draft": "def matching_items(items, targets):\n    found = []\n    for item in items:\n        if item in targets:\n            found.append(item)\n    return found\n",
+    "expected_status": "manual_review_required",
+    "expected_failure_kinds": ["algorithmic_cost"],
+    "expected_failure_engines": ["engine-4-cost"]
+  }
+]

@@ -60,6 +60,55 @@ Behavioral Unit Test Specification:
 - analyze([[1, 2, 3], [10, 0, -5]]) == 16  # mixed rows
 ```
 
+## Plan-Layer Deal Contracts
+
+Plan Mode may emit Deal contract candidates from extracted behavior examples. These are specification scaffolds for the architect and prompt builder, not proof that the implementation is correct.
+
+Use this shape:
+
+```python
+import deal
+# Attach these plan-layer contracts to `parse_int_list` before implementation.
+@deal.example(lambda: parse_int_list("1, -2, +3") == [1, -2, 3])
+@deal.example(lambda: parse_int_list("a, 4, -, 5") == [4, 5])
+# Architect may add stronger @deal.pre/@deal.post clauses when requirements are explicit.
+```
+
+The small worker should usually satisfy contracts; it should not be asked to invent reliable contracts.
+
+## Compact Worker Packet
+
+Plan Mode has two renderings:
+
+- full plan context for humans and architect workers
+- compact worker packet for small local models
+
+The small worker should receive the compact packet:
+
+```text
+PLAN PACKET:
+FUNCTION: parse_sectioned_config
+LANGUAGE: python
+EXAMPLES:
+- parse_sectioned_config(...) == {...}
+STATE RULES:
+- track parser state explicitly with an active section variable initialized to None
+- only activate section state after a valid non-empty section header is found
+- ignore key/value records until an active section exists
+ADAPTER RULES:
+- treat external libraries as opaque dependencies behind local adapter helpers
+FINAL RULES:
+- Return only complete Python code.
+```
+
+This is intentionally lower-noise than the full `PLAN MODE SPEC`.
+
+## Optional Formal Validation
+
+CrossHair is an optional semantic validator. When enabled in `config.yaml`, the controller runs it after static policy and behavior validation. If CrossHair is not installed, the formal gate is marked skipped and does not block the run.
+
+Nagini is reserved for architect-tier formalization. The big model can translate small critical helpers into typed, proof-friendly Python with preconditions and postconditions, but Nagini output is still treated as untrusted until the normal harness gates accept it.
+
 ## Current Session Notes
 
 The harness direction is generalized code creation and repair, not a Snake-game-specific generator. Snake-style tasks are useful smoke tests because they exercise loops, branching, imports, and state, but they are not the target architecture.
@@ -67,13 +116,55 @@ The harness direction is generalized code creation and repair, not a Snake-game-
 Current baseline:
 
 - Python is the primary reliable path.
-- Every valid Python draft must pass through all three engines on every attempt:
+- Every valid Python draft must pass through the full registered Python engine set on every attempt:
   - `engine-1-math`
   - `engine-2-hazards`
   - `engine-3-branching`
+  - `engine-4-cost`
+  - `engine-5-lint` when Pylint is available; otherwise it emits a low-severity skipped finding.
 - Repaired drafts must be rescanned; no repair path should bypass loop analysis, hazard analysis, or branching analysis.
 - The engine evaluator is at `overall_recall: 1.0`.
-- The full unit suite last passed with `76` tests.
+- The full unit suite last passed locally with `156` tests after the Python-first hardening pass.
+- The harder fixture coding-capability suite passes `7/7` without model calls.
+- The live small-worker plus DeepSeek architect test reached `6/7` on the harder task suite.
+- The 3B worker-limit ladder reaches difficulty 6 and still breaks on `parse_sectioned_config`; this is treated as a semantic/state-machine worker limit, not an engine-plumbing failure.
+
+## Small Worker And Architect Prompting
+
+The small model is the first coding worker. The API-backed architect model is a second repair worker that takes over only after the controller has engine/behavior evidence that the small worker is failing.
+
+The architect is not an engine. It is not trusted by default. Its output must pass the same parse contract, engine registry, static policy, and behavior validator before the controller can mark a task `completed`.
+
+Current backend contract:
+
+- Local worker: Ollama, default `qwen2.5-coder:1.5b`.
+- Architect worker: DeepSeek API, default `deepseek-v4-pro`.
+- Secrets: read from `.env` or shell env via `DEEPSEEK_API_KEY` or `ARCHITECT_API_KEY`.
+- `.env` is ignored by git; `.env.example` is the committed template.
+- Escalation command: `make test-coding-capability-architect`.
+- Default escalation threshold: `ARCHITECT_AFTER=1`.
+- Default architect retry budget: `ARCHITECT_MAX_RETRIES=2`.
+
+## Configuration Source Of Truth
+
+The harness now has a declarative `config.yaml` layer. The loader lives in `agents/config_loader.py` and validates the supported schema before execution.
+
+Config-owned defaults:
+
+- platform environment and log level
+- static policy thresholds and allow flags
+- behavior validator timeout
+- optional CrossHair timeout
+- worker and architect model names
+- difficulty-based model routing for worker ladders
+- architect escalation threshold
+- retry/manual-review gate settings
+
+The coding-capability runner accepts `--config config.yaml` and passes config-derived policy and behavior timeout into `GenerationController`. Make targets use `CONFIG_PATH=config.yaml` by default.
+
+Worker ladders can use `MODEL=auto` to select a model from `execution.models.difficulty_models`.
+
+The config loader is intentionally dependency-light. It uses strict dataclasses and a small YAML-subset parser instead of requiring Pydantic/PyYAML. If the project later needs UI-driven config editing, this schema is the contract the UI should read/write.
 
 ## Engine Diagnostic Contract
 
@@ -97,6 +188,41 @@ Examples:
 
 The `RepairStrategyAgent` consumes `recommended_refactor` from `violation.evidence["diagnostic"]` and injects it into retry prompts as targeted repair instructions.
 
+## Hard Coding-Capability Suite
+
+The current general-purpose task suite is intentionally more complicated than simple smoke tests. It exercises parsing, grouping, sorting, edge-case behavior, and structural validation:
+
+- `matrix_scoring`
+- `dedupe_preserve_order`
+- `clamp_values`
+- `merge_intervals`
+- `parse_key_value_lines`
+- `group_top_scores`
+- `summarize_transactions`
+
+The suite is designed to measure coding capability, not template matching. Task-specific generation shortcuts should not be added to the normal model path. Fixture solutions exist only to prove the harness and behavior specs are valid without model/API calls.
+
+Recent live result:
+
+- Small worker plus architect completed `6/7`.
+- The architect visibly repaired `matrix_scoring`, `merge_intervals`, `group_top_scores`, and `summarize_transactions`.
+- `parse_key_value_lines` still required manual review after architect escalation, which is acceptable behavior because the harness refused an incorrect draft.
+
+## Python-First Measurement Commands
+
+Use these commands to measure the harness without expanding into multi-file/full-stack work yet:
+
+```bash
+make test-plan-mode-ladder
+make test-worker-limit MODEL=qwen2.5-coder:3b SAVE_ARTIFACTS=1
+make test-worker-limit-auto SAVE_ARTIFACTS=1
+make test-python-ladder-parsing MODEL=qwen2.5-coder:3b
+make test-python-ladder-data MODEL=qwen2.5-coder:3b
+make test-python-ladder-algorithmic MODEL=qwen2.5-coder:3b
+make test-raw-vs-harness MODEL=qwen2.5-coder:3b
+make review-run RUN=<artifact-run-id-or-path>
+```
+
 ## Live Prompt Test
 
 A non-Snake terminal-game prompt was tested with a maze-runner request using local `qwen2.5-coder:1.5b`.
@@ -112,7 +238,7 @@ Return only runnable Python code with no explanation and no markdown fences.
 Observed result:
 
 - Initial generated code parsed successfully.
-- All three Python engines ran.
+- The registered Python engine set ran.
 - The model exceeded the structural policy with high cyclomatic complexity and, in the controller test, excessive loop depth.
 - The controller generated a retry prompt containing targeted diagnostic instructions.
 - The model returned an unchanged draft on the repair attempt, and the stagnation guard correctly stopped the loop with `manual_review_required`.

@@ -132,6 +132,19 @@ class GatingContractTests(unittest.TestCase):
     def test_empty_registry_returns_no_findings(self) -> None:
         self.assertEqual(EngineRegistry().findings_for("anything", "c"), [])
 
+    def test_controller_gates_parseable_language_without_registered_engines(self) -> None:
+        controller = GenerationController(
+            max_retries=0,
+            draft_supplier=lambda _prompt: "int main(void) { return 0; }\n",
+            engine_registry=EngineRegistry(),
+            language="c",
+        )
+        result = controller.run(target="empty-c-registry", initial_prompt="generate")
+        self.assertEqual(result.payload["final_status"], "manual_review_required")
+        violations = result.payload["attempts"][0]["validation"]["violations"]
+        self.assertEqual(violations[0]["kind"], "parse_error")
+        self.assertEqual(violations[0]["summary"], "Unsupported language")
+
 
 if __name__ == "__main__":
     unittest.main()

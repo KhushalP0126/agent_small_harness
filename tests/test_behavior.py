@@ -5,7 +5,7 @@ from benchmarker import ROOT
 from engines.branching_engine import BranchingEngine
 from engines.hazards_engine import HazardsEngine
 from engines.math_engine import MathEngine
-from validation.behavior import mixed_hard_case_spec, validate_function_behavior
+from validation.behavior import BehaviorCase, FunctionBehaviorSpec, mixed_hard_case_spec, validate_function_behavior
 from validation.policy import validate_findings
 
 
@@ -42,6 +42,62 @@ def analyze(matrix):
         result = validate_function_behavior(unsafe_source, mixed_hard_case_spec())
         self.assertFalse(result.is_compliant)
         self.assertEqual(result.issues[0].case, "load")
+
+    def test_behavior_validator_times_out_infinite_loop(self) -> None:
+        source = """
+def analyze(matrix):
+    while True:
+        pass
+"""
+        result = validate_function_behavior(source, mixed_hard_case_spec(), timeout_seconds=0.05)
+        self.assertFalse(result.is_compliant)
+        self.assertEqual(result.issues[0].case, "timeout")
+
+    def test_behavior_validator_allows_value_error_handling(self) -> None:
+        source = """
+def parse_value(value):
+    try:
+        return int(value)
+    except ValueError:
+        return value
+"""
+        spec = FunctionBehaviorSpec(
+            function_name="parse_value",
+            cases=[
+                BehaviorCase(name="integer", args=("7",), expected=7),
+                BehaviorCase(name="string", args=("hello",), expected="hello"),
+            ],
+        )
+        result = validate_function_behavior(source, spec)
+        self.assertTrue(result.is_compliant, [asdict(issue) for issue in result.issues])
+
+    def test_behavior_validator_allows_safe_map_builtin(self) -> None:
+        source = """
+def parse_values(values):
+    return list(map(int, values))
+"""
+        spec = FunctionBehaviorSpec(
+            function_name="parse_values",
+            cases=[
+                BehaviorCase(name="values", args=(["1", "2", "3"],), expected=[1, 2, 3]),
+            ],
+        )
+        result = validate_function_behavior(source, spec)
+        self.assertTrue(result.is_compliant, [asdict(issue) for issue in result.issues])
+
+    def test_behavior_validator_allows_safe_str_builtin(self) -> None:
+        source = """
+def stringify(value):
+    return str(value)
+"""
+        spec = FunctionBehaviorSpec(
+            function_name="stringify",
+            cases=[
+                BehaviorCase(name="integer", args=(7,), expected="7"),
+            ],
+        )
+        result = validate_function_behavior(source, spec)
+        self.assertTrue(result.is_compliant, [asdict(issue) for issue in result.issues])
 
 
 if __name__ == "__main__":

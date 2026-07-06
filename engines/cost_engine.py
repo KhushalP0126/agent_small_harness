@@ -1,0 +1,199 @@
+from __future__ import annotations
+
+import ast
+from dataclasses import dataclass
+
+from engines.base import BaseEngine, EngineDiagnostic, EngineFinding
+
+
+@dataclass
+class MembershipHotspot:
+    container: str
+    line: int
+
+
+class _CostVisitor(ast.NodeVisitor):
+    def __init__(self) -> None:
+        self.loop_depth = 0
+        self.set_like_names: set[str] = set()
+        self.dict_like_names: set[str] = set()
+        self.list_like_names: set[str] = set()
+        self.string_like_names: set[str] = set()
+        self.hotspots: list[MembershipHotspot] = []
+
+    def _annotation_name(self, node: ast.AST | None) -> str:
+        if node is None:
+            return ""
+        if isinstance(node, ast.Name):
+            return node.id
+        if isinstance(node, ast.Attribute):
+            return node.attr
+        if isinstance(node, ast.Subscript):
+            return self._annotation_name(node.value)
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return node.value.split("[", 1)[0]
+        return ""
+
+    def _record_name_type(self, name: str, kind: str) -> None:
+        if not name:
+            return
+        for names in (
+            self.set_like_names,
+            self.dict_like_names,
+            self.list_like_names,
+            self.string_like_names,
+        ):
+            names.discard(name)
+        if kind == "set":
+            self.set_like_names.add(name)
+        elif kind == "dict":
+            self.dict_like_names.add(name)
+        elif kind in {"list", "tuple"}:
+            self.list_like_names.add(name)
+        elif kind == "str":
+            self.string_like_names.add(name)
+
+    def _infer_container_kind(self, node: ast.AST) -> str:
+        if isinstance(node, ast.Dict):
+            return "dict"
+        if isinstance(node, (ast.Set, ast.SetComp)):
+            return "set"
+        if isinstance(node, (ast.List, ast.ListComp, ast.Tuple)):
+            return "list"
+        if isinstance(node, ast.Constant) and isinstance(node.value, str):
+            return "str"
+        if isinstance(node, ast.JoinedStr):
+            return "str"
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            if node.func.id in {"dict", "set", "list", "tuple", "str"}:
+                return node.func.id
+        return ""
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        for arg in [*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs]:
+            annotation = self._annotation_name(arg.annotation)
+            if annotation in {"dict", "Dict", "Mapping", "MutableMapping"}:
+                self._record_name_type(arg.arg, "dict")
+            elif annotation in {"set", "Set", "frozenset", "FrozenSet"}:
+                self._record_name_type(arg.arg, "set")
+            elif annotation in {"list", "List", "tuple", "Tuple", "Sequence", "MutableSequence"}:
+                self._record_name_type(arg.arg, "list")
+            elif annotation in {"str", "String"}:
+                self._record_name_type(arg.arg, "str")
+        self.generic_visit(node)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        self.visit_FunctionDef(node)
+
+    def visit_Assign(self, node: ast.Assign) -> None:
+        kind = self._infer_container_kind(node.value)
+        for target in node.targets:
+            if not isinstance(target, ast.Name):
+                continue
+            self._record_name_type(target.id, kind)
+        self.generic_visit(node)
+
+    def visit_AnnAssign(self, node: ast.AnnAssign) -> None:
+        if isinstance(node.target, ast.Name):
+            kind = self._infer_container_kind(node.value) if node.value is not None else ""
+            if not kind:
+                annotation = self._annotation_name(node.annotation)
+                if annotation in {"dict", "Dict", "Mapping", "MutableMapping"}:
+                    kind = "dict"
+                elif annotation in {"set", "Set", "frozenset", "FrozenSet"}:
+                    kind = "set"
+                elif annotation in {"list", "List", "tuple", "Tuple", "Sequence", "MutableSequence"}:
+                    kind = "list"
+                elif annotation in {"str", "String"}:
+                    kind = "str"
+            self._record_name_type(node.target.id, kind)
+        self.generic_visit(node)
+
+    def visit_For(self, node: ast.For) -> None:
+        self.loop_depth += 1
+        self.generic_visit(node)
+        self.loop_depth -= 1
+
+    def visit_While(self, node: ast.While) -> None:
+        self.loop_depth += 1
+        self.generic_visit(node)
+        self.loop_depth -= 1
+
+    def visit_ListComp(self, node: ast.ListComp) -> None:
+        self.loop_depth += len(node.generators)
+        self.generic_visit(node)
+        self.loop_depth -= len(node.generators)
+
+    def visit_SetComp(self, node: ast.SetComp) -> None:
+        self.loop_depth += len(node.generators)
+        self.generic_visit(node)
+        self.loop_depth -= len(node.generators)
+
+    def visit_DictComp(self, node: ast.DictComp) -> None:
+        self.loop_depth += len(node.generators)
+        self.generic_visit(node)
+        self.loop_depth -= len(node.generators)
+
+    def visit_GeneratorExp(self, node: ast.GeneratorExp) -> None:
+        self.loop_depth += len(node.generators)
+        self.generic_visit(node)
+        self.loop_depth -= len(node.generators)
+
+    def visit_Compare(self, node: ast.Compare) -> None:
+        if self.loop_depth:
+            for operator, comparator in zip(node.ops, node.comparators):
+                if isinstance(operator, (ast.In, ast.NotIn)) and isinstance(comparator, ast.Name):
+                    if comparator.id in self.list_like_names:
+                        self.hotspots.append(
+                            MembershipHotspot(
+                                container=comparator.id,
+                                line=getattr(node, "lineno", 0),
+                            )
+                        )
+        self.generic_visit(node)
+
+
+class CostEngine(BaseEngine):
+    name = "engine-4-cost"
+
+    def scan(self, source: str) -> list[EngineFinding]:
+        tree = ast.parse(source)
+        visitor = _CostVisitor()
+        visitor.visit(tree)
+        if visitor.hotspots:
+            containers = sorted({hotspot.container for hotspot in visitor.hotspots})
+            lines = sorted({hotspot.line for hotspot in visitor.hotspots})
+            return [
+                EngineFinding(
+                    engine=self.name,
+                    severity="High",
+                    summary="Linear membership test inside loop",
+                    details=(
+                        "A loop performs membership checks against a non-set container. "
+                        "This often creates O(N*M) behavior and should usually be converted to set lookup."
+                    ),
+                    metrics={
+                        "containers": containers,
+                        "lines": lines,
+                        "hotspot_count": len(visitor.hotspots),
+                    },
+                    diagnostic=EngineDiagnostic(
+                        violation="ALGORITHMIC_COST",
+                        threshold="avoid repeated linear membership inside loops",
+                        actual=", ".join(containers),
+                        location=", ".join(f"line {line}" for line in lines),
+                        recommended_refactor=(
+                            "Precompute a set for repeated membership checks before the loop, then test against that set."
+                        ),
+                    ),
+                )
+            ]
+        return [
+            EngineFinding(
+                engine=self.name,
+                severity="Low",
+                summary="No repeated linear membership hotspot detected",
+                details="No loop membership checks against non-set containers were found.",
+                metrics={"hotspot_count": 0},
+            )
+        ]

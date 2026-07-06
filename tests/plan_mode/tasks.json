@@ -1,0 +1,93 @@
+[
+  {
+    "difficulty": 1,
+    "name": "simple_function_example",
+    "prompt": "Write a Python function named sum_even_numbers. sum_even_numbers([1, 2, 3, 4]) == 6",
+    "expected": {
+      "language": "python",
+      "task_type": "general_code",
+      "target_function": "sum_even_numbers",
+      "min_behavior_cases": 1,
+      "min_deal_examples": 1,
+      "needs_user_clarification": false
+    }
+  },
+  {
+    "difficulty": 2,
+    "name": "signed_integer_parser",
+    "prompt": "Write a Python function named parse_int_list(text). It parses user input efficiently. parse_int_list('1, -2, +3') == [1, -2, 3]; parse_int_list('--1, +, 5') == [5]",
+    "expected": {
+      "language": "python",
+      "task_type": "general_code",
+      "target_function": "parse_int_list",
+      "min_behavior_cases": 2,
+      "min_deal_examples": 2,
+      "needs_user_clarification": false,
+      "performance_contains": ["avoid repeated linear membership"],
+      "security_contains": ["handle malformed input"]
+    }
+  },
+  {
+    "difficulty": 3,
+    "name": "library_context",
+    "prompt": "Build a pandas data cleaner function clean_rows(df). clean_rows([]) == []",
+    "expected": {
+      "language": "python",
+      "task_type": "data",
+      "target_function": "clean_rows",
+      "min_behavior_cases": 1,
+      "min_deal_examples": 1,
+      "needs_user_clarification": false,
+      "allowed_libraries": ["pandas"],
+      "route_hint": "template_or_small_worker"
+    }
+  },
+  {
+    "difficulty": 4,
+    "name": "ambiguous_helper",
+    "prompt": "Build a helper function that returns the right answer.",
+    "expected": {
+      "language": "python",
+      "task_type": "general_code",
+      "target_function": "",
+      "min_behavior_cases": 0,
+      "min_deal_examples": 0,
+      "needs_user_clarification": true,
+      "question_contains": ["What exact function name", "What input/output examples"]
+    }
+  },
+  {
+    "difficulty": 5,
+    "name": "sectioned_config_state_machine",
+    "prompt": "Write a Python function named parse_sectioned_config(text). It receives lines of configuration text. Blank lines and lines starting with # are ignored. A section header is [section]. Key value records inside a section use key=value and require exactly one equals sign. Ignore records before any section or with empty keys. Later valid records overwrite earlier values in the same section. parse_sectioned_config('orphan=skip\\n[]\\n[ok]\\n=bad\\nx=1=2\\nx = one\\nx = two') == {'ok': {'x': 'two'}}",
+    "expected": {
+      "language": "python",
+      "task_type": "general_code",
+      "target_function": "parse_sectioned_config",
+      "min_behavior_cases": 1,
+      "min_deal_examples": 1,
+      "min_state_constraints": 8,
+      "needs_user_clarification": false,
+      "state_contains": [
+        "track parser state explicitly with an active section variable initialized to None",
+        "only activate section state after a valid non-empty section header is found",
+        "ignore key/value records until an active section exists",
+        "treat a key/value record as valid only when it contains exactly one equals sign",
+        "store later valid records over earlier records with the same key"
+      ]
+    }
+  },
+  {
+    "difficulty": 6,
+    "name": "multifile_scope",
+    "prompt": "Build a Python full stack helper function named normalize_user(row). normalize_user({'id': '7'}) == {'id': 7}. This may require multi-file changes.",
+    "expected": {
+      "language": "python",
+      "target_function": "normalize_user",
+      "min_behavior_cases": 1,
+      "min_deal_examples": 1,
+      "needs_user_clarification": true,
+      "question_contains": ["Which files or modules are in scope"]
+    }
+  }
+]

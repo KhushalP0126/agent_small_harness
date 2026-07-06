@@ -11,7 +11,10 @@ DEFAULT_POLICY = {
     "allow_explicit_globals": False,
     "allow_module_state_mutation": False,
     "allow_external_dependencies": False,
+    "allow_unknown_registered_apis": False,
     "allow_unsafe_calls": False,
+    "allow_algorithmic_hotspots": False,
+    "allow_lint_errors": False,
 }
 
 
@@ -129,6 +132,24 @@ def validate_findings(
                         evidence=_evidence(finding),
                     )
                 )
+            elif (
+                finding.summary == "Unknown registered-library API usage"
+                and not policy["allow_unknown_registered_apis"]
+            ):
+                violations.append(
+                    Violation(
+                        kind="unknown_api",
+                        engine=finding.engine,
+                        severity=finding.severity,
+                        summary=finding.summary,
+                        rationale=finding.details,
+                        current_value=", ".join(metrics.get("unknown_api_calls", [])) or "unknown API",
+                        allowed_value="registered library schema",
+                        repair_hint="use_registered_api",
+                        location=finding.diagnostic.location,
+                        evidence=_evidence(finding),
+                    )
+                )
         elif finding.engine == "engine-parse-contract":
             violations.append(
                 Violation(
@@ -144,6 +165,38 @@ def validate_findings(
                     evidence=_evidence(finding),
                 )
             )
+        elif finding.engine == "engine-4-cost":
+            if finding.summary == "Linear membership test inside loop" and not policy["allow_algorithmic_hotspots"]:
+                violations.append(
+                    Violation(
+                        kind="algorithmic_cost",
+                        engine=finding.engine,
+                        severity=finding.severity,
+                        summary=finding.summary,
+                        rationale=finding.details,
+                        current_value=", ".join(metrics.get("containers", [])) or "linear membership hotspot",
+                        allowed_value="precomputed set or constant-time lookup",
+                        repair_hint="precompute_lookup",
+                        location=finding.diagnostic.location,
+                        evidence=_evidence(finding),
+                    )
+                )
+        elif finding.engine == "engine-5-lint":
+            if finding.summary in {"Pylint error", "Pylint fatal"} and not policy["allow_lint_errors"]:
+                violations.append(
+                    Violation(
+                        kind="lint_error",
+                        engine=finding.engine,
+                        severity=finding.severity,
+                        summary=finding.summary,
+                        rationale=finding.details,
+                        current_value=metrics.get("symbol", "lint error"),
+                        allowed_value="no Pylint fatal/error messages",
+                        repair_hint="fix_lint_error",
+                        location=finding.diagnostic.location,
+                        evidence=_evidence(finding),
+                    )
+                )
 
     return ValidationResult(is_compliant=not violations, violations=violations)
 

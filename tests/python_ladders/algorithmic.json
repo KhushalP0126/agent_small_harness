@@ -1,0 +1,38 @@
+[
+  {
+    "difficulty": 1,
+    "name": "compact_ranges",
+    "task_type": "python_algorithmic",
+    "language": "python",
+    "prompt": "Write a Python function named compact_ranges(values). It receives a list of integers. Sort values, remove duplicates, and return a list of range strings. A single value is 'N'. Consecutive runs are 'A-B'. Empty input returns an empty list.",
+    "function_name": "compact_ranges",
+    "cases": [
+      {"name": "mixed", "args": [[5, 1, 2, 3, 3, 7, 9, 8]], "expected": ["1-3", "5", "7-9"]},
+      {"name": "negative", "args": [[-3, -2, -1, 1, 3, 4]], "expected": ["-3--1", "1", "3-4"]}
+    ]
+  },
+  {
+    "difficulty": 2,
+    "name": "merge_intervals",
+    "task_type": "python_algorithmic",
+    "language": "python",
+    "prompt": "Write a Python function named merge_intervals(intervals). It receives a list of two-item lists or tuples representing inclusive integer intervals. Normalize intervals where start is greater than end, sort them by start then end, and merge intervals that overlap or are adjacent with no integer gap between them. Return a new list of [start, end] pairs. Empty input returns an empty list. Do not mutate the input.",
+    "function_name": "merge_intervals",
+    "cases": [
+      {"name": "overlap and touch", "args": [[[5, 7], [1, 3], [3, 5], [10, 12]]], "expected": [[1, 7], [10, 12]]},
+      {"name": "normalize reversed", "args": [[[8, 6], [2, 4], [5, 5]]], "expected": [[2, 8]]}
+    ]
+  },
+  {
+    "difficulty": 3,
+    "name": "resolve_dependency_order",
+    "task_type": "python_algorithmic",
+    "language": "python",
+    "prompt": "Write a Python function named resolve_dependency_order(items, dependencies). items is a list of task names. dependencies is a dict mapping a task to a list of tasks that must come before it. Return a valid order containing every item once. If a dependency names an unknown task, ignore that dependency. If there is a cycle, return an empty list. When multiple tasks are available, choose alphabetical order.",
+    "function_name": "resolve_dependency_order",
+    "cases": [
+      {"name": "simple", "args": [["build", "test", "deploy"], {"test": ["build"], "deploy": ["test"]}], "expected": ["build", "test", "deploy"]},
+      {"name": "cycle", "args": [["a", "b"], {"a": ["b"], "b": ["a"]}], "expected": []}
+    ]
+  }
+]

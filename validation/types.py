@@ -11,7 +11,11 @@ ViolationKind = Literal[
     "parse_error",
     "behavior_mismatch",
     "external_dependency",
+    "unknown_api",
     "unsafe_call",
+    "algorithmic_cost",
+    "lint_error",
+    "formal_counterexample",
 ]
 
 RepairHint = Literal[
@@ -22,7 +26,11 @@ RepairHint = Literal[
     "return_valid_python",
     "preserve_behavior",
     "use_standard_library",
+    "use_registered_api",
     "remove_unsafe_call",
+    "precompute_lookup",
+    "fix_lint_error",
+    "satisfy_contract",
 ]
 
 

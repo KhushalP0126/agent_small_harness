@@ -1,0 +1,36 @@
+[
+  {
+    "difficulty": 1,
+    "name": "dedupe_by_key",
+    "task_type": "python_data_transform",
+    "language": "python",
+    "prompt": "Write a Python function named dedupe_by_key(rows, key). It receives a list of dictionaries and returns a new list keeping only the first row for each distinct row[key] value. Ignore rows that do not contain the key. Preserve original order and do not mutate the input rows.",
+    "function_name": "dedupe_by_key",
+    "cases": [
+      {"name": "first wins", "args": [[{"id": 1, "name": "a"}, {"id": 1, "name": "b"}, {"id": 2, "name": "c"}], "id"], "expected": [{"id": 1, "name": "a"}, {"id": 2, "name": "c"}]}
+    ]
+  },
+  {
+    "difficulty": 2,
+    "name": "group_top_scores",
+    "task_type": "python_data_transform",
+    "language": "python",
+    "prompt": "Write a Python function named group_top_scores(records). Each record is a dict with team, player, and score keys. Ignore records missing any required key. For each team, return up to two player names with the highest scores, sorted by score descending and then player name ascending for ties. Return a dict mapping each team to the selected player-name list. Do not mutate the input records.",
+    "function_name": "group_top_scores",
+    "cases": [
+      {"name": "top two", "args": [[{"team": "red", "player": "amy", "score": 5}, {"team": "red", "player": "zoe", "score": 8}, {"team": "red", "player": "bob", "score": 8}]], "expected": {"red": ["bob", "zoe"]}}
+    ]
+  },
+  {
+    "difficulty": 3,
+    "name": "summarize_transactions",
+    "task_type": "python_data_transform",
+    "language": "python",
+    "prompt": "Write a Python function named summarize_transactions(rows). Each row is a dict with account, kind, and amount keys. kind is either credit or debit. Ignore rows missing required keys or with any other kind. Return a dict mapping account names to net totals where credits add amount and debits subtract amount. Accounts with a final total of 0 should still be included if they had at least one valid row.",
+    "function_name": "summarize_transactions",
+    "cases": [
+      {"name": "mixed", "args": [[{"account": "cash", "kind": "credit", "amount": 10}, {"account": "cash", "kind": "debit", "amount": 4}, {"account": "bank", "kind": "credit", "amount": 3}]], "expected": {"cash": 6, "bank": 3}},
+      {"name": "zero retained", "args": [[{"account": "a", "kind": "credit", "amount": 5}, {"account": "a", "kind": "debit", "amount": 5}]], "expected": {"a": 0}}
+    ]
+  }
+]

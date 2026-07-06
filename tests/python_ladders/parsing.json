@@ -1,0 +1,38 @@
+[
+  {
+    "difficulty": 1,
+    "name": "parse_int_list",
+    "task_type": "python_parsing",
+    "language": "python",
+    "prompt": "Write a Python function named parse_int_list(text). It receives a comma-separated string. Trim whitespace around each item. Convert signed integer tokens to int. Ignore empty tokens and non-integer tokens. Return the integers in order.",
+    "function_name": "parse_int_list",
+    "cases": [
+      {"name": "mixed", "args": ["1, -2, hello, +3"], "expected": [1, -2, 3]},
+      {"name": "bad", "args": ["--1, +, 5"], "expected": [5]}
+    ]
+  },
+  {
+    "difficulty": 2,
+    "name": "parse_key_value_lines",
+    "task_type": "python_parsing",
+    "language": "python",
+    "prompt": "Write a Python function named parse_key_value_lines(text). It receives newline-separated key=value records. Ignore blank lines and lines without exactly one equals sign. Trim keys and values. Ignore empty keys. Convert signed integer values to int; leave other values as strings. Later valid records overwrite earlier values.",
+    "function_name": "parse_key_value_lines",
+    "cases": [
+      {"name": "mixed", "args": ["a=1\nb = hello\nbad\nc=-5"], "expected": {"a": 1, "b": "hello", "c": -5}},
+      {"name": "later wins", "args": ["x=1\nx=two\nx=3"], "expected": {"x": 3}}
+    ]
+  },
+  {
+    "difficulty": 3,
+    "name": "parse_sectioned_config",
+    "task_type": "python_parsing",
+    "language": "python",
+    "prompt": "Write a Python function named parse_sectioned_config(text). It receives lines of configuration text. Blank lines and lines starting with # are ignored. A section header is [section]. Key value records inside a section use key=value and require exactly one equals sign. Trim whitespace. Ignore records before any section or with empty keys. Later valid records overwrite earlier values in the same section. Return a nested dict of section to key/value strings.",
+    "function_name": "parse_sectioned_config",
+    "cases": [
+      {"name": "basic", "args": ["[db]\nhost = local\nport=5432"], "expected": {"db": {"host": "local", "port": "5432"}}},
+      {"name": "malformed", "args": ["orphan=skip\n[]\n[ok]\n=bad\nx=1=2\nx = one\nx = two"], "expected": {"ok": {"x": "two"}}}
+    ]
+  }
+]

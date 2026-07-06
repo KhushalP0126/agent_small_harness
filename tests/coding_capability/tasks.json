@@ -1,0 +1,91 @@
+[
+  {
+    "name": "matrix_scoring",
+    "task_type": "general_code",
+    "language": "python",
+    "prompt": "Write a Python function named analyze(matrix). It receives a list of rows containing numbers. Return the total score for every value: negative numbers score 1, zero scores 2, values from 1 through 9 score 3, values from 10 through 99 score 4, and values 100 or greater score 5. Empty matrices and empty rows should return or contribute 0.",
+    "function_name": "analyze",
+    "cases": [
+      {"name": "empty matrix", "args": [[]], "expected": 0},
+      {"name": "empty rows", "args": [[[], []]], "expected": 0},
+      {"name": "all classes", "args": [[[-1, 0, 4, 10, 99, 100]]], "expected": 19},
+      {"name": "mixed rows", "args": [[[1, 2, 3], [10, 0, -5]]], "expected": 16}
+    ]
+  },
+  {
+    "name": "dedupe_preserve_order",
+    "task_type": "general_code",
+    "language": "python",
+    "prompt": "Write a Python function named dedupe_preserve_order(items). It receives a list and returns a new list containing the first occurrence of each value in the original order. Do not mutate the input list.",
+    "function_name": "dedupe_preserve_order",
+    "cases": [
+      {"name": "empty", "args": [[]], "expected": []},
+      {"name": "numbers", "args": [[3, 1, 3, 2, 1]], "expected": [3, 1, 2]},
+      {"name": "strings", "args": [["a", "b", "a", "c", "b"]], "expected": ["a", "b", "c"]}
+    ]
+  },
+  {
+    "name": "clamp_values",
+    "task_type": "general_code",
+    "language": "python",
+    "prompt": "Write a Python function named clamp_values(values, lower, upper). It receives a list of numbers and returns a new list where each number below lower becomes lower, each number above upper becomes upper, and values inside the range are unchanged. Do not mutate the input list.",
+    "function_name": "clamp_values",
+    "cases": [
+      {"name": "empty", "args": [[], 0, 10], "expected": []},
+      {"name": "mixed", "args": [[-5, 0, 4, 12], 0, 10], "expected": [0, 0, 4, 10]},
+      {"name": "negative bounds", "args": [[-10, -3, 2], -4, 1], "expected": [-4, -3, 1]}
+    ]
+  },
+  {
+    "name": "merge_intervals",
+    "task_type": "general_code",
+    "language": "python",
+    "prompt": "Write a Python function named merge_intervals(intervals). It receives a list of two-item lists or tuples representing inclusive integer intervals. Normalize intervals where start is greater than end, sort them by start then end, and merge intervals that overlap or are adjacent with no integer gap between them. Return a new list of [start, end] pairs. Empty input returns an empty list. Do not mutate the input.",
+    "function_name": "merge_intervals",
+    "cases": [
+      {"name": "empty", "args": [[]], "expected": []},
+      {"name": "overlap and touch", "args": [[[5, 7], [1, 3], [3, 5], [10, 12]]], "expected": [[1, 7], [10, 12]]},
+      {"name": "normalize reversed", "args": [[[8, 6], [2, 4], [5, 5]]], "expected": [[2, 8]]},
+      {"name": "separate intervals", "args": [[[1, 2], [4, 5], [8, 9]]], "expected": [[1, 2], [4, 5], [8, 9]]}
+    ]
+  },
+  {
+    "name": "parse_key_value_lines",
+    "task_type": "general_code",
+    "language": "python",
+    "prompt": "Write a Python function named parse_key_value_lines(text). It receives a string containing newline-separated key=value records. Ignore blank lines and lines without exactly one equals sign. Trim surrounding whitespace from keys and values. Ignore records with an empty key. Convert signed integer values to int; leave other values as strings. If a key appears more than once, the later valid record wins.",
+    "function_name": "parse_key_value_lines",
+    "cases": [
+      {"name": "empty", "args": [""], "expected": {}},
+      {"name": "mixed values", "args": ["a=1\nb = hello\nbad\nc=-5"], "expected": {"a": 1, "b": "hello", "c": -5}},
+      {"name": "ignore malformed", "args": ["=missing\nx=1=2\nvalid = 007\nname=ada"], "expected": {"valid": 7, "name": "ada"}},
+      {"name": "later wins", "args": ["x=1\nx=two\nx=3"], "expected": {"x": 3}}
+    ]
+  },
+  {
+    "name": "group_top_scores",
+    "task_type": "general_code",
+    "language": "python",
+    "prompt": "Write a Python function named group_top_scores(records). Each record is a dict with team, player, and score keys. Ignore records missing any required key. For each team, return up to two player names with the highest scores, sorted by score descending and then player name ascending for ties. Return a dict mapping each team to the selected player-name list. Do not mutate the input records.",
+    "function_name": "group_top_scores",
+    "cases": [
+      {"name": "empty", "args": [[]], "expected": {}},
+      {"name": "top two per team", "args": [[{"team": "red", "player": "amy", "score": 5}, {"team": "red", "player": "zoe", "score": 8}, {"team": "red", "player": "bob", "score": 8}, {"team": "blue", "player": "kim", "score": 1}]], "expected": {"red": ["bob", "zoe"], "blue": ["kim"]}},
+      {"name": "ignore missing", "args": [[{"team": "red", "player": "amy"}, {"team": "red", "player": "bob", "score": 3}, {"player": "no-team", "score": 9}]], "expected": {"red": ["bob"]}},
+      {"name": "ties by name", "args": [[{"team": "x", "player": "cara", "score": 2}, {"team": "x", "player": "anna", "score": 2}, {"team": "x", "player": "beth", "score": 2}]], "expected": {"x": ["anna", "beth"]}}
+    ]
+  },
+  {
+    "name": "summarize_transactions",
+    "task_type": "general_code",
+    "language": "python",
+    "prompt": "Write a Python function named summarize_transactions(rows). Each row is a dict with account, kind, and amount keys. kind is either credit or debit. Ignore rows missing required keys or with any other kind. Return a dict mapping account names to net totals where credits add amount and debits subtract amount. Accounts with a final total of 0 should still be included if they had at least one valid row.",
+    "function_name": "summarize_transactions",
+    "cases": [
+      {"name": "empty", "args": [[]], "expected": {}},
+      {"name": "mixed", "args": [[{"account": "cash", "kind": "credit", "amount": 10}, {"account": "cash", "kind": "debit", "amount": 4}, {"account": "bank", "kind": "credit", "amount": 3}]], "expected": {"cash": 6, "bank": 3}},
+      {"name": "ignore bad rows", "args": [[{"account": "cash", "kind": "other", "amount": 10}, {"account": "cash", "kind": "debit", "amount": 2}, {"account": "missing", "amount": 5}]], "expected": {"cash": -2}},
+      {"name": "zero retained", "args": [[{"account": "a", "kind": "credit", "amount": 5}, {"account": "a", "kind": "debit", "amount": 5}]], "expected": {"a": 0}}
+    ]
+  }
+]

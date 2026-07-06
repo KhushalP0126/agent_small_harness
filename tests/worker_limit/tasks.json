@@ -1,0 +1,94 @@
+[
+  {
+    "difficulty": 1,
+    "name": "sum_even_numbers",
+    "task_type": "worker_limit",
+    "language": "python",
+    "prompt": "Write a Python function named sum_even_numbers(values). It receives a list of integers and returns the sum of the even values. Empty input returns 0. Do not mutate the input.",
+    "function_name": "sum_even_numbers",
+    "cases": [
+      {"name": "empty", "args": [[]], "expected": 0},
+      {"name": "mixed", "args": [[1, 2, 3, 4, 5, 6]], "expected": 12},
+      {"name": "negative", "args": [[-4, -3, -2, 7]], "expected": -6}
+    ]
+  },
+  {
+    "difficulty": 2,
+    "name": "dedupe_by_key",
+    "task_type": "worker_limit",
+    "language": "python",
+    "prompt": "Write a Python function named dedupe_by_key(rows, key). It receives a list of dictionaries and returns a new list keeping only the first row for each distinct row[key] value. Ignore rows that do not contain the key. Preserve original order and do not mutate the input rows.",
+    "function_name": "dedupe_by_key",
+    "cases": [
+      {"name": "empty", "args": [[], "id"], "expected": []},
+      {"name": "first wins", "args": [[{"id": 1, "name": "a"}, {"name": "missing"}, {"id": 1, "name": "b"}, {"id": 2, "name": "c"}], "id"], "expected": [{"id": 1, "name": "a"}, {"id": 2, "name": "c"}]},
+      {"name": "different key", "args": [[{"team": "red", "v": 1}, {"team": "blue", "v": 2}, {"team": "red", "v": 3}], "team"], "expected": [{"team": "red", "v": 1}, {"team": "blue", "v": 2}]}
+    ]
+  },
+  {
+    "difficulty": 3,
+    "name": "parse_int_list",
+    "task_type": "worker_limit",
+    "language": "python",
+    "prompt": "Write a Python function named parse_int_list(text). It receives a comma-separated string. Trim whitespace around each item. Convert signed integer tokens to int. Ignore empty tokens and non-integer tokens. Return the integers in order.",
+    "function_name": "parse_int_list",
+    "cases": [
+      {"name": "empty", "args": [""], "expected": []},
+      {"name": "mixed", "args": ["1, -2, hello, 003, , +4"], "expected": [1, -2, 3, 4]},
+      {"name": "bad signs", "args": ["--1, +, 5, -0"], "expected": [5, 0]}
+    ]
+  },
+  {
+    "difficulty": 4,
+    "name": "compact_ranges",
+    "task_type": "worker_limit",
+    "language": "python",
+    "prompt": "Write a Python function named compact_ranges(values). It receives a list of integers. Sort values, remove duplicates, and return a list of range strings. A single value is 'N'. Consecutive runs are 'A-B'. Empty input returns an empty list.",
+    "function_name": "compact_ranges",
+    "cases": [
+      {"name": "empty", "args": [[]], "expected": []},
+      {"name": "mixed", "args": [[5, 1, 2, 3, 3, 7, 9, 8]], "expected": ["1-3", "5", "7-9"]},
+      {"name": "negative", "args": [[-3, -2, -1, 1, 3, 4]], "expected": ["-3--1", "1", "3-4"]}
+    ]
+  },
+  {
+    "difficulty": 5,
+    "name": "merge_inventory_events",
+    "task_type": "worker_limit",
+    "language": "python",
+    "prompt": "Write a Python function named merge_inventory_events(events). Each event is a dict with sku, action, and qty. action is 'add' or 'remove'. Ignore events missing required keys, with unknown actions, or with non-positive qty. Return a dict mapping sku to final quantity. Adds increase quantity. Removes decrease quantity but never below 0. Keep sku keys that had at least one valid event even if final quantity is 0.",
+    "function_name": "merge_inventory_events",
+    "cases": [
+      {"name": "empty", "args": [[]], "expected": {}},
+      {"name": "mixed", "args": [[{"sku": "a", "action": "add", "qty": 5}, {"sku": "a", "action": "remove", "qty": 3}, {"sku": "b", "action": "remove", "qty": 2}, {"sku": "b", "action": "add", "qty": 1}]], "expected": {"a": 2, "b": 1}},
+      {"name": "ignore invalid", "args": [[{"sku": "x", "action": "add", "qty": 0}, {"sku": "x", "action": "other", "qty": 3}, {"sku": "x", "action": "add", "qty": 2}, {"action": "add", "qty": 2}]], "expected": {"x": 2}}
+    ]
+  },
+  {
+    "difficulty": 6,
+    "name": "parse_sectioned_config",
+    "task_type": "worker_limit",
+    "language": "python",
+    "prompt": "Write a Python function named parse_sectioned_config(text). It receives lines of configuration text. Blank lines and lines starting with # are ignored. A section header is [section]. Key value records inside a section use key=value and require exactly one equals sign. Trim whitespace. Ignore records before any section or with empty keys. Later valid records overwrite earlier values in the same section. Return a nested dict of section to key/value strings.",
+    "function_name": "parse_sectioned_config",
+    "cases": [
+      {"name": "empty", "args": [""], "expected": {}},
+      {"name": "basic", "args": ["# comment\n[db]\nhost = local\nport=5432\n[app]\nname = demo"], "expected": {"db": {"host": "local", "port": "5432"}, "app": {"name": "demo"}}},
+      {"name": "malformed", "args": ["orphan=skip\n[]\n[ok]\n=bad\nx=1=2\nx = one\nx = two"], "expected": {"ok": {"x": "two"}}}
+    ]
+  },
+  {
+    "difficulty": 7,
+    "name": "resolve_dependency_order",
+    "task_type": "worker_limit",
+    "language": "python",
+    "prompt": "Write a Python function named resolve_dependency_order(items, dependencies). items is a list of task names. dependencies is a dict mapping a task to a list of tasks that must come before it. Return a valid order containing every item once. If a dependency names an unknown task, ignore that dependency. If there is a cycle, return an empty list. When multiple tasks are available, choose alphabetical order.",
+    "function_name": "resolve_dependency_order",
+    "cases": [
+      {"name": "empty", "args": [[], {}], "expected": []},
+      {"name": "simple", "args": [["build", "test", "deploy"], {"test": ["build"], "deploy": ["test"]}], "expected": ["build", "test", "deploy"]},
+      {"name": "alphabetical ready", "args": [["b", "a", "c"], {"c": ["a"]}], "expected": ["a", "b", "c"]},
+      {"name": "cycle", "args": [["a", "b"], {"a": ["b"], "b": ["a"]}], "expected": []}
+    ]
+  }
+]

@@ -9,14 +9,25 @@ from agents.engine_registry import EngineRegistry
 from agents.parse_contract import ParseContractAgent, ParseFailure
 from agents.repair_strategy import MANUAL_REVIEW, TEMPLATE_DIRECTED, RepairStrategyAgent
 from engines.base import EngineFinding
-from prompt.retry_builder import build_retry_prompt
+from prompt.retry_builder import build_retry_prompt, build_small_worker_retry_prompt
 from validation.behavior import FunctionBehaviorSpec, serialize_behavior_result, validate_function_behavior
+from validation.finding_aggregator import aggregate_violations, serialize_repair_directives
+from validation.formal import serialize_formal_result, validate_with_crosshair
 from validation.policy import serialize_validation_result, validate_findings
 from validation.types import ValidationResult, Violation
 
 
 DraftSupplier = Callable[[str], str]
 RepairSupplier = Callable[[str, str], str]
+
+SEVERITY_RANK = {
+    "info": 0,
+    "low": 1,
+    "warn": 2,
+    "medium": 2,
+    "block": 3,
+    "high": 3,
+}
 
 
 @dataclass
@@ -26,10 +37,28 @@ class GenerationAttempt:
     findings: list[dict]
     validation: dict
     behavior_validation: dict
+    formal_validation: dict = field(default_factory=dict)
     diagnostic_deltas: list[dict] = field(default_factory=list)
+    repair_directives: list[dict] = field(default_factory=list)
     retry_prompt: str = ""
+    repair_worker: str = ""
+    repair_error: str = ""
     changed: bool = True
     diff: str = ""
+
+
+@dataclass
+class HumanReviewPayload:
+    status: str
+    reason: str
+    blocking_findings: list[dict]
+    blocking_violations: list[dict]
+    behavior_issues: list[dict]
+    formal_issues: list[dict] = field(default_factory=list)
+    last_retry_prompt: str = ""
+    diagnostic_deltas: list[dict] = field(default_factory=list)
+    repair_directives: list[dict] = field(default_factory=list)
+    suggested_human_decision: str = ""
 
 
 @dataclass
@@ -39,6 +68,7 @@ class GenerationSession:
     max_retries: int
     attempts: list[GenerationAttempt] = field(default_factory=list)
     final_status: str = "manual_review_required"
+    human_review: HumanReviewPayload | None = None
 
 
 class GenerationController(BaseAgent):
@@ -49,8 +79,13 @@ class GenerationController(BaseAgent):
         max_retries: int = 2,
         draft_supplier: DraftSupplier | None = None,
         repair_supplier: RepairSupplier | None = None,
+        architect_supplier: RepairSupplier | None = None,
+        architect_after_repair_attempts: int | None = None,
         policy: dict | None = None,
         behavior_spec: FunctionBehaviorSpec | None = None,
+        behavior_timeout_seconds: float | None = None,
+        crosshair_enabled: bool = False,
+        crosshair_timeout_seconds: float = 3.0,
         debug: bool = False,
         engine_registry: EngineRegistry | None = None,
         parse_contract: ParseContractAgent | None = None,
@@ -60,8 +95,13 @@ class GenerationController(BaseAgent):
         self.max_retries = max_retries
         self.draft_supplier = draft_supplier or (lambda prompt: prompt)
         self.repair_supplier = repair_supplier or (lambda draft, retry_prompt: draft)
+        self.architect_supplier = architect_supplier
+        self.architect_after_repair_attempts = architect_after_repair_attempts
         self.policy = policy
         self.behavior_spec = behavior_spec
+        self.behavior_timeout_seconds = behavior_timeout_seconds
+        self.crosshair_enabled = crosshair_enabled
+        self.crosshair_timeout_seconds = crosshair_timeout_seconds
         self.debug = debug
         self.engine_registry = engine_registry or EngineRegistry.default()
         self.parse_contract = parse_contract or ParseContractAgent()
@@ -72,6 +112,24 @@ class GenerationController(BaseAgent):
         parse_result = self.parse_contract.parse(source, language=self.language)
         if isinstance(parse_result, ParseFailure):
             return [parse_result.finding]
+        if not self.engine_registry.has_language(parse_result.language):
+            return [
+                EngineFinding(
+                    engine="engine-parse-contract",
+                    severity="High",
+                    summary="Unsupported language",
+                    details=(
+                        f"No engine set is registered for language '{parse_result.language}'. "
+                        "Refusing to mark unanalyzed code as compliant."
+                    ),
+                    metrics={
+                        "line": 0,
+                        "offset": 0,
+                        "error": "unsupported_language",
+                        "language": parse_result.language,
+                    },
+                )
+            ]
         return self.engine_registry.findings_for(source, parse_result.language)
 
     def _route(self, findings: list[EngineFinding]) -> str:
@@ -109,6 +167,15 @@ class GenerationController(BaseAgent):
         if self.debug:
             print(f"[Buddy] {message}")
 
+    def _repair_worker_for(self, repair_attempt_index: int) -> tuple[str, RepairSupplier]:
+        if (
+            self.architect_supplier is not None
+            and self.architect_after_repair_attempts is not None
+            and repair_attempt_index >= self.architect_after_repair_attempts
+        ):
+            return "architect_llm", self.architect_supplier
+        return "small_worker", self.repair_supplier
+
     def _behavior_violations(self, result: dict) -> list[Violation]:
         violations: list[Violation] = []
         for issue in result["issues"]:
@@ -123,6 +190,24 @@ class GenerationController(BaseAgent):
                     allowed_value=issue["expected"],
                     repair_hint="preserve_behavior",
                     evidence={"case": issue},
+                )
+            )
+        return violations
+
+    def _formal_violations(self, result: dict) -> list[Violation]:
+        violations: list[Violation] = []
+        for issue in result.get("issues", []):
+            violations.append(
+                Violation(
+                    kind="formal_counterexample",
+                    engine="formal-crosshair",
+                    severity="High",
+                    summary=issue.get("summary", "Formal validation failed"),
+                    rationale=issue.get("details", ""),
+                    current_value="contract or assertion violation",
+                    allowed_value="all checkable contracts and assertions hold",
+                    repair_hint="satisfy_contract",
+                    evidence={"issue": issue},
                 )
             )
         return violations
@@ -204,6 +289,135 @@ class GenerationController(BaseAgent):
         lines.append("A repeated violation with no improvement requires a stronger structural rewrite.")
         return "\n".join(lines)
 
+    def _top_violation(self, violations: list[Violation]) -> Violation | None:
+        if not violations:
+            return None
+        return sorted(
+            violations,
+            key=lambda violation: (
+                -SEVERITY_RANK.get(violation.severity.lower(), 0),
+                violation.engine,
+                violation.kind,
+            ),
+        )[0]
+
+    def _prompt_scope(
+        self,
+        source: str,
+        violations: list[Violation],
+        diagnostic_deltas: list[dict],
+        worker_name: str,
+    ) -> tuple[list[Violation], list]:
+        if worker_name == "architect_llm":
+            scoped_violations = violations
+        else:
+            top_violation = self._top_violation(violations)
+            scoped_violations = [top_violation] if top_violation is not None else []
+        return (
+            scoped_violations,
+            aggregate_violations(
+                source,
+                scoped_violations,
+                diagnostic_deltas=diagnostic_deltas,
+            ),
+        )
+
+    def _build_scoped_retry_prompt(
+        self,
+        source: str,
+        violations: list[Violation],
+        diagnostic_deltas: list[dict],
+        worker_name: str,
+        initial_prompt: str,
+        failed_attempts: list[GenerationAttempt],
+    ) -> tuple[str, list, list[Violation]]:
+        scoped_violations, scoped_directives = self._prompt_scope(
+            source,
+            violations,
+            diagnostic_deltas,
+            worker_name,
+        )
+        if worker_name == "small_worker":
+            retry_prompt = build_small_worker_retry_prompt(source, scoped_violations)
+            if failed_attempts:
+                retry_prompt = (
+                    f"{retry_prompt}\n\n"
+                    "PREVIOUS FAILURE:\n"
+                    "- A prior repair attempt did not pass validation. Do not repeat the same output."
+                )
+            if diagnostic_deltas:
+                retry_prompt = f"{retry_prompt}\n\nPREVIOUS REPAIR SIGNAL:"
+                for delta in diagnostic_deltas:
+                    if delta.get("delta") == 0:
+                        change = "no improvement"
+                    elif delta.get("improved"):
+                        change = "improved but still failing"
+                    else:
+                        change = "changed but still failing"
+                    retry_prompt = (
+                        f"{retry_prompt}\n"
+                        f"- {delta.get('kind')}: {delta.get('prior_actual')} -> {delta.get('current_actual')} ({change})"
+                    )
+        else:
+            retry_prompt = build_retry_prompt(source, scoped_violations, scoped_directives)
+            feedback_context = self._feedback_context(failed_attempts)
+            if initial_prompt.strip():
+                retry_prompt = f"{initial_prompt.strip()}\n\nENGINE FEEDBACK:\n{retry_prompt}"
+            if feedback_context:
+                retry_prompt = f"{retry_prompt}\n\n{feedback_context}"
+            delta_context = self._delta_context(diagnostic_deltas)
+            if delta_context:
+                retry_prompt = f"{retry_prompt}\n\n{delta_context}"
+        if worker_name == "architect_llm" and len(violations) > 1:
+            retry_prompt = (
+                f"{retry_prompt}\n\n"
+                "ARCHITECT MODE:\n"
+                "- Consider the full finding set together.\n"
+                "- Produce a coherent structural repair that satisfies every listed static and behavioral gate."
+            )
+        return retry_prompt, scoped_directives, scoped_violations
+
+    def _suggest_human_decision(self, reason: str) -> str:
+        suggestions = {
+            "stagnant_repair": (
+                "Escalate the payload to an architect model or edit the draft manually; the worker returned an unchanged repair."
+            ),
+            "repair_strategy_manual_review": (
+                "Review the strategy rationale and choose whether to relax policy, provide a stronger spec, or make a manual edit."
+            ),
+            "max_retries_exhausted": (
+                "Escalate to an architect model with the blocking findings and diagnostic deltas before asking for human code review."
+            ),
+            "repair_supplier_error": (
+                "Review the repair backend error, then retry with a different model, larger token budget, or a manual patch."
+            ),
+        }
+        return suggestions.get(
+            reason,
+            "Review the blocking findings and decide whether to revise the prompt, relax policy, or edit the code directly.",
+        )
+
+    def _human_review_payload(self, reason: str, attempt: GenerationAttempt) -> HumanReviewPayload:
+        violations = attempt.validation.get("violations", [])
+        violation_engines = {violation.get("engine") for violation in violations if violation.get("engine")}
+        blocking_findings = [
+            finding
+            for finding in attempt.findings
+            if finding.get("severity") == "High" or finding.get("engine") in violation_engines
+        ]
+        return HumanReviewPayload(
+            status="human_review_required",
+            reason=reason,
+            blocking_findings=blocking_findings,
+            blocking_violations=violations,
+            behavior_issues=attempt.behavior_validation.get("issues", []),
+            formal_issues=attempt.formal_validation.get("issues", []),
+            last_retry_prompt=attempt.retry_prompt,
+            diagnostic_deltas=attempt.diagnostic_deltas,
+            repair_directives=attempt.repair_directives,
+            suggested_human_decision=self._suggest_human_decision(reason),
+        )
+
     def run(self, target: str, initial_prompt: str) -> AgentResult:
         initial_draft = self.draft_supplier(initial_prompt)
         initial_findings = self._scan(initial_draft)
@@ -220,10 +434,35 @@ class GenerationController(BaseAgent):
                 behavior_validation = {"is_compliant": True, "issues": []}
             else:
                 behavior_validation = serialize_behavior_result(
-                    validate_function_behavior(draft, self.behavior_spec)
+                    validate_function_behavior(
+                        draft,
+                        self.behavior_spec,
+                        timeout_seconds=self.behavior_timeout_seconds
+                        if self.behavior_timeout_seconds is not None
+                        else 1.0,
+                    )
                 )
-            is_complete = validation_result.is_compliant and behavior_validation["is_compliant"]
+            if self.crosshair_enabled:
+                formal_validation = serialize_formal_result(
+                    validate_with_crosshair(
+                        draft,
+                        timeout_seconds=self.crosshair_timeout_seconds,
+                    )
+                )
+            else:
+                formal_validation = {
+                    "is_compliant": True,
+                    "skipped": True,
+                    "tool": "crosshair",
+                    "issues": [],
+                }
+            is_complete = (
+                validation_result.is_compliant
+                and behavior_validation["is_compliant"]
+                and formal_validation["is_compliant"]
+            )
             retry_prompt = ""
+            repair_worker = ""
             force_manual_review = False
             changed = attempt_index == 0 or not self._is_stagnant(previous_draft, draft)
             diff_text = self._diff_text(previous_draft, draft) if attempt_index > 0 else ""
@@ -231,14 +470,39 @@ class GenerationController(BaseAgent):
                 failed_attempts[-1] if failed_attempts else None,
                 validation_result.violations,
             )
+            active_violations = (
+                validation_result.violations
+                if not validation_result.is_compliant
+                else (
+                    []
+                    if behavior_validation["is_compliant"] and formal_validation["is_compliant"]
+                    else (
+                        self._behavior_violations(behavior_validation)
+                        if not behavior_validation["is_compliant"]
+                        else self._formal_violations(formal_validation)
+                    )
+                )
+            )
+            repair_directives = aggregate_violations(
+                draft,
+                active_violations,
+                diagnostic_deltas=diagnostic_deltas,
+            )
             if is_complete:
                 self._debug_print(f"Iteration {attempt_index}: draft is static and behavior compliant.")
             elif validation_result.is_compliant:
-                issue_summaries = ", ".join(
-                    f"{issue['case']} expected {issue['expected']} got {issue['actual']}"
-                    for issue in behavior_validation["issues"]
-                )
-                self._debug_print(f"Iteration {attempt_index}: behavior violation detected: {issue_summaries}.")
+                if not behavior_validation["is_compliant"]:
+                    issue_summaries = ", ".join(
+                        f"{issue['case']} expected {issue['expected']} got {issue['actual']}"
+                        for issue in behavior_validation["issues"]
+                    )
+                    self._debug_print(f"Iteration {attempt_index}: behavior violation detected: {issue_summaries}.")
+                else:
+                    issue_summaries = ", ".join(
+                        issue.get("summary", "formal validation failed")
+                        for issue in formal_validation["issues"]
+                    )
+                    self._debug_print(f"Iteration {attempt_index}: formal violation detected: {issue_summaries}.")
             else:
                 violation_summaries = ", ".join(
                     f"{violation.kind} ({violation.current_value} -> {violation.allowed_value})"
@@ -249,14 +513,33 @@ class GenerationController(BaseAgent):
                 retry_violations = (
                     validation_result.violations
                     if not validation_result.is_compliant
-                    else self._behavior_violations(behavior_validation)
+                    else (
+                        self._behavior_violations(behavior_validation)
+                        if not behavior_validation["is_compliant"]
+                        else self._formal_violations(formal_validation)
+                    )
                 )
-                retry_prompt = build_retry_prompt(draft, retry_violations)
+                repair_worker, _supplier = self._repair_worker_for(len(failed_attempts))
+                retry_prompt, prompt_directives, prompt_violations = self._build_scoped_retry_prompt(
+                    source=draft,
+                    violations=retry_violations,
+                    diagnostic_deltas=diagnostic_deltas,
+                    worker_name=repair_worker,
+                    initial_prompt=initial_prompt,
+                    failed_attempts=failed_attempts,
+                )
+                repair_directives = prompt_directives
                 if self.repair_strategy is not None:
                     decision = self.repair_strategy.decide(
                         source=draft,
-                        violations=validation_result.violations,
-                        behavior_issues=behavior_validation["issues"],
+                        violations=prompt_violations if not validation_result.is_compliant else [],
+                        behavior_issues=(
+                            behavior_validation["issues"]
+                            if validation_result.is_compliant and not behavior_validation["is_compliant"]
+                            else formal_validation["issues"]
+                            if validation_result.is_compliant and behavior_validation["is_compliant"]
+                            else []
+                        ),
                         attempt_index=attempt_index,
                         max_retries=self.max_retries,
                     )
@@ -274,29 +557,24 @@ class GenerationController(BaseAgent):
                         )
                     else:
                         self._debug_print(f"Repair strategy selected model-only repair: {decision.rationale}")
-                    if decision.repair_instructions:
+                    if decision.repair_instructions and repair_worker != "small_worker":
                         retry_prompt = (
                             f"{retry_prompt}\n\n"
                             "TARGETED REPAIR INSTRUCTIONS:\n"
                             + "\n".join(f"- {instruction}" for instruction in decision.repair_instructions)
                         )
-                feedback_context = self._feedback_context(failed_attempts)
-                if initial_prompt.strip():
-                    retry_prompt = f"{initial_prompt.strip()}\n\nENGINE FEEDBACK:\n{retry_prompt}"
-                if feedback_context:
-                    retry_prompt = f"{retry_prompt}\n\n{feedback_context}"
-                delta_context = self._delta_context(diagnostic_deltas)
-                if delta_context:
-                    retry_prompt = f"{retry_prompt}\n\n{delta_context}"
-                self._debug_print("Sending repair prompt to model.")
+                self._debug_print(f"Sending repair prompt to {repair_worker}.")
             attempt = GenerationAttempt(
                 attempt=attempt_index,
                 draft=draft,
                 findings=[asdict(finding) for finding in findings],
                 validation=serialize_validation_result(validation_result),
                 behavior_validation=behavior_validation,
+                formal_validation=formal_validation,
                 diagnostic_deltas=diagnostic_deltas,
+                repair_directives=serialize_repair_directives(repair_directives),
                 retry_prompt=retry_prompt,
+                repair_worker=repair_worker,
                 changed=changed,
                 diff=diff_text,
             )
@@ -306,13 +584,65 @@ class GenerationController(BaseAgent):
                 break
             if force_manual_review:
                 session.final_status = "manual_review_required"
+                session.human_review = self._human_review_payload("repair_strategy_manual_review", attempt)
                 break
             if attempt_index < self.max_retries:
                 failed_attempts.append(attempt)
-                next_draft = self.repair_supplier(draft, retry_prompt)
+                worker_name, supplier = self._repair_worker_for(len(failed_attempts) - 1)
+                try:
+                    next_draft = supplier(draft, retry_prompt)
+                except Exception as exc:
+                    attempt.repair_worker = worker_name
+                    attempt.repair_error = f"{exc.__class__.__name__}: {exc}"
+                    self._debug_print(f"Repair backend failed in {worker_name}: {attempt.repair_error}")
+                    session.final_status = "manual_review_required"
+                    session.human_review = self._human_review_payload("repair_supplier_error", attempt)
+                    break
                 if self._is_stagnant(draft, next_draft):
+                    if worker_name != "architect_llm":
+                        fallback_worker, fallback_supplier = self._repair_worker_for(len(failed_attempts))
+                        if fallback_worker == "architect_llm":
+                            self._debug_print(
+                                "Small worker returned unchanged code. Escalating repair prompt to architect."
+                            )
+                            attempt.repair_worker = "small_worker->architect_llm"
+                            architect_violations = (
+                                validation_result.violations
+                                if not validation_result.is_compliant
+                                else (
+                                    self._behavior_violations(behavior_validation)
+                                    if not behavior_validation["is_compliant"]
+                                    else self._formal_violations(formal_validation)
+                                )
+                            )
+                            retry_prompt, architect_directives, _architect_violations = self._build_scoped_retry_prompt(
+                                source=draft,
+                                violations=architect_violations,
+                                diagnostic_deltas=diagnostic_deltas,
+                                worker_name=fallback_worker,
+                                initial_prompt=initial_prompt,
+                                failed_attempts=failed_attempts,
+                            )
+                            attempt.retry_prompt = retry_prompt
+                            attempt.repair_directives = serialize_repair_directives(architect_directives)
+                            try:
+                                next_draft = fallback_supplier(draft, retry_prompt)
+                            except Exception as exc:
+                                attempt.repair_error = f"{exc.__class__.__name__}: {exc}"
+                                self._debug_print(
+                                    f"Repair backend failed in {fallback_worker}: {attempt.repair_error}"
+                                )
+                                session.final_status = "manual_review_required"
+                                session.human_review = self._human_review_payload("repair_supplier_error", attempt)
+                                break
+                            if not self._is_stagnant(draft, next_draft):
+                                self._debug_print("Architect attempt received. Re-analyzing updated draft.")
+                                previous_draft = draft
+                                draft = next_draft
+                                continue
                     self._debug_print("Warning: No changes detected in code. Terminating to avoid infinite loop.")
                     session.final_status = "manual_review_required"
+                    session.human_review = self._human_review_payload("stagnant_repair", attempt)
                     break
                 self._debug_print("Attempt received. Re-analyzing updated draft.")
                 previous_draft = draft
@@ -322,6 +652,8 @@ class GenerationController(BaseAgent):
 
         if session.final_status != "completed":
             session.final_status = "manual_review_required"
+            if session.human_review is None and session.attempts:
+                session.human_review = self._human_review_payload("max_retries_exhausted", session.attempts[-1])
 
         return AgentResult(agent=self.name, payload=asdict(session))
 
@@ -338,6 +670,10 @@ class GenerationController(BaseAgent):
             for issue in attempt.behavior_validation.get("issues", []):
                 lines.append(
                     f"  Behavior failure: {issue['case']} expected {issue['expected']} but got {issue['actual']} ({issue['details']})."
+                )
+            for issue in attempt.formal_validation.get("issues", []):
+                lines.append(
+                    f"  Formal failure: {issue.get('summary', 'formal validation failed')} ({issue.get('details', '')})."
                 )
         lines.append("Do not repeat any prior failed pattern.")
         return "\n".join(lines)

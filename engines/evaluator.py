@@ -6,8 +6,10 @@ from pathlib import Path
 
 from engines.base import BaseEngine, EngineFinding
 from engines.branching_engine import BranchingEngine
+from engines.cost_engine import CostEngine
 from engines.decomposition_engine import DecompositionEngine
 from engines.hazards_engine import HazardsEngine
+from engines.lint_engine import LintEngine
 from engines.math_engine import MathEngine
 
 SEVERITY_WEIGHTS = {
@@ -45,7 +47,7 @@ class EngineEvaluation:
 
 
 def default_engines() -> list[BaseEngine]:
-    return [MathEngine(), HazardsEngine(), BranchingEngine()]
+    return [MathEngine(), HazardsEngine(), BranchingEngine(), CostEngine(), LintEngine()]
 
 
 def load_cases(cases_path: Path | None = None) -> list[EngineCase]:

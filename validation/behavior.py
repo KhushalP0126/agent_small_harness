@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import ast
+import multiprocessing as mp
+import queue
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
 
+DEFAULT_BEHAVIOR_TIMEOUT_SECONDS = 1.0
 BLOCKED_CALL_NAMES = {"__import__", "compile", "eval", "exec", "input", "open"}
 BLOCKED_NODES = (ast.AsyncFunctionDef, ast.AsyncFor, ast.AsyncWith, ast.ClassDef, ast.Import, ast.ImportFrom)
 SAFE_BUILTINS = {
@@ -19,12 +22,16 @@ SAFE_BUILTINS = {
     "int": int,
     "len": len,
     "list": list,
+    "map": map,
     "max": max,
     "min": min,
     "range": range,
     "set": set,
+    "sorted": sorted,
+    "str": str,
     "sum": sum,
     "tuple": tuple,
+    "ValueError": ValueError,
 }
 
 
@@ -88,7 +95,65 @@ def mixed_hard_case_spec() -> FunctionBehaviorSpec:
     )
 
 
-def validate_function_behavior(source: str, spec: FunctionBehaviorSpec) -> BehaviorResult:
+def validate_function_behavior(
+    source: str,
+    spec: FunctionBehaviorSpec,
+    timeout_seconds: float = DEFAULT_BEHAVIOR_TIMEOUT_SECONDS,
+) -> BehaviorResult:
+    ctx = _multiprocessing_context()
+    result_queue = ctx.Queue()
+    process = ctx.Process(target=_behavior_worker, args=(source, spec, result_queue))
+    process.start()
+    process.join(timeout_seconds)
+    if process.is_alive():
+        process.terminate()
+        process.join()
+        return BehaviorResult(
+            is_compliant=False,
+            issues=[
+                BehaviorIssue(
+                    case="timeout",
+                    expected=f"complete within {timeout_seconds:g}s",
+                    actual="timeout",
+                    details="Behavior validation exceeded the sandbox timeout.",
+                )
+            ],
+        )
+    try:
+        payload = result_queue.get_nowait()
+    except queue.Empty:
+        return BehaviorResult(
+            is_compliant=False,
+            issues=[
+                BehaviorIssue(
+                    case="load",
+                    expected="behavior result",
+                    actual=f"process exit {process.exitcode}",
+                    details="Behavior sandbox exited without returning a result.",
+                )
+            ],
+        )
+    return _deserialize_behavior_result(payload)
+
+
+def _multiprocessing_context() -> mp.context.BaseContext:
+    if "fork" in mp.get_all_start_methods():
+        return mp.get_context("fork")
+    return mp.get_context()
+
+
+def _behavior_worker(source: str, spec: FunctionBehaviorSpec, result_queue: Any) -> None:
+    result_queue.put(serialize_behavior_result(_validate_function_behavior_inline(source, spec)))
+
+
+def _deserialize_behavior_result(payload: dict[str, Any]) -> BehaviorResult:
+    return BehaviorResult(
+        is_compliant=payload["is_compliant"],
+        issues=[BehaviorIssue(**issue) for issue in payload["issues"]],
+    )
+
+
+def _validate_function_behavior_inline(source: str, spec: FunctionBehaviorSpec) -> BehaviorResult:
     issues: list[BehaviorIssue] = []
     try:
         tree = ast.parse(source)
