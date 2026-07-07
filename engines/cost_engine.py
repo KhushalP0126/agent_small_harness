@@ -12,13 +12,34 @@ class MembershipHotspot:
     line: int
 
 
+class ContainerTypeTracker:
+    def __init__(self) -> None:
+        self._scopes: list[dict[str, str]] = [{}]
+
+    def push_scope(self) -> None:
+        self._scopes.append({})
+
+    def pop_scope(self) -> None:
+        if len(self._scopes) == 1:
+            return
+        self._scopes.pop()
+
+    def record(self, name: str, kind: str) -> None:
+        if not name:
+            return
+        self._scopes[-1][name] = kind
+
+    def kind_of(self, name: str) -> str:
+        for scope in reversed(self._scopes):
+            if name in scope:
+                return scope[name]
+        return ""
+
+
 class _CostVisitor(ast.NodeVisitor):
     def __init__(self) -> None:
         self.loop_depth = 0
-        self.set_like_names: set[str] = set()
-        self.dict_like_names: set[str] = set()
-        self.list_like_names: set[str] = set()
-        self.string_like_names: set[str] = set()
+        self.tracker = ContainerTypeTracker()
         self.hotspots: list[MembershipHotspot] = []
 
     def _annotation_name(self, node: ast.AST | None) -> str:
@@ -34,24 +55,19 @@ class _CostVisitor(ast.NodeVisitor):
             return node.value.split("[", 1)[0]
         return ""
 
+    def _kind_from_annotation(self, annotation: str) -> str:
+        if annotation in {"dict", "Dict", "Mapping", "MutableMapping"}:
+            return "dict"
+        if annotation in {"set", "Set", "frozenset", "FrozenSet"}:
+            return "set"
+        if annotation in {"list", "List", "tuple", "Tuple", "Sequence", "MutableSequence"}:
+            return "list"
+        if annotation in {"str", "String"}:
+            return "str"
+        return ""
+
     def _record_name_type(self, name: str, kind: str) -> None:
-        if not name:
-            return
-        for names in (
-            self.set_like_names,
-            self.dict_like_names,
-            self.list_like_names,
-            self.string_like_names,
-        ):
-            names.discard(name)
-        if kind == "set":
-            self.set_like_names.add(name)
-        elif kind == "dict":
-            self.dict_like_names.add(name)
-        elif kind in {"list", "tuple"}:
-            self.list_like_names.add(name)
-        elif kind == "str":
-            self.string_like_names.add(name)
+        self.tracker.record(name, kind)
 
     def _infer_container_kind(self, node: ast.AST) -> str:
         if isinstance(node, ast.Dict):
@@ -69,21 +85,40 @@ class _CostVisitor(ast.NodeVisitor):
                 return node.func.id
         return ""
 
-    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
-        for arg in [*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs]:
+    def _record_arguments(self, arguments: ast.arguments) -> None:
+        for arg in [*arguments.posonlyargs, *arguments.args, *arguments.kwonlyargs]:
             annotation = self._annotation_name(arg.annotation)
-            if annotation in {"dict", "Dict", "Mapping", "MutableMapping"}:
-                self._record_name_type(arg.arg, "dict")
-            elif annotation in {"set", "Set", "frozenset", "FrozenSet"}:
-                self._record_name_type(arg.arg, "set")
-            elif annotation in {"list", "List", "tuple", "Tuple", "Sequence", "MutableSequence"}:
-                self._record_name_type(arg.arg, "list")
-            elif annotation in {"str", "String"}:
-                self._record_name_type(arg.arg, "str")
-        self.generic_visit(node)
+            self._record_name_type(arg.arg, self._kind_from_annotation(annotation))
+        if arguments.vararg is not None:
+            self._record_name_type(arguments.vararg.arg, "")
+        if arguments.kwarg is not None:
+            self._record_name_type(arguments.kwarg.arg, "")
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        for decorator in node.decorator_list:
+            self.visit(decorator)
+        for default in [*node.args.defaults, *node.args.kw_defaults]:
+            if default is not None:
+                self.visit(default)
+        if node.returns is not None:
+            self.visit(node.returns)
+        self.tracker.push_scope()
+        self._record_arguments(node.args)
+        for statement in node.body:
+            self.visit(statement)
+        self.tracker.pop_scope()
 
     def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
         self.visit_FunctionDef(node)
+
+    def visit_Lambda(self, node: ast.Lambda) -> None:
+        for default in [*node.args.defaults, *node.args.kw_defaults]:
+            if default is not None:
+                self.visit(default)
+        self.tracker.push_scope()
+        self._record_arguments(node.args)
+        self.visit(node.body)
+        self.tracker.pop_scope()
 
     def visit_Assign(self, node: ast.Assign) -> None:
         kind = self._infer_container_kind(node.value)
@@ -98,14 +133,7 @@ class _CostVisitor(ast.NodeVisitor):
             kind = self._infer_container_kind(node.value) if node.value is not None else ""
             if not kind:
                 annotation = self._annotation_name(node.annotation)
-                if annotation in {"dict", "Dict", "Mapping", "MutableMapping"}:
-                    kind = "dict"
-                elif annotation in {"set", "Set", "frozenset", "FrozenSet"}:
-                    kind = "set"
-                elif annotation in {"list", "List", "tuple", "Tuple", "Sequence", "MutableSequence"}:
-                    kind = "list"
-                elif annotation in {"str", "String"}:
-                    kind = "str"
+                kind = self._kind_from_annotation(annotation)
             self._record_name_type(node.target.id, kind)
         self.generic_visit(node)
 
@@ -143,7 +171,7 @@ class _CostVisitor(ast.NodeVisitor):
         if self.loop_depth:
             for operator, comparator in zip(node.ops, node.comparators):
                 if isinstance(operator, (ast.In, ast.NotIn)) and isinstance(comparator, ast.Name):
-                    if comparator.id in self.list_like_names:
+                    if self.tracker.kind_of(comparator.id) == "list":
                         self.hotspots.append(
                             MembershipHotspot(
                                 container=comparator.id,
