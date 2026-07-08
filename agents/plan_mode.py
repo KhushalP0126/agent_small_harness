@@ -285,6 +285,16 @@ class PlanModeAgent(BaseAgent):
 
     def _dependency_graph_context(self, prompt: str) -> list[str]:
         lowered = prompt.lower()
+        if (
+            any(token in lowered for token in ("section", "header", "active section", "current section"))
+            and any(token in lowered for token in ("key=value", "key value", "equals sign", "nested dict"))
+        ):
+            return [
+                "lines -> active section state -> nested dict writes",
+                "valid section header -> active_section changes",
+                "valid key/value record -> result[active_section][key] write",
+                "later valid records -> overwrite previous value for same section/key",
+            ]
         if not (
             "event" in lowered
             and "state" in lowered

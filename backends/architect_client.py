@@ -15,6 +15,11 @@ DEFAULT_ARCHITECT_API_KEY_ENV = "ARCHITECT_API_KEY"
 DEFAULT_DEEPSEEK_API_KEY_ENV = "DEEPSEEK_API_KEY"
 DEFAULT_ARCHITECT_MODEL_ENV = "ARCHITECT_MODEL"
 DEFAULT_ARCHITECT_API_BASE_URL_ENV = "ARCHITECT_API_BASE_URL"
+DEFAULT_ARCHITECT_TIMEOUT_SECONDS_ENV = "ARCHITECT_TIMEOUT_SECONDS"
+DEFAULT_ARCHITECT_TEMPERATURE_ENV = "ARCHITECT_TEMPERATURE"
+DEFAULT_ARCHITECT_MAX_TOKENS_ENV = "ARCHITECT_MAX_TOKENS"
+DEFAULT_ARCHITECT_THINKING_TYPE_ENV = "ARCHITECT_THINKING_TYPE"
+DEFAULT_ARCHITECT_REASONING_EFFORT_ENV = "ARCHITECT_REASONING_EFFORT"
 DEFAULT_ARCHITECT_MODEL = "deepseek-v4-pro"
 DEFAULT_ARCHITECT_API_BASE_URL = "https://api.deepseek.com/chat/completions"
 DEFAULT_ARCHITECT_ENV_FILE = ".env"
@@ -50,6 +55,11 @@ class ArchitectConfig:
     fallback_api_key_env: str = DEFAULT_DEEPSEEK_API_KEY_ENV
     model_env: str = DEFAULT_ARCHITECT_MODEL_ENV
     base_url_env: str = DEFAULT_ARCHITECT_API_BASE_URL_ENV
+    timeout_seconds_env: str = DEFAULT_ARCHITECT_TIMEOUT_SECONDS_ENV
+    temperature_env: str = DEFAULT_ARCHITECT_TEMPERATURE_ENV
+    max_tokens_env: str = DEFAULT_ARCHITECT_MAX_TOKENS_ENV
+    thinking_type_env: str = DEFAULT_ARCHITECT_THINKING_TYPE_ENV
+    reasoning_effort_env: str = DEFAULT_ARCHITECT_REASONING_EFFORT_ENV
     env_file: str = DEFAULT_ARCHITECT_ENV_FILE
     timeout_seconds: int = 120
     temperature: float = 0.1
@@ -76,8 +86,48 @@ class ArchitectConfig:
     def base_url(self) -> str:
         return self._config_value(self.base_url_env) or DEFAULT_ARCHITECT_API_BASE_URL
 
+    @property
+    def request_timeout_seconds(self) -> int:
+        return self._int_config_value(self.timeout_seconds_env, self.timeout_seconds, minimum=1)
+
+    @property
+    def request_temperature(self) -> float:
+        return self._float_config_value(self.temperature_env, self.temperature, minimum=0.0)
+
+    @property
+    def request_max_tokens(self) -> int:
+        return self._int_config_value(self.max_tokens_env, self.max_tokens, minimum=1)
+
+    @property
+    def request_thinking_type(self) -> str:
+        return self._config_value(self.thinking_type_env) or self.thinking_type
+
+    @property
+    def request_reasoning_effort(self) -> str:
+        return self._config_value(self.reasoning_effort_env) or self.reasoning_effort
+
     def _config_value(self, name: str) -> str:
         return os.environ.get(name, "").strip() or _dotenv_values(self.env_file).get(name, "").strip()
+
+    def _int_config_value(self, name: str, default: int, minimum: int) -> int:
+        value = self._config_value(name)
+        if not value:
+            return default
+        try:
+            parsed = int(value)
+        except ValueError:
+            return default
+        return max(minimum, parsed)
+
+    def _float_config_value(self, name: str, default: float, minimum: float) -> float:
+        value = self._config_value(name)
+        if not value:
+            return default
+        try:
+            parsed = float(value)
+        except ValueError:
+            return default
+        return max(minimum, parsed)
 
 
 class ArchitectApiClient:
@@ -99,10 +149,10 @@ class ArchitectApiClient:
                 {"role": "system", "content": system},
                 {"role": "user", "content": prompt},
             ],
-            "temperature": self.config.temperature,
-            "max_tokens": self.config.max_tokens,
-            "thinking": {"type": self.config.thinking_type},
-            "reasoning_effort": self.config.reasoning_effort,
+            "temperature": self.config.request_temperature,
+            "max_tokens": self.config.request_max_tokens,
+            "thinking": {"type": self.config.request_thinking_type},
+            "reasoning_effort": self.config.request_reasoning_effort,
             "stream": False,
         }
         request = Request(
@@ -115,7 +165,7 @@ class ArchitectApiClient:
             method="POST",
         )
         try:
-            with urlopen(request, timeout=self.config.timeout_seconds) as response:
+            with urlopen(request, timeout=self.config.request_timeout_seconds) as response:
                 body = json.loads(response.read().decode("utf-8"))
         except HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")

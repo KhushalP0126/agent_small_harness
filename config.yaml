@@ -43,5 +43,5 @@ execution:
     complexity_threshold: 0.7
   gates:
     auto_repair: true
-    max_retries: 1
+    max_retries: 3
     manual_review_required: true

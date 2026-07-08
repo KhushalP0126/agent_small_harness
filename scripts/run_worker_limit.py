@@ -74,6 +74,10 @@ def _table(rows: list[dict[str, Any]]) -> str:
         "model",
         "status",
         "attempts",
+        "small_fail",
+        "arch_calls",
+        "arch_changed",
+        "arch_meaningful",
         "static",
         "behavior",
         "contribution",
@@ -94,6 +98,10 @@ def _table(rows: list[dict[str, Any]]) -> str:
                     row["model"],
                     row["status"],
                     str(row["attempts"]),
+                    str(row["small_fail"]),
+                    str(row["arch_calls"]),
+                    str(row["arch_changed"]),
+                    row["arch_meaningful"],
                     str(row["static"]),
                     str(row["behavior"]),
                     row["contribution"],
@@ -117,6 +125,7 @@ def run_ladder(
     continue_after_failure: bool,
     decompose: bool,
     architect_after_repair_attempts: int | None,
+    debug_controller: bool,
 ) -> int:
     config = load_config(DEFAULT_CONFIG_PATH)
     policy = config.engines.policy.to_validation_policy()
@@ -143,6 +152,11 @@ def run_ladder(
         decomposition = decompositions.get(task["name"])
         prompt = _apply_decomposition_prompt(_build_prompt(task, spec), task, decomposition)
         mode = f"decompose:{decomposition.get('strategy', 'manual')}" if decomposition else "direct"
+        print(
+            f"[worker-limit] difficulty={task['difficulty']} task={task['name']} "
+            f"model={active_model} mode={mode} architect_after={architect_after_repair_attempts}",
+            flush=True,
+        )
         controller = GenerationController(
             max_retries=max_retries,
             draft_supplier=supplier.generate_draft,
@@ -157,6 +171,7 @@ def run_ladder(
             crosshair_enabled=config.engines.formal.crosshair_enabled,
             crosshair_timeout_seconds=config.engines.formal.crosshair_timeout_seconds,
             repair_strategy=RepairStrategyAgent(),
+            debug=debug_controller,
         )
         result = controller.run(target=task["prompt"], initial_prompt=prompt)
         session = result.payload
@@ -188,6 +203,10 @@ def run_ladder(
             "mode": mode,
             "status": session.get("final_status", ""),
             "attempts": len(session.get("attempts", [])),
+            "small_fail": contribution["small_failed_count"],
+            "arch_calls": contribution["architect_repair_count"],
+            "arch_changed": contribution["architect_changed_count"],
+            "arch_meaningful": "yes" if contribution["architect_meaningful_change"] else "no",
             "static": len(final_static),
             "behavior": len(final_behavior),
             "contribution": contribution["label"],
@@ -234,6 +253,7 @@ def main() -> int:
     parser.add_argument("--continue-after-failure", action="store_true")
     parser.add_argument("--decompose", action="store_true")
     parser.add_argument("--architect-after-repair-attempts", type=int, default=None)
+    parser.add_argument("--debug-controller", action="store_true")
     args = parser.parse_args()
     return run_ladder(
         tasks_path=args.tasks,
@@ -247,6 +267,7 @@ def main() -> int:
         continue_after_failure=args.continue_after_failure,
         decompose=args.decompose,
         architect_after_repair_attempts=args.architect_after_repair_attempts,
+        debug_controller=args.debug_controller,
     )
 
 

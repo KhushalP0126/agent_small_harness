@@ -237,16 +237,60 @@ def _worker_contribution(session: dict) -> dict[str, Any]:
     completed = session.get("final_status") == "completed"
     repair_workers = [attempt.get("repair_worker", "") for attempt in attempts]
     architect_used = any("architect_llm" in worker for worker in repair_workers)
+    final_attempt_index = len(attempts) - 1
+
+    def pressure(attempt: dict) -> int:
+        validation = attempt.get("validation", {})
+        behavior_validation = attempt.get("behavior_validation", {})
+        formal_validation = attempt.get("formal_validation", {})
+        return (
+            len(validation.get("violations", []))
+            + len(behavior_validation.get("issues", []))
+            + len(formal_validation.get("issues", []))
+        )
+
     small_repair_indices = [
         index
         for index, worker in enumerate(repair_workers)
         if worker == "small_worker"
+    ]
+    small_attempt_indices = [
+        index
+        for index, worker in enumerate(repair_workers)
+        if worker == "small_worker" or worker.startswith("small_worker->")
+    ]
+    architect_repair_indices = [
+        index
+        for index, worker in enumerate(repair_workers)
+        if "architect_llm" in worker
     ]
     small_repair_count = len(small_repair_indices)
     small_changed_count = sum(
         1
         for index in small_repair_indices
         if index + 1 < len(attempts) and attempts[index + 1].get("changed", False)
+    )
+    small_failed_count = sum(
+        1
+        for index in small_attempt_indices
+        if repair_workers[index].startswith("small_worker->")
+        or index + 1 >= len(attempts)
+        or not (completed and index + 1 == final_attempt_index)
+    )
+    architect_changed_count = sum(
+        1
+        for index in architect_repair_indices
+        if index + 1 < len(attempts) and attempts[index + 1].get("changed", False)
+    )
+    architect_meaningful_change_count = sum(
+        1
+        for index in architect_repair_indices
+        if index + 1 < len(attempts)
+        and attempts[index + 1].get("changed", False)
+        and (
+            pressure(attempts[index + 1]) < pressure(attempts[index])
+            or (completed and index + 1 == final_attempt_index)
+        )
     )
     first_attempt = attempts[0] if attempts else {}
     last_attempt = attempts[-1] if attempts else {}
@@ -281,7 +325,12 @@ def _worker_contribution(session: dict) -> dict[str, Any]:
         "score": score,
         "small_repair_count": small_repair_count,
         "small_changed_count": small_changed_count,
+        "small_failed_count": small_failed_count,
         "architect_used": architect_used,
+        "architect_repair_count": len(architect_repair_indices),
+        "architect_changed_count": architect_changed_count,
+        "architect_meaningful_change_count": architect_meaningful_change_count,
+        "architect_meaningful_change": architect_meaningful_change_count > 0,
         "initial_static_violations": initial_static_count,
         "final_static_violations": final_static_count,
         "static_violation_delta": static_delta,

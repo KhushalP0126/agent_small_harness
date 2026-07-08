@@ -126,11 +126,12 @@ Current baseline:
   - `engine-5-lint` when Pylint is available; otherwise it emits a low-severity skipped finding.
 - Repaired drafts must be rescanned; no repair path should bypass loop analysis, hazard analysis, or branching analysis.
 - The engine evaluator is at `overall_recall: 1.0`.
-- The full unit suite last passed locally with `171` tests after adding bounds, state-flow, artifact-review, and ladder updates.
+- The full unit suite last passed locally with `176` tests after adding bounds, state-flow, artifact-review, ladder updates, architect-stop routing, and metric-scope manual-review classification.
 - The harder fixture coding-capability suite passes `7/7` without model calls.
 - The live small-worker plus DeepSeek architect test reached `6/7` on the harder task suite.
 - The 3B worker-limit ladder reaches difficulty 6 and still breaks on `parse_sectioned_config`; this is treated as a semantic/state-machine worker limit, not an engine-plumbing failure.
-- A focused D6 architect run produced `manual_review_required` with contribution `small_made_progress_but_failed:0.25`; final failures were `cyclomatic_complexity`, `state_flow_risk`, and behavior mismatches.
+- A focused D6 architect run produced `manual_review_required` with contribution `small_made_progress_but_failed:0.25`; the latest architect artifact is behavior-correct and state-flow clean, but still fails `cyclomatic_complexity` because the current branching engine scores module-wide helper complexity.
+- Complexity-only architect failures with clean behavior now route to `metric_scope_ambiguous` manual review instead of retrying the architect.
 - The stateful Python ladder completed `process_events` and broke on `parse_sectioned_config_stateful`, which confirms the stateful/parser boundary is still hard for the 3B worker.
 
 ## Small Worker And Architect Prompting

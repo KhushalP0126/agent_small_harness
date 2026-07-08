@@ -135,7 +135,7 @@ class BenchmarkerTests(unittest.TestCase):
         self.assertEqual(config.engines.policy.max_cyclomatic_complexity, 7)
         self.assertFalse(config.engines.formal.crosshair_enabled)
         self.assertEqual(config.engines.formal.crosshair_timeout_seconds, 3.0)
-        self.assertEqual(config.execution.gates.max_retries, 1)
+        self.assertEqual(config.execution.gates.max_retries, 3)
         self.assertFalse(config.engines.policy.allow_explicit_globals)
         self.assertTrue(config.engines.policy.allow_bounds_warnings)
         self.assertFalse(config.engines.policy.allow_state_flow_warnings)
@@ -665,6 +665,9 @@ def parse_key_value_lines(text):
         self.assertFalse(contribution["architect_used"])
         self.assertEqual(contribution["static_violation_delta"], 0)
         self.assertEqual(contribution["behavior_issue_delta"], 0)
+        self.assertEqual(contribution["small_failed_count"], 0)
+        self.assertEqual(contribution["architect_repair_count"], 0)
+        self.assertFalse(contribution["architect_meaningful_change"])
 
     def test_worker_contribution_labels_architect_takeover(self) -> None:
         contribution = _worker_contribution(
@@ -679,6 +682,10 @@ def parse_key_value_lines(text):
         self.assertEqual(contribution["label"], "architect_solved_after_small_stall")
         self.assertEqual(contribution["score"], 0.0)
         self.assertTrue(contribution["architect_used"])
+        self.assertEqual(contribution["small_failed_count"], 1)
+        self.assertEqual(contribution["architect_repair_count"], 1)
+        self.assertEqual(contribution["architect_changed_count"], 1)
+        self.assertTrue(contribution["architect_meaningful_change"])
 
     def test_worker_contribution_reports_validation_pressure_reduction(self) -> None:
         contribution = _worker_contribution(
@@ -706,6 +713,34 @@ def parse_key_value_lines(text):
         self.assertEqual(contribution["static_violation_delta"], -1)
         self.assertEqual(contribution["behavior_issue_delta"], 0)
         self.assertTrue(contribution["validation_pressure_reduced"])
+        self.assertEqual(contribution["small_failed_count"], 1)
+
+    def test_worker_contribution_reports_architect_non_meaningful_change(self) -> None:
+        contribution = _worker_contribution(
+            {
+                "final_status": "manual_review_required",
+                "attempts": [
+                    {
+                        "attempt": 0,
+                        "repair_worker": "architect_llm",
+                        "changed": True,
+                        "validation": {"violations": [{"kind": "cyclomatic_complexity"}]},
+                        "behavior_validation": {"issues": []},
+                    },
+                    {
+                        "attempt": 1,
+                        "repair_worker": "",
+                        "changed": True,
+                        "validation": {"violations": [{"kind": "cyclomatic_complexity"}]},
+                        "behavior_validation": {"issues": []},
+                    },
+                ],
+            }
+        )
+        self.assertEqual(contribution["architect_repair_count"], 1)
+        self.assertEqual(contribution["architect_changed_count"], 1)
+        self.assertEqual(contribution["architect_meaningful_change_count"], 0)
+        self.assertFalse(contribution["architect_meaningful_change"])
 
     def test_generation_controller_stops_on_stagnation(self) -> None:
         violating_source = (ROOT / "data" / "snippets" / "mixed_hard_case.py").read_text(encoding="utf-8")
@@ -945,6 +980,31 @@ def analyze(matrix):
             self.assertTrue(config.api_key_configured)
             self.assertEqual(config.api_key, "dotenv-secret")
             self.assertEqual(config.model, "deepseek-v4-flash")
+
+    def test_architect_config_reads_request_budget_from_dotenv_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env_file = Path(tmpdir) / ".env"
+            env_file.write_text(
+                "ARCHITECT_TEST_TIMEOUT_SECONDS=15\n"
+                "ARCHITECT_TEST_MAX_TOKENS=900\n"
+                "ARCHITECT_TEST_TEMPERATURE=0.2\n"
+                "ARCHITECT_TEST_THINKING_TYPE=disabled\n"
+                "ARCHITECT_TEST_REASONING_EFFORT=low\n",
+                encoding="utf-8",
+            )
+            config = ArchitectConfig(
+                timeout_seconds_env="ARCHITECT_TEST_TIMEOUT_SECONDS",
+                max_tokens_env="ARCHITECT_TEST_MAX_TOKENS",
+                temperature_env="ARCHITECT_TEST_TEMPERATURE",
+                thinking_type_env="ARCHITECT_TEST_THINKING_TYPE",
+                reasoning_effort_env="ARCHITECT_TEST_REASONING_EFFORT",
+                env_file=str(env_file),
+            )
+            self.assertEqual(config.request_timeout_seconds, 15)
+            self.assertEqual(config.request_max_tokens, 900)
+            self.assertEqual(config.request_temperature, 0.2)
+            self.assertEqual(config.request_thinking_type, "disabled")
+            self.assertEqual(config.request_reasoning_effort, "low")
 
     def test_architect_supplier_extracts_code_from_api_response(self) -> None:
         class StubArchitectClient:

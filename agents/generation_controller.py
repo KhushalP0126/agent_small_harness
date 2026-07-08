@@ -9,6 +9,7 @@ from agents.engine_registry import EngineRegistry
 from agents.parse_contract import ParseContractAgent, ParseFailure
 from agents.repair_strategy import MANUAL_REVIEW, TEMPLATE_DIRECTED, RepairStrategyAgent
 from engines.base import EngineFinding
+from prompt.architect_builder import build_state_machine_architect_prompt
 from prompt.retry_builder import build_retry_prompt, build_small_worker_retry_prompt
 from validation.behavior import FunctionBehaviorSpec, serialize_behavior_result, validate_function_behavior
 from validation.finding_aggregator import aggregate_violations, serialize_repair_directives
@@ -43,6 +44,7 @@ class GenerationAttempt:
     retry_prompt: str = ""
     repair_worker: str = ""
     repair_error: str = ""
+    draft_source_worker: str = ""
     changed: bool = True
     diff: str = ""
 
@@ -371,6 +373,25 @@ class GenerationController(BaseAgent):
             ]
         )
 
+    def _is_state_machine_failure(self, violations: list[Violation]) -> bool:
+        kinds = {violation.kind for violation in violations}
+        return bool(kinds & {"state_flow_risk", "behavior_mismatch", "cyclomatic_complexity", "loop_depth"})
+
+    def _is_metric_scope_ambiguous(
+        self,
+        validation_result: ValidationResult,
+        behavior_validation: dict,
+        formal_validation: dict,
+    ) -> bool:
+        if not behavior_validation.get("is_compliant", False):
+            return False
+        if not formal_validation.get("is_compliant", False):
+            return False
+        violations = validation_result.violations
+        if not violations:
+            return False
+        return all(violation.kind == "cyclomatic_complexity" for violation in violations)
+
     def _build_scoped_retry_prompt(
         self,
         source: str,
@@ -412,9 +433,17 @@ class GenerationController(BaseAgent):
                         f"- {delta.get('kind')}: {delta.get('prior_actual')} -> {delta.get('current_actual')} ({change})"
                     )
         else:
-            retry_prompt = build_retry_prompt(source, scoped_violations, scoped_directives)
+            preserved_context = self._preserved_plan_context(initial_prompt)
+            if preserved_context and self._is_state_machine_failure(scoped_violations):
+                retry_prompt = build_state_machine_architect_prompt(
+                    current_code=source,
+                    violations=scoped_violations,
+                    preserved_context=preserved_context,
+                )
+            else:
+                retry_prompt = build_retry_prompt(source, scoped_violations, scoped_directives)
             feedback_context = self._feedback_context(failed_attempts)
-            if initial_prompt.strip():
+            if initial_prompt.strip() and "STATE MACHINE ARCHITECT MODE" not in retry_prompt:
                 retry_prompt = f"{initial_prompt.strip()}\n\nENGINE FEEDBACK:\n{retry_prompt}"
             if feedback_context:
                 retry_prompt = f"{retry_prompt}\n\n{feedback_context}"
@@ -443,6 +472,12 @@ class GenerationController(BaseAgent):
             ),
             "repair_supplier_error": (
                 "Review the repair backend error, then retry with a different model, larger token budget, or a manual patch."
+            ),
+            "architect_static_gate_failed": (
+                "Review the architect output manually; it was routed through the static engines and still failed a blocking gate."
+            ),
+            "metric_scope_ambiguous": (
+                "Review the code manually; behavior passes, but the remaining branching failure may be module-wide helper complexity rather than target-function complexity."
             ),
         }
         return suggestions.get(
@@ -478,6 +513,7 @@ class GenerationController(BaseAgent):
         session = GenerationSession(target=target, route=route, max_retries=self.max_retries)
 
         draft = initial_draft
+        draft_source_worker = "draft_supplier"
         previous_draft = ""
         failed_attempts: list[GenerationAttempt] = []
         for attempt_index in range(self.max_retries + 1):
@@ -517,6 +553,7 @@ class GenerationController(BaseAgent):
             retry_prompt = ""
             repair_worker = ""
             force_manual_review = False
+            manual_review_reason = "repair_strategy_manual_review"
             changed = attempt_index == 0 or not self._is_stagnant(previous_draft, draft)
             diff_text = self._diff_text(previous_draft, draft) if attempt_index > 0 else ""
             diagnostic_deltas = self._diagnostic_deltas(
@@ -562,7 +599,24 @@ class GenerationController(BaseAgent):
                     for violation in validation_result.violations
                 )
                 self._debug_print(f"Iteration {attempt_index}: violation detected: {violation_summaries}.")
-            if not is_complete and attempt_index < self.max_retries:
+            if (
+                not is_complete
+                and draft_source_worker == "architect_llm"
+                and not validation_result.is_compliant
+            ):
+                force_manual_review = True
+                if self._is_metric_scope_ambiguous(validation_result, behavior_validation, formal_validation):
+                    manual_review_reason = "metric_scope_ambiguous"
+                    self._debug_print(
+                        "Architect output is behavior-compliant but still fails branching complexity. "
+                        "Stopping for metric-scope manual review."
+                    )
+                else:
+                    manual_review_reason = "architect_static_gate_failed"
+                    self._debug_print(
+                        "Architect output failed static engine gates. Stopping instead of retrying architect."
+                    )
+            if not force_manual_review and not is_complete and attempt_index < self.max_retries:
                 retry_violations = (
                     validation_result.violations
                     if not validation_result.is_compliant
@@ -598,6 +652,7 @@ class GenerationController(BaseAgent):
                     )
                     if decision.mode == MANUAL_REVIEW:
                         force_manual_review = True
+                        manual_review_reason = "repair_strategy_manual_review"
                         self._debug_print(f"Repair strategy selected manual review: {decision.rationale}")
                     elif decision.mode == TEMPLATE_DIRECTED and decision.template_code:
                         retry_prompt = (
@@ -628,6 +683,7 @@ class GenerationController(BaseAgent):
                 repair_directives=serialize_repair_directives(repair_directives),
                 retry_prompt=retry_prompt,
                 repair_worker=repair_worker,
+                draft_source_worker=draft_source_worker,
                 changed=changed,
                 diff=diff_text,
             )
@@ -637,7 +693,7 @@ class GenerationController(BaseAgent):
                 break
             if force_manual_review:
                 session.final_status = "manual_review_required"
-                session.human_review = self._human_review_payload("repair_strategy_manual_review", attempt)
+                session.human_review = self._human_review_payload(manual_review_reason, attempt)
                 break
             if attempt_index < self.max_retries:
                 failed_attempts.append(attempt)
@@ -692,6 +748,7 @@ class GenerationController(BaseAgent):
                                 self._debug_print("Architect attempt received. Re-analyzing updated draft.")
                                 previous_draft = draft
                                 draft = next_draft
+                                draft_source_worker = "architect_llm"
                                 continue
                     self._debug_print("Warning: No changes detected in code. Terminating to avoid infinite loop.")
                     session.final_status = "manual_review_required"
@@ -700,6 +757,7 @@ class GenerationController(BaseAgent):
                 self._debug_print("Attempt received. Re-analyzing updated draft.")
                 previous_draft = draft
                 draft = next_draft
+                draft_source_worker = worker_name
         else:
             session.final_status = "manual_review_required"
 

@@ -33,7 +33,7 @@ from engines.lint_engine import LintEngine
 from engines.library_registry import LibraryRegistry
 from engines.math_engine import MathEngine
 from engines.state_flow_engine import StateFlowEngine
-from validation.behavior import mixed_hard_case_spec
+from validation.behavior import BehaviorCase, FunctionBehaviorSpec, mixed_hard_case_spec
 from validation.policy import validate_findings
 from validation.types import Violation
 from scripts.approve_library import merge_proposal
@@ -854,6 +854,146 @@ def analyze(value):
         self.assertEqual(result.payload["final_status"], "manual_review_required")
         self.assertEqual(result.payload["human_review"]["reason"], "repair_supplier_error")
         self.assertIn("empty architect response", result.payload["attempts"][0]["repair_error"])
+
+    def test_architect_static_engine_failure_stops_without_second_architect_retry(self) -> None:
+        bad_v1 = """
+def analyze(value):
+    if value == 0:
+        return 0
+    if value == 1:
+        return 1
+    if value == 2:
+        return 2
+    if value == 3:
+        return 3
+    if value == 4:
+        return 4
+    if value == 5:
+        return 5
+    if value == 6:
+        return 6
+    return 7
+"""
+        bad_v2 = bad_v1.replace("return 7", "return value")
+        architect_bad = bad_v1.replace("return 7", "return value + 1")
+        architect_calls = []
+
+        def small_supplier(_draft: str, _retry_prompt: str) -> str:
+            return bad_v2
+
+        def architect_supplier(_draft: str, retry_prompt: str) -> str:
+            architect_calls.append(retry_prompt)
+            return architect_bad
+
+        controller = GenerationController(
+            max_retries=3,
+            draft_supplier=lambda _prompt: bad_v1,
+            repair_supplier=small_supplier,
+            architect_supplier=architect_supplier,
+            architect_after_repair_attempts=1,
+        )
+        result = controller.run(target="architect-static-stop", initial_prompt="generate")
+
+        self.assertEqual(result.payload["final_status"], "manual_review_required")
+        self.assertEqual(result.payload["human_review"]["reason"], "metric_scope_ambiguous")
+        self.assertEqual(len(architect_calls), 1)
+        self.assertEqual(result.payload["attempts"][-1]["draft_source_worker"], "architect_llm")
+        self.assertFalse(result.payload["attempts"][-1]["validation"]["is_compliant"])
+
+    def test_architect_behavior_clean_complexity_only_routes_to_metric_scope_review(self) -> None:
+        initial_source = """
+def parse_sectioned_config(text):
+    return {}
+"""
+        architect_source = """
+def parse_sectioned_config(text):
+    result = {}
+    active_section = None
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith('#'):
+            continue
+        if line.startswith('[') and line.endswith(']'):
+            name = line[1:-1].strip()
+            if name:
+                active_section = name
+                result.setdefault(active_section, {})
+            continue
+        if active_section is None:
+            continue
+        if line.count('=') != 1:
+            continue
+        key, value = line.split('=', 1)
+        key = key.strip()
+        value = value.strip()
+        if key:
+            result[active_section][key] = value
+    return result
+"""
+        spec = FunctionBehaviorSpec(
+            function_name="parse_sectioned_config",
+            cases=[
+                BehaviorCase(name="empty", args=("",), expected={}),
+                BehaviorCase(
+                    name="malformed",
+                    args=("orphan=skip\n[]\n[ok]\n=bad\nx=1=2\nx = one\nx = two",),
+                    expected={"ok": {"x": "two"}},
+                ),
+            ],
+        )
+        architect_calls = []
+
+        def architect_supplier(_draft: str, retry_prompt: str) -> str:
+            architect_calls.append(retry_prompt)
+            return architect_source
+
+        controller = GenerationController(
+            max_retries=3,
+            draft_supplier=lambda _prompt: initial_source,
+            repair_supplier=lambda draft, _prompt: draft,
+            architect_supplier=architect_supplier,
+            architect_after_repair_attempts=0,
+            behavior_spec=spec,
+        )
+        result = controller.run(target="metric-scope", initial_prompt="generate")
+
+        self.assertEqual(result.payload["final_status"], "manual_review_required")
+        self.assertEqual(result.payload["human_review"]["reason"], "metric_scope_ambiguous")
+        self.assertEqual(len(architect_calls), 1)
+        self.assertTrue(result.payload["attempts"][-1]["behavior_validation"]["is_compliant"])
+        self.assertEqual(
+            [violation["kind"] for violation in result.payload["attempts"][-1]["validation"]["violations"]],
+            ["cyclomatic_complexity"],
+        )
+
+    def test_architect_parse_error_still_routes_to_static_gate_failed(self) -> None:
+        bad_source = """
+def analyze(value):
+    if value:
+        return value
+    return 0
+"""
+        architect_calls = []
+
+        def architect_supplier(_draft: str, retry_prompt: str) -> str:
+            architect_calls.append(retry_prompt)
+            return "def broken(:\n    return 1\n"
+
+        controller = GenerationController(
+            max_retries=3,
+            draft_supplier=lambda _prompt: bad_source,
+            repair_supplier=lambda draft, _prompt: draft,
+            architect_supplier=architect_supplier,
+            architect_after_repair_attempts=0,
+            policy={"max_cyclomatic_complexity": 1},
+        )
+        result = controller.run(target="architect-parse-error", initial_prompt="generate")
+
+        self.assertEqual(result.payload["final_status"], "manual_review_required")
+        self.assertEqual(result.payload["human_review"]["reason"], "architect_static_gate_failed")
+        self.assertEqual(len(architect_calls), 1)
+        self.assertEqual(result.payload["attempts"][-1]["draft_source_worker"], "architect_llm")
+        self.assertEqual(result.payload["attempts"][-1]["validation"]["violations"][0]["kind"], "parse_error")
 
     def test_unknown_registered_api_feedback_repairs_through_controller(self) -> None:
         violating_source = (

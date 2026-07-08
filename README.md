@@ -275,14 +275,14 @@ execution:
       3-5: qwen2.5-coder:3b
       6+: qwen2.5-coder:7b
   gates:
-    max_retries: 1
+    max_retries: 3
 ```
 
 ## Current Evidence
 
 Recent deterministic checks:
 
-- `make test`: 156 passing tests
+- `python3 -m unittest discover -s tests`: 176 passing tests
 - `make evaluate-engines`: engine recall reported as `1.0`
 - `make test-coding-capability-fixture`: 7/7 completed without model calls
 
@@ -317,9 +317,10 @@ Latest stateful/D6 observations:
 - Focused D6 run with architect escalation:
   `parse_sectioned_config` ended `manual_review_required`, contribution
   `small_made_progress_but_failed:0.25`.
-- The final artifact surfaced unresolved `cyclomatic_complexity` and
-  `state_flow_risk`, plus behavior mismatches. That is the intended safety
-  behavior: the harness refused a semantically wrong parser.
+- The latest D6 artifact is behavior-correct and state-flow clean, but still
+  fails `cyclomatic_complexity` under the current module-wide branching metric.
+  The harness now classifies that as `metric_scope_ambiguous` manual review
+  instead of repeatedly retrying the architect.
 
 ## Research Questions
 
