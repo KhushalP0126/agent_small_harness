@@ -3,11 +3,13 @@ from __future__ import annotations
 from typing import Callable
 
 from engines.base import BaseEngine, EngineFinding
+from engines.bounds_engine import BoundsEngine
 from engines.branching_engine import BranchingEngine
 from engines.cost_engine import CostEngine
 from engines.hazards_engine import HazardsEngine
 from engines.lint_engine import LintEngine
 from engines.math_engine import MathEngine
+from engines.state_flow_engine import StateFlowEngine
 
 
 EngineFactory = Callable[[], BaseEngine]
@@ -15,7 +17,7 @@ PARSE_CONTRACT_ENGINE = "engine-parse-contract"
 
 
 def python_engine_factories() -> list[EngineFactory]:
-    return [MathEngine, HazardsEngine, BranchingEngine, CostEngine, LintEngine]
+    return [MathEngine, HazardsEngine, BranchingEngine, CostEngine, BoundsEngine, StateFlowEngine, LintEngine]
 
 
 class EngineRegistry:

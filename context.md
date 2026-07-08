@@ -121,13 +121,17 @@ Current baseline:
   - `engine-2-hazards`
   - `engine-3-branching`
   - `engine-4-cost`
+  - `engine-6-bounds`
+  - `engine-7-state-flow`
   - `engine-5-lint` when Pylint is available; otherwise it emits a low-severity skipped finding.
 - Repaired drafts must be rescanned; no repair path should bypass loop analysis, hazard analysis, or branching analysis.
 - The engine evaluator is at `overall_recall: 1.0`.
-- The full unit suite last passed locally with `156` tests after the Python-first hardening pass.
+- The full unit suite last passed locally with `171` tests after adding bounds, state-flow, artifact-review, and ladder updates.
 - The harder fixture coding-capability suite passes `7/7` without model calls.
 - The live small-worker plus DeepSeek architect test reached `6/7` on the harder task suite.
 - The 3B worker-limit ladder reaches difficulty 6 and still breaks on `parse_sectioned_config`; this is treated as a semantic/state-machine worker limit, not an engine-plumbing failure.
+- A focused D6 architect run produced `manual_review_required` with contribution `small_made_progress_but_failed:0.25`; final failures were `cyclomatic_complexity`, `state_flow_risk`, and behavior mismatches.
+- The stateful Python ladder completed `process_events` and broke on `parse_sectioned_config_stateful`, which confirms the stateful/parser boundary is still hard for the 3B worker.
 
 ## Small Worker And Architect Prompting
 
@@ -219,9 +223,20 @@ make test-worker-limit-auto SAVE_ARTIFACTS=1
 make test-python-ladder-parsing MODEL=qwen2.5-coder:3b
 make test-python-ladder-data MODEL=qwen2.5-coder:3b
 make test-python-ladder-algorithmic MODEL=qwen2.5-coder:3b
+make test-python-ladder-stateful MODEL=qwen2.5-coder:3b
+make test-python-ladder-stateful-architect MODEL=qwen2.5-coder:3b SAVE_ARTIFACTS=1
 make test-raw-vs-harness MODEL=qwen2.5-coder:3b
 make review-run RUN=<artifact-run-id-or-path>
 ```
+
+## Added Engine Checks
+
+Two newer Python engines expand structural feedback:
+
+- `engine-6-bounds`: warning-first detection for high-confidence one-past-end reads/writes such as `items[len(items)]` and loops over `range(len(items) + 1)`.
+- `engine-7-state-flow`: blocking-by-default diagnostic for helpers that assign to state-like parameters such as `section`, `state`, `current`, or `total` without returning the updated state.
+
+The state-flow engine is intentionally narrow because it is meant to catch the observed parser-state failure class without pretending to be a full dataflow verifier.
 
 ## Live Prompt Test
 

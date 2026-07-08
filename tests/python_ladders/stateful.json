@@ -1,0 +1,38 @@
+[
+  {
+    "difficulty": 1,
+    "name": "process_events",
+    "task_type": "python_stateful",
+    "language": "python",
+    "prompt": "Write a Python function named process_events(events). It receives ordered event dicts with type and value fields. Maintain a running total. type reset sets total to 0, add increases total by value, subtract decreases total by value, and emit appends the current total to the returned list. Ignore unknown event types.",
+    "function_name": "process_events",
+    "cases": [
+      {"name": "basic", "args": [[{"type": "add", "value": 3}, {"type": "emit"}, {"type": "reset"}, {"type": "emit"}]], "expected": [3, 0]},
+      {"name": "subtract", "args": [[{"type": "add", "value": 10}, {"type": "subtract", "value": 4}, {"type": "emit"}]], "expected": [6]}
+    ]
+  },
+  {
+    "difficulty": 2,
+    "name": "parse_sectioned_config_stateful",
+    "task_type": "python_stateful",
+    "language": "python",
+    "prompt": "Write a Python function named parse_sectioned_config(text). It receives lines of configuration text. Blank lines and lines starting with # are ignored. A section header is [section]. Key value records inside a section use key=value and require exactly one equals sign. Trim whitespace. Ignore records before any section or with empty keys. Later valid records overwrite earlier values in the same section. Return a nested dict of section to key/value strings.",
+    "function_name": "parse_sectioned_config",
+    "cases": [
+      {"name": "basic", "args": ["# comment\n[db]\nhost = local\nport=5432\n[app]\nname = demo"], "expected": {"db": {"host": "local", "port": "5432"}, "app": {"name": "demo"}}},
+      {"name": "malformed", "args": ["orphan=skip\n[]\n[ok]\n=bad\nx=1=2\nx = one\nx = two"], "expected": {"ok": {"x": "two"}}}
+    ]
+  },
+  {
+    "difficulty": 3,
+    "name": "sessionize_events",
+    "task_type": "python_stateful",
+    "language": "python",
+    "prompt": "Write a Python function named sessionize_events(events). Each event is a dict with user, action, and optional value. Track the current open session per user. A start action opens a new session if none is open. An add action appends value to that user's open session only. An end action closes that user's open session and appends it to the returned list as {'user': user, 'values': [...]}. Ignore malformed events and end actions without an open session. Preserve completion order.",
+    "function_name": "sessionize_events",
+    "cases": [
+      {"name": "basic", "args": [[{"user": "a", "action": "start"}, {"user": "a", "action": "add", "value": 1}, {"user": "a", "action": "end"}]], "expected": [{"user": "a", "values": [1]}]},
+      {"name": "interleaved", "args": [[{"user": "a", "action": "start"}, {"user": "b", "action": "start"}, {"user": "a", "action": "add", "value": "x"}, {"user": "a", "action": "end"}, {"user": "b", "action": "add", "value": "y"}, {"user": "b", "action": "end"}]], "expected": [{"user": "a", "values": ["x"]}, {"user": "b", "values": ["y"]}]}
+    ]
+  }
+]

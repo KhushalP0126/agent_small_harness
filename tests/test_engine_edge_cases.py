@@ -3,11 +3,13 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from engines.bounds_engine import BoundsEngine
 from engines.branching_engine import BranchingEngine
 from engines.cost_engine import CostEngine
 from engines.hazards_engine import HazardsEngine
 from engines.lint_engine import LintEngine
 from engines.math_engine import MathEngine
+from engines.state_flow_engine import StateFlowEngine
 from validation.policy import validate_findings
 
 
@@ -282,6 +284,99 @@ def group_top_scores(records):
             finding = CostEngine().scan(source)[0]
             self.assertEqual(finding.summary, "No repeated linear membership hotspot detected")
             self.assertTrue(validate_findings([finding]).is_compliant)
+
+
+class BoundsEngineEdgeCaseTests(unittest.TestCase):
+    def test_direct_len_index_read_is_bounds_risk(self) -> None:
+        source = """
+def last_bad(items):
+    return items[len(items)]
+"""
+        finding = BoundsEngine().scan(source)[0]
+        self.assertEqual(finding.summary, "Potential bounds risk")
+        self.assertIn("items[len(items)]", finding.metrics["expressions"])
+
+    def test_direct_len_index_write_is_bounds_risk(self) -> None:
+        source = """
+def write_bad(items, value):
+    items[len(items)] = value
+    return items
+"""
+        finding = BoundsEngine().scan(source)[0]
+        self.assertEqual(finding.summary, "Potential bounds risk")
+        self.assertIn("items[len(items)]", finding.metrics["expressions"])
+        self.assertIn("Potential out-of-bounds write", finding.metrics["risk_summaries"])
+
+    def test_range_len_plus_one_is_bounds_risk(self) -> None:
+        source = """
+def copy_bad(items):
+    result = []
+    for index in range(len(items) + 1):
+        result.append(items[index])
+    return result
+"""
+        finding = BoundsEngine().scan(source)[0]
+        self.assertEqual(finding.summary, "Potential bounds risk")
+        self.assertIn("Potential range upper-bound overflow", finding.metrics["risk_summaries"])
+
+    def test_bounds_engine_is_advisory_by_default(self) -> None:
+        source = """
+def last_bad(items):
+    return items[len(items)]
+"""
+        finding = BoundsEngine().scan(source)[0]
+        self.assertTrue(validate_findings([finding]).is_compliant)
+
+    def test_bounds_engine_can_be_policy_blocking(self) -> None:
+        source = """
+def last_bad(items):
+    return items[len(items)]
+"""
+        finding = BoundsEngine().scan(source)[0]
+        result = validate_findings([finding], {"allow_bounds_warnings": False})
+        self.assertFalse(result.is_compliant)
+        self.assertEqual(result.violations[0].kind, "bounds_risk")
+        self.assertEqual(result.violations[0].repair_hint, "guard_index_access")
+
+
+class StateFlowEngineEdgeCaseTests(unittest.TestCase):
+    def test_helper_that_updates_section_without_return_is_state_flow_risk(self) -> None:
+        source = """
+def process_line(line, section):
+    if line.startswith("["):
+        section = line.strip("[]")
+    return None
+
+def parse_sectioned_config(text):
+    active_section = None
+    for line in text.splitlines():
+        process_line(line, active_section)
+    return {}
+"""
+        finding = StateFlowEngine().scan(source)[0]
+        self.assertEqual(finding.summary, "Potential lost state update")
+        self.assertEqual(finding.metrics["parameters"], ["section"])
+        result = validate_findings([finding])
+        self.assertFalse(result.is_compliant)
+        self.assertEqual(result.violations[0].kind, "state_flow_risk")
+        self.assertEqual(result.violations[0].repair_hint, "return_updated_state")
+
+    def test_helper_that_returns_updated_section_is_not_state_flow_risk(self) -> None:
+        source = """
+def process_line(line, section):
+    if line.startswith("["):
+        section = line.strip("[]")
+    return section
+
+def parse_sectioned_config(text):
+    active_section = None
+    for line in text.splitlines():
+        active_section = process_line(line, active_section)
+    return {}
+"""
+        finding = StateFlowEngine().scan(source)[0]
+        self.assertEqual(finding.summary, "No lost state-flow risk detected")
+        self.assertTrue(validate_findings([finding]).is_compliant)
 
 
 class LintEngineEdgeCaseTests(unittest.TestCase):

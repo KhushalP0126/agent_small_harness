@@ -15,6 +15,8 @@ engines:
     allow_unknown_registered_apis: false
     allow_unsafe_calls: false
     allow_algorithmic_hotspots: false
+    allow_bounds_warnings: true
+    allow_state_flow_warnings: false
     allow_lint_errors: false
   behavior:
     enabled: true

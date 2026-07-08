@@ -47,12 +47,19 @@ ParseContractAgent
 -> HazardsEngine
 -> BranchingEngine
 -> CostEngine
+-> BoundsEngine
+-> StateFlowEngine
 -> LintEngine when available
 -> validation policy
 -> RepairStrategyAgent
 ```
 
 Every successful or failed attempt should preserve this audit trail. A repair is not accepted just because the model claims it fixed the code; it must be parsed and rescanned.
+
+Bounds and state-flow have different policy defaults:
+
+- Bounds warnings are advisory by default because full bounds proof requires broader dataflow and value reasoning.
+- State-flow warnings are blocking by default because the engine is intentionally narrow: it flags state-like helper parameters that are reassigned without returning the updated value, a concrete failure mode observed in parser/config tasks.
 
 ## Formal Verification Design
 
@@ -154,6 +161,11 @@ Engine findings should expose a stable diagnostic shape:
 ```
 
 The repair strategy should consume this diagnostic directly. Generic fallback instructions are acceptable, but engine-provided recommendations should take priority because they are grounded in the structural scan.
+
+Additional diagnostic examples:
+
+- `BOUNDS_RISK`: guard indices, iterate directly, or avoid one-past-end range/index patterns.
+- `STATE_FLOW_RISK`: return updated parser/event state from helpers and assign it at the call site.
 
 ## Fixture Policy
 

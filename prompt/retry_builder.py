@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 from dataclasses import asdict
 
 from validation.finding_aggregator import RepairDirective
@@ -10,7 +11,7 @@ def _directive_to_dict(directive: RepairDirective | dict) -> dict:
     return directive if isinstance(directive, dict) else asdict(directive)
 
 
-def _behavior_hint_text(violation: Violation) -> str:
+def _behavior_hint_text(violation: Violation, source: str = "") -> str:
     if violation.kind != "behavior_mismatch":
         return ""
     evidence = violation.evidence.get("case", {}) if isinstance(violation.evidence, dict) else {}
@@ -18,9 +19,21 @@ def _behavior_hint_text(violation: Violation) -> str:
     actual = str(evidence.get("actual", violation.current_value))
     rationale = violation.rationale.lower()
     combined = f"{expected}\n{actual}\n{violation.current_value}\n{violation.allowed_value}".lower()
+    source_lowered = source.lower()
     if "nameerror" in combined or "nameerror" in rationale:
         return "The draft raised NameError. Remove undefined names or replace them with available builtins/helpers."
-    if any(token in combined for token in ("-1", "-2", "-3", "-4", "-5", "+1", "+2", "+3", "+4", "+5")):
+    signed_token_context = any(
+        token in source_lowered
+        for token in (
+            "parse_int",
+            "isdigit",
+            "integer token",
+            "signed integer",
+        )
+    )
+    if signed_token_context and any(
+        token in combined for token in ("-1", "-2", "-3", "-4", "-5", "+1", "+2", "+3", "+4", "+5")
+    ):
         return (
             "The failed behavior includes signed integer tokens. Do not use str.isdigit() alone; "
             "handle optional leading + or - signs, or use safe int conversion in a small helper."
@@ -30,10 +43,10 @@ def _behavior_hint_text(violation: Violation) -> str:
     return ""
 
 
-def _semantic_repair_hints(violations: list[Violation]) -> list[str]:
+def _semantic_repair_hints(violations: list[Violation], source: str = "") -> list[str]:
     hints: list[str] = []
     for violation in violations:
-        hint = _behavior_hint_text(violation)
+        hint = _behavior_hint_text(violation, source=source)
         if hint and hint not in hints:
             hints.append(hint)
     return hints
@@ -55,6 +68,13 @@ def _low_noise_directive(violation: Violation | None) -> str:
         return "Reduce branching by extracting a small helper or replacing repeated conditionals with a simpler data-driven structure."
     if violation.kind in {"global_mutation", "module_state_mutation"}:
         return "Remove global or module-level state mutation. Pass state as an argument and return the updated value."
+    if violation.kind == "state_flow_risk":
+        return (
+            "A helper updates parser or event state locally but the caller keeps stale state. "
+            "Return the updated state from the helper and assign it at the call site."
+        )
+    if violation.kind == "bounds_risk":
+        return "Fix one-past-the-end indexing. Use guarded index checks, direct iteration, or range(len(seq))."
     if violation.kind == "loop_depth":
         return "Reduce nested loop depth by moving inner-loop work into a helper or flattening the traversal."
     if violation.kind == "lint_error":
@@ -74,29 +94,82 @@ def _low_noise_directive(violation: Violation | None) -> str:
     return violation.rationale or violation.summary or "Fix the listed issue."
 
 
-def build_small_worker_retry_prompt(original_code: str, violations: list[Violation]) -> str:
+def _low_noise_directive_for_source(violation: Violation | None, source: str) -> str:
+    if violation is None:
+        return "Fix the current draft while preserving its required behavior."
+    semantic_hints = _semantic_repair_hints([violation], source=source)
+    if semantic_hints:
+        return semantic_hints[0]
+    return _low_noise_directive(violation)
+
+
+def _function_name(violation: Violation | None) -> str:
+    if violation is None or not isinstance(violation.evidence, dict):
+        return ""
+    name = violation.evidence.get("function_name", "")
+    return name if isinstance(name, str) else ""
+
+
+def _unit_test_hint(violation: Violation | None) -> str:
+    if violation is None or not isinstance(violation.evidence, dict):
+        return ""
+    hint = violation.evidence.get("unit_test", "")
+    return hint if isinstance(hint, str) else ""
+
+
+def _scoped_code(original_code: str, violation: Violation | None) -> str:
+    function_name = _function_name(violation)
+    if not function_name:
+        return original_code
+    try:
+        tree = ast.parse(original_code)
+    except SyntaxError:
+        return original_code
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == function_name:
+            segment = ast.get_source_segment(original_code, node)
+            if segment:
+                return segment
+    return original_code
+
+
+def build_small_worker_retry_prompt(
+    original_code: str,
+    violations: list[Violation],
+    preserve_context: str = "",
+) -> str:
     violation = _primary_violation(violations)
+    code = _scoped_code(original_code, violation)
+    unit_test = _unit_test_hint(violation)
     sections = [
         "CRITICAL BUG FIX REQUIRED",
         "",
         "YOUR CODE:",
-        original_code,
+        code,
         "",
     ]
     if violation is not None:
+        failed_check = [
+            "FAILED CHECK:",
+            f"- Problem: {violation.summary}",
+            f"- Your result: {violation.current_value}",
+            f"- Required result: {violation.allowed_value}",
+        ]
+        if unit_test:
+            failed_check.append(f"- Unit test: {unit_test}")
+        sections.extend([*failed_check, ""])
+    if preserve_context.strip():
         sections.extend(
             [
-                "FAILED CHECK:",
-                f"- Problem: {violation.summary}",
-                f"- Your result: {violation.current_value}",
-                f"- Required result: {violation.allowed_value}",
+                "PRESERVE CONTEXT:",
+                preserve_context.strip(),
                 "",
             ]
         )
     sections.extend(
         [
             "FIX DIRECTIVE:",
-            _low_noise_directive(violation),
+            _low_noise_directive_for_source(violation, original_code),
             "",
             "FINAL RULES:",
             "- Return only complete Python code.",
@@ -150,7 +223,7 @@ def build_retry_prompt(
                 f"  Repair hint: {violation.repair_hint}",
             ]
         )
-    semantic_hints = _semantic_repair_hints(violations)
+    semantic_hints = _semantic_repair_hints(violations, source=original_code)
     if semantic_hints:
         sections.extend(["", "SEMANTIC REPAIR HINTS:"])
         sections.extend(f"- {hint}" for hint in semantic_hints)

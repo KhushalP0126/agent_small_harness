@@ -248,6 +248,14 @@ def _worker_contribution(session: dict) -> dict[str, Any]:
         for index in small_repair_indices
         if index + 1 < len(attempts) and attempts[index + 1].get("changed", False)
     )
+    first_attempt = attempts[0] if attempts else {}
+    last_attempt = attempts[-1] if attempts else {}
+    initial_static_count = len(first_attempt.get("validation", {}).get("violations", []))
+    final_static_count = len(last_attempt.get("validation", {}).get("violations", []))
+    initial_behavior_count = len(first_attempt.get("behavior_validation", {}).get("issues", []))
+    final_behavior_count = len(last_attempt.get("behavior_validation", {}).get("issues", []))
+    static_delta = final_static_count - initial_static_count
+    behavior_delta = final_behavior_count - initial_behavior_count
 
     if completed and len(attempts) == 1:
         label = "small_solved_initial"
@@ -274,6 +282,13 @@ def _worker_contribution(session: dict) -> dict[str, Any]:
         "small_repair_count": small_repair_count,
         "small_changed_count": small_changed_count,
         "architect_used": architect_used,
+        "initial_static_violations": initial_static_count,
+        "final_static_violations": final_static_count,
+        "static_violation_delta": static_delta,
+        "initial_behavior_issues": initial_behavior_count,
+        "final_behavior_issues": final_behavior_count,
+        "behavior_issue_delta": behavior_delta,
+        "validation_pressure_reduced": static_delta < 0 or behavior_delta < 0,
     }
 
 

@@ -14,6 +14,8 @@ DEFAULT_POLICY = {
     "allow_unknown_registered_apis": False,
     "allow_unsafe_calls": False,
     "allow_algorithmic_hotspots": False,
+    "allow_bounds_warnings": True,
+    "allow_state_flow_warnings": False,
     "allow_lint_errors": False,
 }
 
@@ -193,6 +195,38 @@ def validate_findings(
                         current_value=metrics.get("symbol", "lint error"),
                         allowed_value="no Pylint fatal/error messages",
                         repair_hint="fix_lint_error",
+                        location=finding.diagnostic.location,
+                        evidence=_evidence(finding),
+                    )
+                )
+        elif finding.engine == "engine-6-bounds":
+            if finding.summary == "Potential bounds risk" and not policy["allow_bounds_warnings"]:
+                violations.append(
+                    Violation(
+                        kind="bounds_risk",
+                        engine=finding.engine,
+                        severity=finding.severity,
+                        summary=finding.summary,
+                        rationale=finding.details,
+                        current_value=", ".join(metrics.get("expressions", [])) or "bounds risk",
+                        allowed_value="guarded in-bounds indexing",
+                        repair_hint="guard_index_access",
+                        location=finding.diagnostic.location,
+                        evidence=_evidence(finding),
+                    )
+                )
+        elif finding.engine == "engine-7-state-flow":
+            if finding.summary == "Potential lost state update" and not policy["allow_state_flow_warnings"]:
+                violations.append(
+                    Violation(
+                        kind="state_flow_risk",
+                        engine=finding.engine,
+                        severity=finding.severity,
+                        summary=finding.summary,
+                        rationale=finding.details,
+                        current_value=", ".join(metrics.get("parameters", [])) or "state parameter",
+                        allowed_value="helper returns updated state and caller assigns it",
+                        repair_hint="return_updated_state",
                         location=finding.diagnostic.location,
                         evidence=_evidence(finding),
                     )

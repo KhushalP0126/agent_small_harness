@@ -142,6 +142,16 @@ def _directive_instruction(function_name: str, kinds: set[str], repair_hints: li
             f"{prefix}Improve algorithmic cost in {target}. Precompute constant-time lookups before loops and avoid "
             "membership checks against lists or tuples inside repeated iteration."
         )
+    if "state_flow_risk" in kinds:
+        return (
+            f"{prefix}Repair state propagation in {target}. If a helper updates parser or event state, return the "
+            "updated state and assign it at the call site so later lines observe the transition."
+        )
+    if "bounds_risk" in kinds:
+        return (
+            f"{prefix}Repair bounds safety in {target}. Do not index at len(seq) or iterate through "
+            "range(len(seq) + 1); guard the index or iterate over valid positions only."
+        )
     if "loop_depth" in kinds:
         return (
             f"{prefix}Reduce loop nesting in {target}. Move inner-loop work into helpers or flatten traversal where "

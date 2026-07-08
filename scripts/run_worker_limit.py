@@ -14,6 +14,7 @@ from agents.artifact_manager import ArtifactManager
 from agents.config_loader import DEFAULT_CONFIG_PATH, load_config
 from agents.generation_controller import GenerationController
 from agents.repair_strategy import RepairStrategyAgent
+from backends.architect_client import ArchitectModelSupplier
 from backends.ollama_client import DEFAULT_OLLAMA_MODEL, OllamaGenerationConfig, OllamaModelSupplier
 from scripts.run_coding_capability import (
     _all_behavior_issues,
@@ -115,6 +116,7 @@ def run_ladder(
     save_artifacts: bool,
     continue_after_failure: bool,
     decompose: bool,
+    architect_after_repair_attempts: int | None,
 ) -> int:
     config = load_config(DEFAULT_CONFIG_PATH)
     policy = config.engines.policy.to_validation_policy()
@@ -145,8 +147,10 @@ def run_ladder(
             max_retries=max_retries,
             draft_supplier=supplier.generate_draft,
             repair_supplier=supplier.repair_draft,
-            architect_supplier=None,
-            architect_after_repair_attempts=None,
+            architect_supplier=ArchitectModelSupplier().repair_draft
+            if architect_after_repair_attempts is not None
+            else None,
+            architect_after_repair_attempts=architect_after_repair_attempts,
             policy=policy,
             behavior_spec=spec,
             behavior_timeout_seconds=config.engines.behavior.timeout_seconds,
@@ -229,6 +233,7 @@ def main() -> int:
     parser.add_argument("--save-artifacts", action="store_true")
     parser.add_argument("--continue-after-failure", action="store_true")
     parser.add_argument("--decompose", action="store_true")
+    parser.add_argument("--architect-after-repair-attempts", type=int, default=None)
     args = parser.parse_args()
     return run_ladder(
         tasks_path=args.tasks,
@@ -241,6 +246,7 @@ def main() -> int:
         save_artifacts=args.save_artifacts,
         continue_after_failure=args.continue_after_failure,
         decompose=args.decompose,
+        architect_after_repair_attempts=args.architect_after_repair_attempts,
     )
 
 

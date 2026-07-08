@@ -25,12 +25,14 @@ from agents.repair_strategy import (
     RepairStrategyAgent,
 )
 from benchmarker import ROOT
+from engines.bounds_engine import BoundsEngine
 from engines.branching_engine import BranchingEngine
 from engines.cost_engine import CostEngine
 from engines.hazards_engine import HazardsEngine
 from engines.lint_engine import LintEngine
 from engines.library_registry import LibraryRegistry
 from engines.math_engine import MathEngine
+from engines.state_flow_engine import StateFlowEngine
 from validation.behavior import mixed_hard_case_spec
 from validation.policy import validate_findings
 from validation.types import Violation
@@ -45,7 +47,15 @@ C_SOURCE = "#include <stdio.h>\nint main(void) { return 0; }\n"
 def _python_findings(source: str):
     return [
         finding
-        for engine in (MathEngine(), HazardsEngine(), BranchingEngine(), CostEngine(), LintEngine())
+        for engine in (
+            MathEngine(),
+            HazardsEngine(),
+            BranchingEngine(),
+            CostEngine(),
+            BoundsEngine(),
+            StateFlowEngine(),
+            LintEngine(),
+        )
         for finding in engine.scan(source)
     ]
 
@@ -86,7 +96,15 @@ class EngineRegistryTests(unittest.TestCase):
         names = [engine.name for engine in registry.engines_for("python")]
         self.assertEqual(
             names,
-            ["engine-1-math", "engine-2-hazards", "engine-3-branching", "engine-4-cost", "engine-5-lint"],
+            [
+                "engine-1-math",
+                "engine-2-hazards",
+                "engine-3-branching",
+                "engine-4-cost",
+                "engine-6-bounds",
+                "engine-7-state-flow",
+                "engine-5-lint",
+            ],
         )
 
     def test_findings_match_direct_engine_calls(self) -> None:
@@ -660,6 +678,8 @@ class ControllerIntegrationTests(unittest.TestCase):
             "engine-2-hazards",
             "engine-3-branching",
             "engine-4-cost",
+            "engine-6-bounds",
+            "engine-7-state-flow",
             "engine-5-lint",
         }
         self.assertEqual(result.payload["final_status"], "completed")
@@ -857,6 +877,7 @@ def analyze(value):
             draft_supplier=lambda _prompt: violating_source,
             repair_supplier=repair_supplier,
             repair_strategy=RepairStrategyAgent(),
+            policy={"allow_lint_errors": True},
         )
         result = controller.run(target="library-api-repair", initial_prompt="generate")
         self.assertEqual(result.payload["final_status"], "completed")

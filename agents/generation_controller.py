@@ -322,6 +322,55 @@ class GenerationController(BaseAgent):
             ),
         )
 
+    def _preserved_plan_context(self, initial_prompt: str) -> str:
+        """Extract durable Plan Mode context that repair prompts must preserve."""
+
+        wanted_headers = {"EXAMPLES:", "STATE RULES:", "DEPENDENCY GRAPH:"}
+        stop_headers = {
+            "PLAN PACKET:",
+            "FUNCTION:",
+            "LANGUAGE:",
+            "EXAMPLES:",
+            "STATE RULES:",
+            "DEPENDENCY GRAPH:",
+            "ADAPTER RULES:",
+            "PERFORMANCE RULES:",
+            "SAFETY RULES:",
+            "FINAL RULES:",
+            "Contract examples for the worker:",
+        }
+        captured: list[str] = []
+        active = False
+        for raw_line in initial_prompt.splitlines():
+            line = raw_line.strip()
+            if not line:
+                if active:
+                    captured.append("")
+                continue
+            if line in wanted_headers:
+                active = True
+                captured.append(line)
+                continue
+            if line in stop_headers:
+                active = False
+                continue
+            if active:
+                captured.append(line)
+        while captured and not captured[-1]:
+            captured.pop()
+        if not captured:
+            return ""
+        return "\n".join(
+            [
+                "Simplify syntax or control flow only if the following task graph and examples remain true.",
+                *captured,
+                "DO NOT BREAK:",
+                "- preserve dependency, order, and state rules implied by this context",
+                "- preserve every listed behavior example",
+                "- do not simplify the code in a way that changes the preserved semantics",
+            ]
+        )
+
     def _build_scoped_retry_prompt(
         self,
         source: str,
@@ -338,7 +387,11 @@ class GenerationController(BaseAgent):
             worker_name,
         )
         if worker_name == "small_worker":
-            retry_prompt = build_small_worker_retry_prompt(source, scoped_violations)
+            retry_prompt = build_small_worker_retry_prompt(
+                source,
+                scoped_violations,
+                preserve_context=self._preserved_plan_context(initial_prompt),
+            )
             if failed_attempts:
                 retry_prompt = (
                     f"{retry_prompt}\n\n"

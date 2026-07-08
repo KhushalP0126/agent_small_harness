@@ -17,7 +17,7 @@ Snake files are smoke-test fixtures only. The harness is intended to stay task-a
 - `.env.example` - Safe committed template showing the supported environment keys.
 - `benchmarker.py` - Day 1 orchestration entrypoint, benchmark helper, and `build_ollama_controller()` factory.
 - `requirements.txt` - Optional dependency manifest, mainly for tree-sitter C/C++ support.
-- `requirements-formal.txt` - Optional Deal/CrossHair dependency manifest. Nagini remains an architect-tier external toolchain target.
+- `requirements-formal.txt` - Optional Deal/CrossHair/Pylint dependency manifest. Nagini remains an architect-tier external toolchain target.
 - `history.json` - Historian persistence file for generation records, repair outcomes, and learned successful templates.
 - `conventions.md` - Static conventions injected by the preprocessor/coder context.
 - `context.md` - Project context for prompt construction and architectural continuity.
@@ -61,6 +61,8 @@ The engine layer performs structural analysis. Python uses the standard-library 
 - `engines/hazards_engine.py` - Python hazard checks: global mutation, module-state mutation, external imports, and registered-library unknown API calls.
 - `engines/branching_engine.py` - Python cyclomatic complexity and branch-density analysis.
 - `engines/cost_engine.py` - Python algorithmic-cost checks, currently repeated linear membership inside loops.
+- `engines/bounds_engine.py` - Python warning-first bounds-safety checks for high-confidence one-past-end read/write patterns such as `xs[len(xs)]` and `range(len(xs) + 1)`.
+- `engines/state_flow_engine.py` - Python state-propagation check for helpers that assign to state-like parameters without returning the updated state.
 - `engines/lint_engine.py` - Optional Pylint-backed lint engine. Blocks only fatal/error messages and skips cleanly when Pylint is unavailable.
 - `engines/evaluator.py` - Evaluates engine findings against `data/engine_cases.json`.
 - `engines/library_registry.py` - Loads `data/library_registry.json` for registered-library API validation.
@@ -145,7 +147,7 @@ Manual smoke-test and integration scripts.
 - `scripts/approve_library.py` - Explicitly merges an approved proposal into the trusted `data/library_registry.json`.
 - `scripts/run_adversarial_prompts.py` - Runs deterministic trap prompts through the controller and appends historian run samples.
 - `scripts/run_coding_capability.py` - Runs small-worker coding tasks through model generation, static engines, behavior checks, optional architect escalation, and optional historian logging.
-- `scripts/run_worker_limit.py` - Runs the harder-and-harder local worker ladder. Supports explicit `MODEL=...`, `MODEL=auto`, artifact saving, and optional decomposition prompts.
+- `scripts/run_worker_limit.py` - Runs the harder-and-harder local worker ladder. Supports explicit `MODEL=...`, `MODEL=auto`, artifact saving, optional decomposition prompts, and optional architect escalation.
 - `scripts/run_plan_mode_ladder.py` - Tests deterministic Plan Mode extraction quality without model calls.
 - `scripts/run_raw_vs_harness.py` - Compares raw one-shot model behavior validation with the full harness loop on the same tasks.
 - `scripts/run_formal_experiment.py` - Runs a tiny optional CrossHair semantic-validation smoke experiment and skips cleanly when CrossHair is missing.
@@ -169,14 +171,16 @@ Unit and integration tests.
 - `tests/python_ladders/parsing.json` - Focused Python parsing ladder.
 - `tests/python_ladders/data_transform.json` - Focused Python grouping/aggregation ladder.
 - `tests/python_ladders/algorithmic.json` - Focused Python algorithmic ladder.
+- `tests/python_ladders/stateful.json` - Focused Python stateful parser/event ladder.
 
 ## Important Current Guarantees
 
-- Every valid Python draft should pass through the Python engine set: math, hazards, branching, algorithmic cost, and optional lint.
+- Every valid Python draft should pass through the Python engine set: math, hazards, branching, algorithmic cost, bounds, state-flow, and optional lint.
 - Parseable code is not enough to complete; the controller also requires a registered engine set for that language.
 - Unknown registered-library API calls, such as `pygame.rect(...)`, become `unknown_api` violations.
 - If a small-worker repair returns unchanged code and architect escalation is configured, the controller can immediately try the architect worker. If the architect is unavailable, fails, or returns unchanged code, the run escalates to `manual_review_required`.
 - The architect worker is not an engine. It receives engine/behavior feedback and its output is rescanned by the same gates.
 - Manual review results include a structured `human_review` payload with blocking findings, violations, behavior issues, diagnostic deltas, and suggested next action.
 - Artifact runs include `attempt_timeline.json` so review tools can show attempt-by-attempt worker, static, behavior, formal, diff, and retry-prompt status without scanning every file manually.
+- `scripts/review_run.py` renders root-cause candidates from the latest static, behavior, and formal validation artifacts.
 - Deal, CrossHair, and Nagini are deliberately separated: Deal is plan/spec scaffolding, CrossHair is optional semantic validation, and Nagini is an architect-tier formalization target for critical helpers rather than a default small-worker gate.

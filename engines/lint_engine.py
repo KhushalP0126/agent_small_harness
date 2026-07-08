@@ -20,7 +20,7 @@ class LintEngine(BaseEngine):
         executable: str | None = None,
         timeout_seconds: int = PYLINT_TIMEOUT_SECONDS,
     ) -> None:
-        self.executable = executable or shutil.which("pylint")
+        self.executable = executable if executable is not None else shutil.which("pylint")
         self.timeout_seconds = timeout_seconds
 
     def scan(self, source: str) -> list[EngineFinding]:

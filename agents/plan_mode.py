@@ -44,6 +44,7 @@ class PlanSpec:
     performance_constraints: list[str] = field(default_factory=list)
     security_constraints: list[str] = field(default_factory=list)
     state_machine_constraints: list[str] = field(default_factory=list)
+    dependency_graph_context: list[str] = field(default_factory=list)
     needs_user_clarification: bool = False
     questions: list[str] = field(default_factory=list)
     route_hint: str = "small_worker"
@@ -71,7 +72,7 @@ class PlanModeAgent(BaseAgent):
         normalized = self.normalizer.normalize(prompt)
         classification = self.classifier.classify(normalized.normalized_prompt)
         target_function = self._target_function(normalized.normalized_prompt)
-        behavior_cases = self._behavior_cases(normalized.normalized_prompt)
+        behavior_cases = self._behavior_cases(prompt)
         deal_contracts = self._deal_contracts(
             language=classification.language,
             target_function=target_function,
@@ -90,6 +91,7 @@ class PlanModeAgent(BaseAgent):
         performance_constraints = self._performance_constraints(normalized.normalized_prompt)
         security_constraints = self._security_constraints(normalized.normalized_prompt)
         state_machine_constraints = self._state_machine_constraints(normalized.normalized_prompt)
+        dependency_graph_context = self._dependency_graph_context(normalized.normalized_prompt)
         questions = self._questions(
             normalized_prompt=normalized.normalized_prompt,
             classification=classification,
@@ -111,6 +113,7 @@ class PlanModeAgent(BaseAgent):
             performance_constraints=performance_constraints,
             security_constraints=security_constraints,
             state_machine_constraints=state_machine_constraints,
+            dependency_graph_context=dependency_graph_context,
             needs_user_clarification=bool(questions),
             questions=questions,
             route_hint=classification.route_hint,
@@ -197,25 +200,57 @@ class PlanModeAgent(BaseAgent):
 
     def _state_machine_constraints(self, prompt: str) -> list[str]:
         lowered = prompt.lower()
-        parser_tokens = (
-            "parse",
-            "configuration",
-            "config",
-            "line",
-            "lines",
-            "section",
-            "header",
-            "key=value",
-            "key value",
-            "current section",
+        is_line_parser = any(
+            token in lowered
+            for token in (
+                "configuration",
+                "config",
+                "line",
+                "lines",
+                "section",
+                "header",
+                "key=value",
+                "key value",
+                "current section",
+                "equals sign",
+                "empty key",
+            )
         )
-        if not any(token in lowered for token in parser_tokens):
+        is_token_parser = any(
+            token in lowered
+            for token in (
+                "comma-separated",
+                "comma separated",
+                "token",
+                "tokens",
+                "signed integer",
+                "integer tokens",
+                "parse_int_list",
+            )
+        )
+        if not is_line_parser and not is_token_parser:
             return []
 
-        constraints = [
-            "process one stripped input line at a time",
-            "skip blank lines before applying parser-specific rules",
-        ]
+        constraints: list[str] = []
+        if is_token_parser:
+            constraints.extend(
+                [
+                    "split input into comma-separated tokens before validation",
+                    "strip whitespace from each token before validation",
+                    "accept optional leading + or - only when the remaining characters are digits",
+                    "ignore empty tokens and non-integer tokens",
+                    "append converted integers in original token order",
+                ]
+            )
+            if not is_line_parser:
+                return constraints
+
+        constraints.extend(
+            [
+                "process one stripped input line at a time",
+                "skip blank lines before applying parser-specific rules",
+            ]
+        )
         if "#" in prompt or "comment" in lowered:
             constraints.append("skip comment lines before applying parser-specific rules")
         if "section" in lowered or "header" in lowered:
@@ -226,7 +261,17 @@ class PlanModeAgent(BaseAgent):
                     "ignore key/value records until an active section exists",
                 ]
             )
-        if "=" in prompt or "equals" in lowered or "key=value" in lowered or "key value" in lowered:
+        has_key_value_rules = any(
+            token in lowered
+            for token in (
+                "key=value",
+                "key value",
+                "equals sign",
+                "exactly one equals",
+                "empty key",
+            )
+        )
+        if has_key_value_rules:
             constraints.extend(
                 [
                     "treat a key/value record as valid only when it contains exactly one equals sign",
@@ -237,6 +282,26 @@ class PlanModeAgent(BaseAgent):
         if "overwrite" in lowered or "later" in lowered:
             constraints.append("store later valid records over earlier records with the same key")
         return constraints
+
+    def _dependency_graph_context(self, prompt: str) -> list[str]:
+        lowered = prompt.lower()
+        if not (
+            "event" in lowered
+            and "state" in lowered
+            and "emit" in lowered
+            and any(token in lowered for token in ("reset", "add", "subtract"))
+        ):
+            return []
+        graph = ["events -> state transitions -> emitted totals"]
+        if "reset" in lowered:
+            graph.append("reset -> total = 0")
+        if "add" in lowered:
+            graph.append("add -> total += value")
+        if "subtract" in lowered:
+            graph.append("subtract -> total -= value")
+        if "emit" in lowered:
+            graph.append("emit -> append current total")
+        return graph
 
     def _questions(
         self,
@@ -280,6 +345,9 @@ class PlanModeAgent(BaseAgent):
         if spec.state_machine_constraints:
             lines.append("- State-machine constraints:")
             lines.extend(f"  - {item}" for item in spec.state_machine_constraints)
+        if spec.dependency_graph_context:
+            lines.append("- Dependency graph context:")
+            lines.extend(f"  - {item}" for item in spec.dependency_graph_context)
         if spec.behavior_cases:
             lines.append("- Behavior examples:")
             lines.extend(f"  - {case.call} == {case.expected}" for case in spec.behavior_cases)
@@ -303,6 +371,9 @@ class PlanModeAgent(BaseAgent):
         if spec.state_machine_constraints:
             lines.append("STATE RULES:")
             lines.extend(f"- {item}" for item in spec.state_machine_constraints)
+        if spec.dependency_graph_context:
+            lines.append("DEPENDENCY GRAPH:")
+            lines.extend(f"- {item}" for item in spec.dependency_graph_context)
         if spec.adapter_contracts:
             lines.append("ADAPTER RULES:")
             lines.extend(f"- {item}" for item in spec.adapter_contracts)

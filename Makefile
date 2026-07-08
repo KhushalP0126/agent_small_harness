@@ -9,7 +9,7 @@ ARCHITECT_AFTER ?= 1
 ARCHITECT_MAX_RETRIES ?= 2
 ARTIFACT_ARGS = $(if $(filter 1 true yes,$(SAVE_ARTIFACTS)),--save-artifacts --artifact-root "$(ARTIFACT_ROOT)",)
 
-.PHONY: help install install-formal test test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-fixture test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-plan-mode-ladder test-raw-vs-harness test-formal-experiment review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library ollama-smoke inference-smoke live-repair day1 clean-history
+.PHONY: help install install-formal test test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-fixture test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-worker-limit-architect test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-python-ladder-stateful test-python-ladder-stateful-architect test-plan-mode-ladder test-raw-vs-harness test-formal-experiment review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library ollama-smoke inference-smoke live-repair day1 clean-history
 
 help:
 	@printf "Targets:\n"
@@ -27,9 +27,12 @@ help:
 	@printf "  make test-worker-limit Push the local worker through a harder-and-harder task ladder\n"
 	@printf "  make test-worker-limit-auto Run worker ladder with config-driven model routing\n"
 	@printf "  make test-worker-limit-decompose Run worker-limit ladder with skeleton decomposition prompts\n"
+	@printf "  make test-worker-limit-architect Run worker ladder with API architect escalation\n"
 	@printf "  make test-python-ladder-parsing Run the parsing-focused Python ladder\n"
 	@printf "  make test-python-ladder-data Run the data-transform Python ladder\n"
 	@printf "  make test-python-ladder-algorithmic Run the algorithmic Python ladder\n"
+	@printf "  make test-python-ladder-stateful Run the stateful parser/event Python ladder\n"
+	@printf "  make test-python-ladder-stateful-architect Run stateful ladder with API architect escalation\n"
 	@printf "  make test-plan-mode-ladder Test Plan Mode extraction on progressively harder prompts\n"
 	@printf "  make test-raw-vs-harness Compare raw one-shot generation with full harness validation\n"
 	@printf "  make test-formal-experiment Run optional CrossHair semantic-validation smoke experiment\n"
@@ -85,6 +88,9 @@ test-worker-limit-auto:
 test-worker-limit-decompose:
 	$(PYTHON) scripts/run_worker_limit.py --model "$(MODEL)" --max-retries "1" --decompose $(ARTIFACT_ARGS)
 
+test-worker-limit-architect:
+	$(PYTHON) scripts/run_worker_limit.py --model "$(MODEL)" --max-retries "$(ARCHITECT_MAX_RETRIES)" --architect-after-repair-attempts "$(ARCHITECT_AFTER)" $(ARTIFACT_ARGS)
+
 test-python-ladder-parsing:
 	$(PYTHON) scripts/run_worker_limit.py --tasks tests/python_ladders/parsing.json --model "$(MODEL)" --max-retries "1" $(ARTIFACT_ARGS)
 
@@ -93,6 +99,12 @@ test-python-ladder-data:
 
 test-python-ladder-algorithmic:
 	$(PYTHON) scripts/run_worker_limit.py --tasks tests/python_ladders/algorithmic.json --model "$(MODEL)" --max-retries "1" $(ARTIFACT_ARGS)
+
+test-python-ladder-stateful:
+	$(PYTHON) scripts/run_worker_limit.py --tasks tests/python_ladders/stateful.json --model "$(MODEL)" --max-retries "1" $(ARTIFACT_ARGS)
+
+test-python-ladder-stateful-architect:
+	$(PYTHON) scripts/run_worker_limit.py --tasks tests/python_ladders/stateful.json --model "$(MODEL)" --max-retries "$(ARCHITECT_MAX_RETRIES)" --architect-after-repair-attempts "$(ARCHITECT_AFTER)" $(ARTIFACT_ARGS)
 
 test-plan-mode-ladder:
 	$(PYTHON) scripts/run_plan_mode_ladder.py

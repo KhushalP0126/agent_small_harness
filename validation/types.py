@@ -16,6 +16,8 @@ ViolationKind = Literal[
     "algorithmic_cost",
     "lint_error",
     "formal_counterexample",
+    "bounds_risk",
+    "state_flow_risk",
 ]
 
 RepairHint = Literal[
@@ -31,6 +33,8 @@ RepairHint = Literal[
     "precompute_lookup",
     "fix_lint_error",
     "satisfy_contract",
+    "guard_index_access",
+    "return_updated_state",
 ]
 
 

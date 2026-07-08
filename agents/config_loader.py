@@ -37,6 +37,8 @@ class PolicyConfig:
     allow_unknown_registered_apis: bool = False
     allow_unsafe_calls: bool = False
     allow_algorithmic_hotspots: bool = False
+    allow_bounds_warnings: bool = True
+    allow_state_flow_warnings: bool = False
     allow_lint_errors: bool = False
 
     def to_validation_policy(self) -> dict[str, Any]:
@@ -51,6 +53,8 @@ class PolicyConfig:
                 "allow_unknown_registered_apis": self.allow_unknown_registered_apis,
                 "allow_unsafe_calls": self.allow_unsafe_calls,
                 "allow_algorithmic_hotspots": self.allow_algorithmic_hotspots,
+                "allow_bounds_warnings": self.allow_bounds_warnings,
+                "allow_state_flow_warnings": self.allow_state_flow_warnings,
                 "allow_lint_errors": self.allow_lint_errors,
             }
         )
@@ -168,6 +172,8 @@ class HarnessConfig:
                 "allow_unknown_registered_apis",
                 "allow_unsafe_calls",
                 "allow_algorithmic_hotspots",
+                "allow_bounds_warnings",
+                "allow_state_flow_warnings",
                 "allow_lint_errors",
             },
             "engines.policy",
@@ -217,6 +223,8 @@ class HarnessConfig:
                     ),
                     allow_unsafe_calls=_bool(policy, "allow_unsafe_calls", False),
                     allow_algorithmic_hotspots=_bool(policy, "allow_algorithmic_hotspots", False),
+                    allow_bounds_warnings=_bool(policy, "allow_bounds_warnings", True),
+                    allow_state_flow_warnings=_bool(policy, "allow_state_flow_warnings", False),
                     allow_lint_errors=_bool(policy, "allow_lint_errors", False),
                 ),
                 behavior=BehaviorConfig(

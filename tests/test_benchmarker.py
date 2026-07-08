@@ -137,6 +137,8 @@ class BenchmarkerTests(unittest.TestCase):
         self.assertEqual(config.engines.formal.crosshair_timeout_seconds, 3.0)
         self.assertEqual(config.execution.gates.max_retries, 1)
         self.assertFalse(config.engines.policy.allow_explicit_globals)
+        self.assertTrue(config.engines.policy.allow_bounds_warnings)
+        self.assertFalse(config.engines.policy.allow_state_flow_warnings)
 
     def test_config_loader_rejects_unknown_keys(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -203,7 +205,16 @@ class BenchmarkerTests(unittest.TestCase):
                     {
                         "attempt": 0,
                         "draft": "def f():\n    return missing\n",
-                        "validation": {"is_compliant": False, "violations": []},
+                        "validation": {
+                            "is_compliant": False,
+                            "violations": [
+                                {
+                                    "kind": "state_flow_risk",
+                                    "current_value": "section",
+                                    "allowed_value": "helper returns updated state",
+                                }
+                            ],
+                        },
                         "behavior_validation": {"is_compliant": True, "issues": []},
                         "formal_validation": {"is_compliant": True, "issues": [], "skipped": True},
                         "retry_prompt": "fix",
@@ -219,6 +230,8 @@ class BenchmarkerTests(unittest.TestCase):
             review = render_review(paths.run_dir)
             self.assertIn("Attempt timeline:", review)
             self.assertIn("Final status: manual_review_required", review)
+            self.assertIn("Root cause candidates:", review)
+            self.assertIn("state propagation", review)
 
     def test_engine_evaluator_matches_fixture_expectations(self) -> None:
         evaluation = evaluate_engines()
@@ -650,6 +663,8 @@ def parse_key_value_lines(text):
         self.assertEqual(contribution["label"], "small_solved_initial")
         self.assertEqual(contribution["score"], 1.0)
         self.assertFalse(contribution["architect_used"])
+        self.assertEqual(contribution["static_violation_delta"], 0)
+        self.assertEqual(contribution["behavior_issue_delta"], 0)
 
     def test_worker_contribution_labels_architect_takeover(self) -> None:
         contribution = _worker_contribution(
@@ -664,6 +679,33 @@ def parse_key_value_lines(text):
         self.assertEqual(contribution["label"], "architect_solved_after_small_stall")
         self.assertEqual(contribution["score"], 0.0)
         self.assertTrue(contribution["architect_used"])
+
+    def test_worker_contribution_reports_validation_pressure_reduction(self) -> None:
+        contribution = _worker_contribution(
+            {
+                "final_status": "manual_review_required",
+                "attempts": [
+                    {
+                        "attempt": 0,
+                        "repair_worker": "small_worker",
+                        "changed": True,
+                        "validation": {"violations": [{"kind": "state_flow_risk"}]},
+                        "behavior_validation": {"issues": [{"case": "basic"}]},
+                    },
+                    {
+                        "attempt": 1,
+                        "repair_worker": "",
+                        "changed": True,
+                        "validation": {"violations": []},
+                        "behavior_validation": {"issues": [{"case": "basic"}]},
+                    },
+                ],
+            }
+        )
+        self.assertEqual(contribution["label"], "small_made_progress_but_failed")
+        self.assertEqual(contribution["static_violation_delta"], -1)
+        self.assertEqual(contribution["behavior_issue_delta"], 0)
+        self.assertTrue(contribution["validation_pressure_reduced"])
 
     def test_generation_controller_stops_on_stagnation(self) -> None:
         violating_source = (ROOT / "data" / "snippets" / "mixed_hard_case.py").read_text(encoding="utf-8")
