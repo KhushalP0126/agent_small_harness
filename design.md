@@ -108,6 +108,8 @@ Rules:
 - Parser/config tasks may include state-machine constraints, but should not receive full solution templates.
 - Library tasks should include adapter rules so the worker treats dependencies as opaque boundaries with explicit inputs and outputs.
 - If a state-machine/parser task fails after one small-worker repair, route to architect or human review instead of spending repeated small-worker retries.
+- Domain-specific app prompts may be used as external experiments, but Plan Mode must not embed permanent app-specific behavior.
+- Template routes must come from explicit configuration or injection, not hard-coded matching inside Plan Mode.
 
 ## Artifact Review Design
 
@@ -169,7 +171,20 @@ Additional diagnostic examples:
 
 ## Fixture Policy
 
-Snake, maze-runner, and similar terminal-game prompts are stress fixtures only. They are useful because they create realistic loops, branches, input handling, and state transitions. They should not drive task-specific architecture, helper names, or permanent rules unless the rule generalizes to other generated code.
+Stress fixtures are useful because they create realistic loops, branches, input
+handling, library calls, and state transitions. They should not drive
+task-specific architecture, helper names, permanent rules, or Make targets
+unless the rule generalizes across generated code.
+
+Rules:
+
+- Keep fixtures outside the core controller and Plan Mode.
+- Do not add fixture-specific repair directives to generic prompts.
+- Do not weaken engines to pass a fixture.
+- Prefer generic behavior examples, state rules, and dependency graphs over
+  problem-specific solution templates.
+- If a fixture needs a known skeleton, inject that route from configuration or a
+  test harness rather than embedding it in production orchestration.
 
 ## Capability Test Design
 

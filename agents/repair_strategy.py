@@ -3,14 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
-from agents.repair_templates import get_repair_template, select_repair_template
 from agents.template_loader import TemplateLibrary
 
 
 MODEL_ONLY = "model_only"
-TEMPLATE_DIRECTED = "template_directed"
 MANUAL_REVIEW = "manual_review"
-REPAIR_MODES = (MODEL_ONLY, TEMPLATE_DIRECTED, MANUAL_REVIEW)
+REPAIR_MODES = (MODEL_ONLY, MANUAL_REVIEW)
 
 
 @dataclass
@@ -56,9 +54,8 @@ class RepairStrategyAgent:
     name = "agent-repair-strategy"
 
     def select_initial_template(self, source: str, forced_template: str = "") -> tuple[str, str]:
-        template_name = select_repair_template(source, forced_template=forced_template or None)
-        template_code = get_repair_template(template_name) if template_name else ""
-        return template_name, template_code
+        del source, forced_template
+        return "", ""
 
     def select_skeleton(
         self,
@@ -143,20 +140,6 @@ class RepairStrategyAgent:
             )
 
         has_issues = bool(violations or behavior_issues)
-        template_name, template_code = self.select_initial_template(source)
-
-        if template_name and template_code and has_issues:
-            return RepairDecision(
-                mode=TEMPLATE_DIRECTED,
-                template_name=template_name,
-                template_code=template_code,
-                rationale=(
-                    f"Detected '{template_name}' pattern; steer the model with the "
-                    "pre-validated template skeleton."
-                ),
-                repair_instructions=self.repair_instructions_for(violations, behavior_issues),
-            )
-
         if has_issues:
             return RepairDecision(
                 mode=MODEL_ONLY,

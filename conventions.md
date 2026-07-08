@@ -25,10 +25,12 @@ Constraints:
    and any enabled formal validation.
 6. Keep the harness generalized for code creation and repair. Do not bake in
    fixture-specific rules unless the rule generalizes across tasks.
-7. Read operational thresholds, model names, retry budgets, and behavior timeouts
+7. Keep template routes injected or configured. Do not add hard-coded app names,
+   fixture names, or helper names to Plan Mode, the controller, or engines.
+8. Read operational thresholds, model names, retry budgets, and behavior timeouts
    from `config.yaml` through the validated config loader instead of scattering
    new hard-coded policy constants through the codebase.
-8. Keep formal tooling tiered: Plan Mode may emit Deal contract candidates,
+9. Keep formal tooling tiered: Plan Mode may emit Deal contract candidates,
    CrossHair may validate enabled semantic contracts/counterexamples, and Nagini
    is an architect-tier formalization target for critical helpers.
 

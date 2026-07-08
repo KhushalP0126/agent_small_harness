@@ -7,10 +7,12 @@ from typing import Any
 from agents.base import AgentResult, BaseAgent
 from agents.prompt_normalizer import PromptNormalizerAgent
 from agents.task_classifier import TaskClassifierAgent, TaskClassification
+from agents.template_registry import TemplateRegistry
+from kernel.task_ir import TaskIR, TemplateRoute, ValidationPlan
 
 
 CALL_EXPECTATION_RE = re.compile(
-    r"(?P<function>[A-Za-z_][A-Za-z0-9_]*)\((?P<args>.*?)\)\s*(?:==|->|=>|returns?)\s*(?P<expected>[^;\n]+)",
+    r"(?P<function>[A-Za-z_][A-Za-z0-9_]*)\((?P<args>[^;\n]*)\)\s*(?:==|->|=>|returns?)\s*(?P<expected>[^;\n]+)",
     re.IGNORECASE,
 )
 FUNCTION_NAME_RE = re.compile(
@@ -18,7 +20,7 @@ FUNCTION_NAME_RE = re.compile(
     re.IGNORECASE,
 )
 DEF_NAME_RE = re.compile(r"\bdef\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*\(")
-SNAKE_NAME_RE = re.compile(r"\b(?P<name>[a-z_]+[a-z0-9_]*)\s*\(")
+CALL_NAME_RE = re.compile(r"\b(?P<name>[a-z_]+[a-z0-9_]*)\s*\(")
 
 
 @dataclass
@@ -35,6 +37,12 @@ class PlanSpec:
     goal: str
     task_type: str
     language: str
+    app_name: str = ""
+    game_kind: str = ""
+    kernel_mode: str = "generate_from_spec"
+    files: list[str] = field(default_factory=list)
+    entrypoints: list[str] = field(default_factory=list)
+    components: list[str] = field(default_factory=list)
     target_function: str = ""
     behavior_cases: list[PlannedBehaviorCase] = field(default_factory=list)
     deal_contracts: list[str] = field(default_factory=list)
@@ -45,6 +53,10 @@ class PlanSpec:
     security_constraints: list[str] = field(default_factory=list)
     state_machine_constraints: list[str] = field(default_factory=list)
     dependency_graph_context: list[str] = field(default_factory=list)
+    template_name: str = ""
+    template_language: str = ""
+    template_source: str = ""
+    template_reason: str = ""
     needs_user_clarification: bool = False
     questions: list[str] = field(default_factory=list)
     route_hint: str = "small_worker"
@@ -64,21 +76,25 @@ class PlanModeAgent(BaseAgent):
         self,
         normalizer: PromptNormalizerAgent | None = None,
         classifier: TaskClassifierAgent | None = None,
+        template_registry: TemplateRegistry | None = None,
     ) -> None:
         self.normalizer = normalizer or PromptNormalizerAgent()
         self.classifier = classifier or TaskClassifierAgent()
+        self.template_registry = template_registry or TemplateRegistry()
 
     def plan(self, prompt: str) -> PlanSpec:
         normalized = self.normalizer.normalize(prompt)
         classification = self.classifier.classify(normalized.normalized_prompt)
-        target_function = self._target_function(normalized.normalized_prompt)
+        template_match = self.template_registry.select(normalized.normalized_prompt, classification)
+        structured_sections = self._structured_sections(prompt)
+        target_function = "" if self._is_structured_app_spec(structured_sections) else self._target_function(normalized.normalized_prompt)
         behavior_cases = self._behavior_cases(prompt)
         deal_contracts = self._deal_contracts(
             language=classification.language,
             target_function=target_function,
             behavior_cases=behavior_cases,
         )
-        allowed_libraries = self._allowed_libraries(classification)
+        allowed_libraries = self._allowed_libraries(classification, structured_sections)
         adapter_contracts = self._adapter_contracts(allowed_libraries)
         forbidden_patterns = [
             "imports unless explicitly allowed",
@@ -91,7 +107,16 @@ class PlanModeAgent(BaseAgent):
         performance_constraints = self._performance_constraints(normalized.normalized_prompt)
         security_constraints = self._security_constraints(normalized.normalized_prompt)
         state_machine_constraints = self._state_machine_constraints(normalized.normalized_prompt)
+        for item in self._structured_constraints(
+            structured_sections,
+            ("STATE", "GAME LOOP", "INPUT RULES", "UPDATE RULES", "VALIDATION RULES", "PURE TESTABLE HELPERS"),
+        ):
+            if item not in state_machine_constraints:
+                state_machine_constraints.append(item)
         dependency_graph_context = self._dependency_graph_context(normalized.normalized_prompt)
+        for item in self._structured_constraints(structured_sections, ("DEPENDENCY GRAPH",)):
+            if item not in dependency_graph_context:
+                dependency_graph_context.append(item)
         questions = self._questions(
             normalized_prompt=normalized.normalized_prompt,
             classification=classification,
@@ -104,6 +129,12 @@ class PlanModeAgent(BaseAgent):
             goal=normalized.normalized_prompt,
             task_type=classification.task_type,
             language=classification.language,
+            app_name=self._structured_field(structured_sections, "GAME SPEC", "name"),
+            game_kind=self._structured_field(structured_sections, "GAME SPEC", "game_kind"),
+            kernel_mode=self._structured_field(structured_sections, "GAME SPEC", "kernel_mode") or "generate_from_spec",
+            files=self._structured_items(structured_sections, "FILES"),
+            entrypoints=self._structured_items(structured_sections, "ENTRYPOINT"),
+            components=self._structured_items(structured_sections, "REQUIRED COMPONENTS"),
             target_function=target_function,
             behavior_cases=behavior_cases,
             deal_contracts=deal_contracts,
@@ -114,17 +145,118 @@ class PlanModeAgent(BaseAgent):
             security_constraints=security_constraints,
             state_machine_constraints=state_machine_constraints,
             dependency_graph_context=dependency_graph_context,
+            template_name=template_match.name if template_match else "",
+            template_language=template_match.language if template_match else "",
+            template_source=template_match.source if template_match else "",
+            template_reason=template_match.reason if template_match else "",
             needs_user_clarification=bool(questions),
             questions=questions,
-            route_hint=classification.route_hint,
+            route_hint="template_route" if template_match else classification.route_hint,
+        )
+
+    def to_task_ir(self, spec: PlanSpec) -> TaskIR:
+        behavior_examples = [f"{case.call} == {case.expected}" for case in spec.behavior_cases]
+        constraints = [
+            *spec.forbidden_patterns,
+            *spec.performance_constraints,
+            *spec.security_constraints,
+            *spec.adapter_contracts,
+        ]
+        template = (
+            TemplateRoute(
+                name=spec.template_name,
+                language=spec.template_language or spec.language,
+                source=spec.template_source,
+                reason=spec.template_reason,
+            )
+            if spec.template_name
+            else None
+        )
+        return TaskIR(
+            goal=spec.goal,
+            task_type=spec.task_type,
+            language=spec.language,
+            app_name=spec.app_name,
+            game_kind=spec.game_kind,
+            kernel_mode=spec.kernel_mode,
+            target_function=spec.target_function,
+            route_hint=spec.route_hint,
+            template=template,
+            files=spec.files,
+            entrypoints=spec.entrypoints,
+            components=spec.components,
+            allowed_libraries=spec.allowed_libraries,
+            constraints=constraints,
+            state=spec.state_machine_constraints,
+            dependency_graph=spec.dependency_graph_context,
+            validation=ValidationPlan(
+                engines=[
+                    "parse-contract",
+                    "math",
+                    "hazards",
+                    "branching",
+                    "cost",
+                    "bounds",
+                    "state-flow",
+                    "lint",
+                ],
+                behavior_examples=behavior_examples,
+                contracts=spec.deal_contracts,
+            ),
         )
 
     def _target_function(self, prompt: str) -> str:
-        for pattern in (DEF_NAME_RE, FUNCTION_NAME_RE, SNAKE_NAME_RE):
+        for pattern in (DEF_NAME_RE, FUNCTION_NAME_RE, CALL_NAME_RE):
             match = pattern.search(prompt)
             if match:
                 return match.group("name")
         return ""
+
+    def _is_structured_app_spec(self, sections: dict[str, list[str]]) -> bool:
+        return any(name in sections for name in ("FILES", "REQUIRED COMPONENTS", "ENTRYPOINT"))
+
+    def _structured_sections(self, prompt: str) -> dict[str, list[str]]:
+        sections: dict[str, list[str]] = {}
+        current = ""
+        for raw_line in prompt.splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            if re.fullmatch(r"[A-Z][A-Z0-9 /_-]*", line):
+                current = line
+                sections.setdefault(current, [])
+                continue
+            if current:
+                sections[current].append(line)
+        return sections
+
+    def _structured_field(self, sections: dict[str, list[str]], section: str, field_name: str) -> str:
+        prefix = f"{field_name.lower()}:"
+        for line in sections.get(section, []):
+            if line.lower().startswith(prefix):
+                return line.split(":", 1)[1].strip()
+        return ""
+
+    def _structured_items(self, sections: dict[str, list[str]], section: str) -> list[str]:
+        items: list[str] = []
+        for line in sections.get(section, []):
+            if line.startswith("- "):
+                items.append(line[2:].strip())
+            elif line and ":" not in line:
+                items.append(line.strip())
+        return items
+
+    def _structured_constraints(
+        self,
+        sections: dict[str, list[str]],
+        names: tuple[str, ...],
+    ) -> list[str]:
+        constraints: list[str] = []
+        for name in names:
+            for item in self._structured_items(sections, name):
+                if item not in constraints:
+                    constraints.append(item)
+        return constraints
 
     def _behavior_cases(self, prompt: str) -> list[PlannedBehaviorCase]:
         cases: list[PlannedBehaviorCase] = []
@@ -158,10 +290,22 @@ class PlanModeAgent(BaseAgent):
             contracts.append("# Architect may add stronger @deal.pre/@deal.post clauses when requirements are explicit.")
         return contracts
 
-    def _allowed_libraries(self, classification: TaskClassification) -> list[str]:
+    def _allowed_libraries(
+        self,
+        classification: TaskClassification,
+        structured_sections: dict[str, list[str]] | None = None,
+    ) -> list[str]:
         if classification.language != "python":
             return []
-        return classification.libraries
+        libraries = list(classification.libraries)
+        structured_sections = structured_sections or {}
+        for field in ("library", "libraries", "allowed_libraries"):
+            value = self._structured_field(structured_sections, "GAME SPEC", field)
+            for item in re.split(r"[, ]+", value):
+                item = item.strip()
+                if item and item not in libraries:
+                    libraries.append(item)
+        return libraries
 
     def _adapter_contracts(self, libraries: list[str]) -> list[str]:
         contracts: list[str] = []
@@ -341,8 +485,21 @@ class PlanModeAgent(BaseAgent):
         ]
         if spec.target_function:
             lines.append(f"- Target function: {spec.target_function}")
+        if spec.app_name:
+            lines.append(f"- App name: {spec.app_name}")
+        if spec.game_kind:
+            lines.append(f"- Game kind: {spec.game_kind}")
+        if spec.files:
+            lines.append(f"- Files: {', '.join(spec.files)}")
+        if spec.entrypoints:
+            lines.append(f"- Entrypoints: {', '.join(spec.entrypoints)}")
+        if spec.components:
+            lines.append("- Required components:")
+            lines.extend(f"  - {component}" for component in spec.components)
         if spec.allowed_libraries:
             lines.append(f"- Allowed libraries: {', '.join(spec.allowed_libraries)}")
+        if spec.template_name:
+            lines.append(f"- Template route: {spec.template_name} ({spec.template_reason})")
         if spec.adapter_contracts:
             lines.append("- Dependency adapter contracts:")
             lines.extend(f"  - {item}" for item in spec.adapter_contracts)
@@ -375,9 +532,28 @@ class PlanModeAgent(BaseAgent):
         if spec.target_function:
             lines.append(f"FUNCTION: {spec.target_function}")
         lines.append(f"LANGUAGE: {spec.language}")
+        if spec.app_name:
+            lines.append(f"APP: {spec.app_name}")
+        if spec.game_kind:
+            lines.append(f"GAME_KIND: {spec.game_kind}")
+        if spec.files:
+            lines.append("FILES:")
+            lines.extend(f"- {path}" for path in spec.files)
+        if spec.entrypoints:
+            lines.append("ENTRYPOINTS:")
+            lines.extend(f"- {entrypoint}" for entrypoint in spec.entrypoints)
+        if spec.components:
+            lines.append("REQUIRED COMPONENTS:")
+            lines.extend(f"- {component}" for component in spec.components)
         if spec.behavior_cases:
             lines.append("EXAMPLES:")
             lines.extend(f"- {case.call} == {case.expected}" for case in spec.behavior_cases)
+        if spec.template_name:
+            lines.append("TEMPLATE ROUTE:")
+            lines.append(f"- Name: {spec.template_name}")
+            lines.append(f"- Reason: {spec.template_reason}")
+            lines.append("SKELETON:")
+            lines.append(spec.template_source.strip())
         if spec.state_machine_constraints:
             lines.append("STATE RULES:")
             lines.extend(f"- {item}" for item in spec.state_machine_constraints)
@@ -405,4 +581,5 @@ class PlanModeAgent(BaseAgent):
         payload = asdict(spec)
         payload["prompt_context"] = self.to_prompt_context(spec)
         payload["worker_packet"] = self.to_worker_packet(spec)
+        payload["task_ir"] = asdict(self.to_task_ir(spec))
         return AgentResult(agent=self.name, payload=payload)

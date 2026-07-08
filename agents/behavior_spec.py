@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 from typing import Any
 
-from agents.repair_templates import detect_scoring_matrix_pattern
 from validation.behavior import (
     BehaviorCase,
     BehaviorResult,
@@ -22,17 +21,16 @@ DEFAULT_BEHAVIOR_CASES = ROOT / "data" / "behavior_cases.json"
 class BehaviorSpecAgent:
     """Resolves and validates behavior specs.
 
-    Replaces hardcoded ``mixed_hard_case_spec()`` call sites with pattern-driven
-    resolution, JSON-backed loading, prompt formatting, and validation, so behavior
-    cases scale beyond a single fixture.
+    Resolves JSON-backed behavior specs, prompt formatting, and validation.
+    Automatic problem-specific behavior detection is intentionally avoided so
+    normal model runs measure capability rather than hidden fixture routing.
     """
 
     name = "agent-behavior-spec"
 
     def for_source(self, source: str) -> FunctionBehaviorSpec | None:
         """Map a detected code pattern to a behavior spec, or None if unknown."""
-        if detect_scoring_matrix_pattern(source):
-            return mixed_hard_case_spec()
+        del source
         return None
 
     def resolve(

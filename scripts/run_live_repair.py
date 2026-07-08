@@ -26,7 +26,6 @@ def run_live_repair(
     fixture_path: Path = DEFAULT_FIXTURE,
     model: str = DEFAULT_OLLAMA_MODEL,
     max_retries: int = 3,
-    template: str = "auto",
     debug: bool = True,
     record_history: bool = False,
     gen_id: str = "live-repair",
@@ -34,18 +33,14 @@ def run_live_repair(
     source = fixture_path.read_text(encoding="utf-8")
     behavior_spec = BehaviorSpecAgent().for_source(source) or mixed_hard_case_spec()
     strategy = RepairStrategyAgent()
-    forced_template = "" if template == "auto" else template
-    template_name, template_code = strategy.select_initial_template(source, forced_template=forced_template)
     initial_prompt = CoderAgent().build_repair_prompt(
         source,
         behavior_spec=behavior_spec,
-        template_name=template_name,
-        template_code=template_code,
     )
     supplier = OllamaModelSupplier(model=model)
     controller = GenerationController(
         max_retries=max_retries,
-        draft_supplier=lambda _prompt: template_code or source,
+        draft_supplier=lambda _prompt: source,
         repair_supplier=supplier.repair_draft,
         policy={"max_cyclomatic_complexity": 4},
         behavior_spec=behavior_spec,
@@ -61,7 +56,6 @@ def run_live_repair(
         HistorianAgent(HISTORY_PATH).record_repair_outcome(
             gen_id=gen_id,
             session=session,
-            template_name=template_name,
             prompt_label="live-repair",
         )
     return session
@@ -105,7 +99,6 @@ def main() -> None:
     parser.add_argument("--fixture", default=str(DEFAULT_FIXTURE))
     parser.add_argument("--model", default=DEFAULT_OLLAMA_MODEL)
     parser.add_argument("--max-retries", type=int, default=3)
-    parser.add_argument("--template", default="auto", help="Use `auto`, `scoring_matrix`, or an empty string.")
     parser.add_argument("--quiet", action="store_true", help="Disable controller debug prints.")
     parser.add_argument("--json", action="store_true", help="Print the full session JSON.")
     parser.add_argument(
@@ -120,7 +113,6 @@ def main() -> None:
         fixture_path=Path(args.fixture).resolve(),
         model=args.model,
         max_retries=args.max_retries,
-        template=args.template,
         debug=not args.quiet,
         record_history=args.record_history,
         gen_id=args.gen_id,

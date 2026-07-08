@@ -21,9 +21,10 @@ from agents.task_classifier import TaskClassifierAgent
 from agents.repair_strategy import (
     MANUAL_REVIEW,
     MODEL_ONLY,
-    TEMPLATE_DIRECTED,
     RepairStrategyAgent,
 )
+from agents.template_loader import TemplateLibrary
+from agents.template_registry import TemplateRegistry
 from benchmarker import ROOT
 from engines.bounds_engine import BoundsEngine
 from engines.branching_engine import BranchingEngine
@@ -33,6 +34,8 @@ from engines.lint_engine import LintEngine
 from engines.library_registry import LibraryRegistry
 from engines.math_engine import MathEngine
 from engines.state_flow_engine import StateFlowEngine
+from kernel.execution_kernel import ExecutionKernel
+from kernel.task_ir import TaskIR
 from validation.behavior import BehaviorCase, FunctionBehaviorSpec, mixed_hard_case_spec
 from validation.policy import validate_findings
 from validation.types import Violation
@@ -189,10 +192,10 @@ class PythonHazardPolicyTests(unittest.TestCase):
 
 
 class RepairStrategyTests(unittest.TestCase):
-    def test_selects_scoring_matrix_template(self) -> None:
+    def test_does_not_auto_select_problem_specific_template(self) -> None:
         name, code = RepairStrategyAgent().select_initial_template(MIXED.read_text(encoding="utf-8"))
-        self.assertEqual(name, "scoring_matrix")
-        self.assertIn("def analyze", code)
+        self.assertEqual(name, "")
+        self.assertEqual(code, "")
 
     def test_parse_error_forces_model_only(self) -> None:
         violation = Violation(
@@ -207,13 +210,13 @@ class RepairStrategyTests(unittest.TestCase):
         decision = RepairStrategyAgent().decide("def bad(:\n", violations=[violation])
         self.assertEqual(decision.mode, MODEL_ONLY)
 
-    def test_template_directed_when_pattern_and_issues(self) -> None:
+    def test_pattern_with_issues_stays_model_only_without_configured_template(self) -> None:
         source = MIXED.read_text(encoding="utf-8")
         violations = validate_findings(_python_findings(source)).violations
         decision = RepairStrategyAgent().decide(source, violations=violations)
-        self.assertEqual(decision.mode, TEMPLATE_DIRECTED)
-        self.assertEqual(decision.template_name, "scoring_matrix")
-        self.assertIn("def analyze", decision.template_code)
+        self.assertEqual(decision.mode, MODEL_ONLY)
+        self.assertEqual(decision.template_name, "")
+        self.assertEqual(decision.template_code, "")
 
     def test_manual_review_when_no_actionable_path(self) -> None:
         decision = RepairStrategyAgent().decide(
@@ -250,8 +253,7 @@ class RepairStrategyTests(unittest.TestCase):
         instructions = "\n".join(decision.repair_instructions)
         self.assertIn("small single-purpose helper functions", instructions)
         self.assertIn("standard-library", instructions)
-        self.assertNotIn("snake", instructions.lower())
-        self.assertNotIn("calculate_new_head", instructions)
+        self.assertNotIn("fixture_specific_helper", instructions)
 
     def test_repair_strategy_consumes_engine_diagnostic_refactor(self) -> None:
         violation = Violation(
@@ -292,14 +294,12 @@ class RepairStrategyTests(unittest.TestCase):
         instructions = "\n".join(decision.repair_instructions)
         self.assertIn("pygame.draw.rect", instructions)
         self.assertIn("registered library schema", instructions)
-        self.assertNotIn("snake", instructions.lower())
 
 
 class BehaviorSpecTests(unittest.TestCase):
-    def test_for_source_maps_scoring_matrix(self) -> None:
+    def test_for_source_does_not_auto_map_problem_specific_specs(self) -> None:
         spec = BehaviorSpecAgent().for_source(MIXED.read_text(encoding="utf-8"))
-        self.assertIsNotNone(spec)
-        self.assertEqual(spec.function_name, "analyze")
+        self.assertIsNone(spec)
 
     def test_for_source_returns_none_for_unknown(self) -> None:
         self.assertIsNone(BehaviorSpecAgent().for_source("def analyze(matrix):\n    return 0\n"))
@@ -354,6 +354,50 @@ class ScalabilityAgentTests(unittest.TestCase):
         self.assertEqual(result["route_hint"], "template_or_small_worker")
         self.assertIn("pandas", result["prompt_context"])
         self.assertIn("ADAPTER RULES:", result["worker_packet"])
+
+    def test_template_registry_has_no_builtin_app_routes(self) -> None:
+        classification = TaskClassifierAgent().classify("Create a small game in Python")
+        self.assertIsNone(TemplateRegistry().select("Create a small game in Python", classification))
+
+    def test_template_registry_supports_injected_routes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            template_dir = root / "sample_app" / "python"
+            template_dir.mkdir(parents=True)
+            (template_dir / "sample_app.py").write_text("def main():\n    return None\n", encoding="utf-8")
+            classification = TaskClassifierAgent().classify("Create a small game in Python")
+            registry = TemplateRegistry(
+                library=TemplateLibrary(root),
+                routes={("game", "python"): "sample_app"},
+            )
+
+            match = registry.select("Create a small game in Python", classification)
+
+        self.assertIsNotNone(match)
+        self.assertEqual(match.name, "sample_app")
+        self.assertEqual(match.language, "python")
+        self.assertIn("def main", match.source)
+
+    def test_plan_mode_has_no_task_specific_game_assumptions(self) -> None:
+        source = (ROOT / "agents" / "plan_mode.py").read_text(encoding="utf-8").lower()
+        self.assertNotIn("fixture_specific_helper", source)
+
+    def test_execution_kernel_delegates_task_ir_to_generation_controller(self) -> None:
+        class StubController:
+            def __init__(self) -> None:
+                self.calls = []
+
+            def run(self, target: str, initial_prompt: str):
+                self.calls.append((target, initial_prompt))
+                return {"target": target, "initial_prompt": initial_prompt}
+
+        controller = StubController()
+        task = TaskIR(goal="build parser", task_type="code", language="python")
+        result = ExecutionKernel(controller=controller).run(task, initial_prompt="packet")
+
+        self.assertEqual(result["target"], "build parser")
+        self.assertEqual(result["initial_prompt"], "packet")
+        self.assertEqual(controller.calls, [("build parser", "packet")])
 
     def test_plan_mode_extracts_state_machine_constraints_for_section_parser(self) -> None:
         prompt = (
@@ -499,14 +543,12 @@ class HistorianLearningTests(unittest.TestCase):
                     },
                 ],
             }
-            outcome = historian.record_repair_outcome(
-                "genX", session, template_name="scoring_matrix", prompt_label="live-repair"
-            )
+            outcome = historian.record_repair_outcome("genX", session, template_name="configured_route", prompt_label="live-repair")
             self.assertTrue(outcome["succeeded"])
             self.assertEqual(len(outcome["summary"]["failed_attempts"]), 1)
-            self.assertEqual(historian.successful_templates(), {"scoring_matrix": 1})
+            self.assertEqual(historian.successful_templates(), {"configured_route": 1})
             lessons = historian.run("genX").payload["lessons_learned"]
-            self.assertTrue(any("scoring_matrix" in lesson for lesson in lessons))
+            self.assertTrue(any("configured_route" in lesson for lesson in lessons))
         finally:
             path.unlink()
 
@@ -515,14 +557,14 @@ class HistorianLearningTests(unittest.TestCase):
         try:
             historian = HistorianAgent(path)
             session = {"final_status": "completed", "attempts": []}
-            historian.record_repair_outcome("genX", session, template_name="scoring_matrix")
-            historian.record_repair_outcome("genY", session, template_name="scoring_matrix")
-            self.assertEqual(historian.successful_templates(), {"scoring_matrix": 2})
+            historian.record_repair_outcome("genX", session, template_name="configured_route")
+            historian.record_repair_outcome("genY", session, template_name="configured_route")
+            self.assertEqual(historian.successful_templates(), {"configured_route": 2})
             history = json.loads(path.read_text(encoding="utf-8"))
             entries = [
                 entry
                 for entry in history["lessons_learned"]
-                if entry["id"] == "repair-template-scoring_matrix"
+                if entry["id"] == "repair-template-configured_route"
             ]
             self.assertEqual(len(entries), 1)
             self.assertEqual(entries[0]["success_count"], 2)
@@ -534,7 +576,7 @@ class HistorianLearningTests(unittest.TestCase):
         try:
             historian = HistorianAgent(path)
             session = {"final_status": "manual_review_required", "attempts": []}
-            historian.record_repair_outcome("genX", session, template_name="scoring_matrix")
+            historian.record_repair_outcome("genX", session, template_name="configured_route")
             self.assertEqual(historian.successful_templates(), {})
         finally:
             path.unlink()
@@ -652,7 +694,6 @@ class ControllerIntegrationTests(unittest.TestCase):
             self.assertIn("CRITICAL BUG FIX REQUIRED", retry_prompt)
             self.assertIn("Remove third-party imports", retry_prompt)
             self.assertIn("standard-library", retry_prompt)
-            self.assertNotIn("snake", retry_prompt.lower())
             return repaired_source
 
         controller = GenerationController(
@@ -725,6 +766,41 @@ def analyze(value):
         self.assertEqual(result.payload["attempts"][1]["diagnostic_deltas"][0]["kind"], "cyclomatic_complexity")
         self.assertEqual(result.payload["attempts"][1]["diagnostic_deltas"][0]["delta"], 0)
         self.assertFalse(result.payload["attempts"][1]["diagnostic_deltas"][0]["improved"])
+
+    def test_branching_loop_detection_stops_repeated_no_progress_repairs(self) -> None:
+        bad_v1 = """
+def analyze(value):
+    if value == 0:
+        return 0
+    if value == 1:
+        return 1
+    if value == 2:
+        return 2
+    if value == 3:
+        return 3
+    if value == 4:
+        return 4
+    if value == 5:
+        return 5
+    if value == 6:
+        return 6
+    return 7
+"""
+        bad_v2 = bad_v1.replace("return 7", "return value")
+        bad_v3 = bad_v1.replace("return 7", "return value + 1")
+        repairs = iter([bad_v2, bad_v3])
+
+        controller = GenerationController(
+            max_retries=3,
+            draft_supplier=lambda _prompt: bad_v1,
+            repair_supplier=lambda _draft, _retry_prompt: next(repairs),
+        )
+        result = controller.run(target="branch-loop", initial_prompt="generate")
+
+        self.assertEqual(result.payload["final_status"], "manual_review_required")
+        self.assertEqual(result.payload["human_review"]["reason"], "branching_loop_detected")
+        self.assertEqual(result.payload["attempts"][-1]["branch_loop"]["reason"], "branching_loop_detected")
+        self.assertEqual(result.payload["attempts"][-1]["branch_state_signature"]["selected_branch_action"], "small_worker")
 
     def test_architect_supplier_takes_over_after_small_worker_threshold(self) -> None:
         bad_v1 = """

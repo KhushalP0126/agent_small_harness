@@ -34,7 +34,7 @@
   {
     "name": "linear_membership_hotspot_is_blocked",
     "prompt": "Create a filter that repeatedly checks membership in a collection.",
-    "draft": "def matching_items(items, targets):\n    found = []\n    for item in items:\n        if item in targets:\n            found.append(item)\n    return found\n",
+    "draft": "def matching_items(items, targets: list):\n    found = []\n    for item in items:\n        if item in targets:\n            found.append(item)\n    return found\n",
     "expected_status": "manual_review_required",
     "expected_failure_kinds": ["algorithmic_cost"],
     "expected_failure_engines": ["engine-4-cost"]

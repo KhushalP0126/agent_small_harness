@@ -66,6 +66,8 @@ class ArtifactManager:
                     "repair_error": attempt.get("repair_error", ""),
                     "changed": attempt.get("changed", False),
                     "diff": attempt.get("diff", ""),
+                    "branch_state_signature": attempt.get("branch_state_signature", {}),
+                    "branch_loop": attempt.get("branch_loop", {}),
                 },
             )
             self._write_json(paths.run_dir / f"attempt_{attempt_index}_findings.json", attempt.get("findings", []))

@@ -7,11 +7,12 @@ from typing import Callable
 from agents.base import AgentResult, BaseAgent
 from agents.engine_registry import EngineRegistry
 from agents.parse_contract import ParseContractAgent, ParseFailure
-from agents.repair_strategy import MANUAL_REVIEW, TEMPLATE_DIRECTED, RepairStrategyAgent
+from agents.repair_strategy import MANUAL_REVIEW, RepairStrategyAgent
 from engines.base import EngineFinding
 from prompt.architect_builder import build_state_machine_architect_prompt
 from prompt.retry_builder import build_retry_prompt, build_small_worker_retry_prompt
 from validation.behavior import FunctionBehaviorSpec, serialize_behavior_result, validate_function_behavior
+from validation.branch_loop_detector import build_branch_state_signature, detect_branching_loop
 from validation.finding_aggregator import aggregate_violations, serialize_repair_directives
 from validation.formal import serialize_formal_result, validate_with_crosshair
 from validation.policy import serialize_validation_result, validate_findings
@@ -47,6 +48,8 @@ class GenerationAttempt:
     draft_source_worker: str = ""
     changed: bool = True
     diff: str = ""
+    branch_state_signature: dict = field(default_factory=dict)
+    branch_loop: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -479,6 +482,15 @@ class GenerationController(BaseAgent):
             "metric_scope_ambiguous": (
                 "Review the code manually; behavior passes, but the remaining branching failure may be module-wide helper complexity rather than target-function complexity."
             ),
+            "branching_loop_detected": (
+                "Review the looped branch state manually; the controller revisited the same unresolved branch pattern without progress."
+            ),
+            "no_new_artifact_progress": (
+                "Review manually or escalate; the selected branch produced no changed artifact and unresolved requirements remain."
+            ),
+            "same_failure_after_branch_switch": (
+                "Review the repair route manually; switching branch actions still led to the same unresolved failure."
+            ),
         }
         return suggestions.get(
             reason,
@@ -654,15 +666,6 @@ class GenerationController(BaseAgent):
                         force_manual_review = True
                         manual_review_reason = "repair_strategy_manual_review"
                         self._debug_print(f"Repair strategy selected manual review: {decision.rationale}")
-                    elif decision.mode == TEMPLATE_DIRECTED and decision.template_code:
-                        retry_prompt = (
-                            f"{retry_prompt}\n\n"
-                            f"TEMPLATE-DIRECTED REPAIR ({decision.template_name}):\n"
-                            f"{decision.template_code}"
-                        )
-                        self._debug_print(
-                            f"Repair strategy selected template-directed repair: {decision.template_name}"
-                        )
                     else:
                         self._debug_print(f"Repair strategy selected model-only repair: {decision.rationale}")
                     if decision.repair_instructions and repair_worker != "small_worker":
@@ -687,10 +690,18 @@ class GenerationController(BaseAgent):
                 changed=changed,
                 diff=diff_text,
             )
+            attempt.branch_state_signature = build_branch_state_signature(target, attempt).to_dict()
             session.attempts.append(attempt)
             if is_complete:
                 session.final_status = "completed"
                 break
+            if not force_manual_review:
+                branch_loop = detect_branching_loop(session.attempts)
+                if branch_loop.detected:
+                    attempt.branch_loop = branch_loop.to_dict()
+                    force_manual_review = True
+                    manual_review_reason = branch_loop.reason
+                    self._debug_print(f"Branching loop detected: {branch_loop.message}")
             if force_manual_review:
                 session.final_status = "manual_review_required"
                 session.human_review = self._human_review_payload(manual_review_reason, attempt)

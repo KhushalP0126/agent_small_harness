@@ -102,23 +102,23 @@ class TreeSitterRegistryAndControllerTests(unittest.TestCase):
 
 
 class TemplateLibraryTests(unittest.TestCase):
-    def test_lists_and_loads_snake_skeletons(self) -> None:
-        library = TemplateLibrary()
-        self.assertEqual(library.available("snake"), ["c", "cpp", "python"])
-        for language in ("python", "c", "cpp"):
-            self.assertIsNotNone(library.load("snake", language))
+    def test_lists_and_loads_configured_skeletons(self) -> None:
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            template_dir = root / "sample_task" / "python"
+            template_dir.mkdir(parents=True)
+            (template_dir / "sample_task.py").write_text("def run():\n    return True\n", encoding="utf-8")
+            library = TemplateLibrary(root)
+
+            self.assertEqual(library.tasks(), ["sample_task"])
+            self.assertEqual(library.available("sample_task"), ["python"])
+            self.assertIn("def run", library.load("sample_task", "python"))
 
     def test_missing_template_returns_none(self) -> None:
-        self.assertIsNone(TemplateLibrary().load("snake", "rust"))
-
-
-@unittest.skipUnless(TREE_SITTER, SKIP_REASON)
-class TemplateParsesTests(unittest.TestCase):
-    def test_c_and_cpp_skeletons_parse_cleanly(self) -> None:
-        library = TemplateLibrary()
-        agent = ParseContractAgent()
-        self.assertIsInstance(agent.parse(library.load("snake", "c"), language="c"), ParseSuccess)
-        self.assertIsInstance(agent.parse(library.load("snake", "cpp"), language="cpp"), ParseSuccess)
+        self.assertIsNone(TemplateLibrary().load("missing_task", "rust"))
 
 
 class GatingContractTests(unittest.TestCase):

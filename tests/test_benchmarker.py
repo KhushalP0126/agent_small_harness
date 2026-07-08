@@ -24,7 +24,6 @@ from agents.coder import CoderAgent
 from agents.generation_controller import GenerationController
 from agents.preprocessor import PreprocessorAgent
 from agents.prompt_normalizer import PromptNormalizerAgent
-from agents.repair_templates import detect_scoring_matrix_pattern, get_repair_template, select_repair_template
 from engines.decomposition_engine import DecompositionEngine
 from engines.evaluator import DEFAULT_CASES_PATH, evaluate_engines, load_cases
 from engines.branching_engine import BranchingEngine
@@ -440,33 +439,16 @@ def analyze(value):
         self.assertIn("Visual & Architectural Design Constraints", prompt)
 
     def test_coder_repair_prompt_includes_template_when_provided(self) -> None:
-        template = get_repair_template("scoring_matrix")
+        template = "def analyze(matrix):\n    return sum(sum(row) for row in matrix)\n"
         prompt = CoderAgent().build_repair_prompt(
             "def analyze(matrix):\n    return 0\n",
-            template_name="scoring_matrix",
+            template_name="configured_template",
             template_code=template,
             context_files=[],
         )
         self.assertIn("Template-Directed Synthesis:", prompt)
         self.assertIn("PRE-VALIDATED TEMPLATE:", prompt)
-        self.assertIn("def _score_value(value):", prompt)
-
-    def test_scoring_matrix_template_is_static_and_behavior_compliant(self) -> None:
-        template = get_repair_template("scoring_matrix")
-        findings = [
-            finding
-            for engine in (MathEngine(), HazardsEngine(), BranchingEngine())
-            for finding in engine.scan(template)
-        ]
-        static_result = validate_findings(findings, policy={"max_cyclomatic_complexity": 4})
-        behavior_result = validate_function_behavior(template, mixed_hard_case_spec())
-        self.assertTrue(static_result.is_compliant)
-        self.assertTrue(behavior_result.is_compliant)
-
-    def test_scoring_matrix_detector_selects_template_for_fixture(self) -> None:
-        source = (ROOT / "data" / "snippets" / "mixed_hard_case.py").read_text(encoding="utf-8")
-        self.assertTrue(detect_scoring_matrix_pattern(source))
-        self.assertEqual(select_repair_template(source), "scoring_matrix")
+        self.assertIn("configured_template", prompt)
 
     def test_validator_emits_violation_objects(self) -> None:
         source = (ROOT / "data" / "snippets" / "mixed_hard_case.py").read_text(encoding="utf-8")
