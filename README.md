@@ -273,7 +273,7 @@ execution:
     difficulty_models:
       1-2: qwen2.5-coder:1.5b
       3-5: qwen2.5-coder:3b
-      6+: qwen2.5-coder:7b
+      6+: qwen2.5-coder:3b
   gates:
     max_retries: 3
 ```

@@ -37,7 +37,7 @@ execution:
     difficulty_models:
       1-2: qwen2.5-coder:1.5b
       3-5: qwen2.5-coder:3b
-      6+: qwen2.5-coder:7b
+      6+: qwen2.5-coder:3b
   routing:
     architect_after_repair_attempts: 1
     complexity_threshold: 0.7

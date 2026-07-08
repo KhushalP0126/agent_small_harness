@@ -130,7 +130,7 @@ class BenchmarkerTests(unittest.TestCase):
         self.assertEqual(config.execution.models.architect_model, "deepseek-v4-pro")
         self.assertEqual(config.execution.models.resolve_for_difficulty(1), "qwen2.5-coder:1.5b")
         self.assertEqual(config.execution.models.resolve_for_difficulty(3), "qwen2.5-coder:3b")
-        self.assertEqual(config.execution.models.resolve_for_difficulty(6), "qwen2.5-coder:7b")
+        self.assertEqual(config.execution.models.resolve_for_difficulty(6), "qwen2.5-coder:3b")
         self.assertEqual(config.engines.policy.max_loop_depth, 2)
         self.assertEqual(config.engines.policy.max_cyclomatic_complexity, 7)
         self.assertFalse(config.engines.formal.crosshair_enabled)
