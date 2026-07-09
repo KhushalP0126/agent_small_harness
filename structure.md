@@ -134,6 +134,13 @@ Ground truth cases, behavior specs, library schemas, run logs, and code snippets
 - `data/stats.json` - Optional aggregate route statistics.
 - `data/snippets/` - Python, C, and C++ static-analysis fixtures.
 
+## `examples/`
+
+External experiment inputs that are intentionally kept outside the harness
+design and runtime logic.
+
+- `examples/specs/` - Structured app/task specs for manual experiments.
+
 ## `scripts/`
 
 Runnable experiments and operator tooling.
