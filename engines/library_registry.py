@@ -13,6 +13,7 @@ DEFAULT_LIBRARY_REGISTRY = ROOT / "data" / "library_registry.json"
 class LibrarySchema:
     name: str
     allowed_calls: frozenset[str] = field(default_factory=frozenset)
+    allowed_constants: frozenset[str] = field(default_factory=frozenset)
     context: str = ""
     unknown_api_repair: str = ""
 
@@ -32,6 +33,7 @@ class LibraryRegistry:
             schemas[normalized] = LibrarySchema(
                 name=normalized,
                 allowed_calls=frozenset(payload.get("allowed_calls", [])),
+                allowed_constants=frozenset(payload.get("allowed_constants", [])),
                 context=payload.get("context", ""),
                 unknown_api_repair=payload.get("unknown_api_repair", ""),
             )

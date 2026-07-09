@@ -26,6 +26,7 @@ class FunctionContract:
 
     name: str
     signature: str
+    kind: str = "function"
     purpose: str = ""
     inputs: list[str] = field(default_factory=list)
     output: str = ""
@@ -35,6 +36,10 @@ class FunctionContract:
 
     def normalized_signature(self) -> str:
         signature = self.signature.strip()
+        if self.kind == "class":
+            if signature.startswith("class "):
+                return signature[:-1] if signature.endswith(":") else signature
+            return f"class {self.name}"
         if signature.startswith("def "):
             return signature[:-1] if signature.endswith(":") else signature
         return f"def {signature[:-1] if signature.endswith(':') else signature}"
@@ -54,13 +59,17 @@ class FunctionContract:
             lines.append(f"    # invariant: {invariant}")
         if self.dependencies:
             lines.append(f"    # dependencies: {', '.join(self.dependencies)}")
-        lines.append("    raise NotImplementedError(\"worker must implement this contract\")")
+        if self.kind == "class":
+            lines.append("    pass")
+        else:
+            lines.append("    raise NotImplementedError(\"worker must implement this contract\")")
         return "\n".join(lines)
 
     def to_worker_packet(self) -> str:
         lines = [
             "FUNCTION CONTRACT PACKET:",
             f"NAME: {self.name}",
+            f"KIND: {self.kind}",
             f"SIGNATURE: {self.normalized_signature()}",
         ]
         if self.purpose:
@@ -82,8 +91,9 @@ class FunctionContract:
         lines.extend(
             [
                 "FINAL RULES:",
-                "- Implement only this function contract.",
-                "- Return only complete Python code for this function and required local helpers.",
+                "- Implement only this contract.",
+                f"- Implement only this {self.kind} contract.",
+                "- Return only complete Python code for this symbol and required tiny local helpers.",
                 "- Preserve the signature exactly.",
                 "- Do not add imports unless the contract explicitly requires them.",
             ]
@@ -141,6 +151,7 @@ def _contract_from_mapping(item: Any) -> FunctionContract:
     return FunctionContract(
         name=name,
         signature=signature,
+        kind=str(item.get("kind", "function")).strip() or "function",
         purpose=str(item.get("purpose", "")).strip(),
         inputs=[str(value).strip() for value in _list(item.get("inputs", [])) if str(value).strip()],
         output=str(item.get("output", "")).strip(),

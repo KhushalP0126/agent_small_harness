@@ -929,6 +929,47 @@ NAME: hits_wall
         )
         self.assertEqual(result.payload["attempts"][1]["validation"]["violations"][0]["kind"], "external_dependency")
 
+    def test_backend_failure_context_is_preserved_for_architect_retry(self) -> None:
+        architect_calls = []
+        drafts = [
+            "def analyze(value):\n    return value + 1\n",
+            "def analyze(value):\n    return value * 2\n",
+        ]
+
+        def architect_supplier(_draft: str, retry_prompt: str) -> str:
+            architect_calls.append(retry_prompt)
+            return drafts.pop(0)
+
+        controller = GenerationController(
+            max_retries=2,
+            draft_supplier=lambda _prompt: (_ for _ in ()).throw(TimeoutError("timed out")),
+            architect_supplier=architect_supplier,
+            architect_after_repair_attempts=0,
+            behavior_spec=FunctionBehaviorSpec(
+                function_name="analyze",
+                cases=[
+                    BehaviorCase(
+                        name="double",
+                        args=(3,),
+                        kwargs={},
+                        expected=6,
+                    )
+                ],
+            ),
+        )
+        result = controller.run(
+            target="backend-timeout-behavior-fail",
+            initial_prompt="PLAN PACKET:\nFUNCTION CONTRACT PACKET:\nNAME: analyze",
+        )
+
+        self.assertEqual(result.payload["final_status"], "completed")
+        self.assertEqual(len(architect_calls), 2)
+        self.assertIn("SMALL WORKER BACKEND FAILURE", architect_calls[0])
+        self.assertIn("SMALL WORKER BACKEND FAILURE", architect_calls[1])
+        self.assertIn("Contract count: 1", architect_calls[1])
+        self.assertEqual(result.payload["attempts"][1]["draft_source_worker"], "architect_llm")
+        self.assertEqual(result.payload["attempts"][2]["draft_source_worker"], "architect_llm")
+
     def test_architect_failure_after_worker_timeout_becomes_manual_review(self) -> None:
         def draft_supplier(_prompt: str) -> str:
             raise TimeoutError("timed out")

@@ -3,8 +3,11 @@ from __future__ import annotations
 import argparse
 import ast
 import json
+import re
 import sys
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from typing import Callable
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -26,18 +29,81 @@ from kernel.function_contracts import ContractQueue, DealExample, FunctionContra
 
 
 DEFAULT_ARTIFACT_ROOT = Path("artifacts/runs")
-FALLBACK_SNAKE_CONTRACTS = [
-    "opposite_direction",
-    "next_head",
-    "hits_wall",
-    "hits_self",
-    "choose_food",
-    "step_state",
-    "create_initial_state",
-    "handle_input",
-    "render",
-    "main",
-]
+FALLBACK_CONTRACT_LIBRARY = {
+    "GameConfig": FunctionContract(
+        name="GameConfig",
+        kind="class",
+        signature="class GameConfig:",
+        purpose="Hold width, height, cell_size, and fps settings.",
+    ),
+    "Direction": FunctionContract(
+        name="Direction",
+        kind="class",
+        signature="class Direction:",
+        purpose="Expose UP, DOWN, LEFT, and RIGHT direction constants.",
+    ),
+    "SnakeState": FunctionContract(
+        name="SnakeState",
+        kind="class",
+        signature="class SnakeState:",
+        purpose="Hold snake body, direction, next_direction, food, score, and game_over state.",
+        dependencies=["Direction"],
+    ),
+    "opposite_direction": FunctionContract(
+        name="opposite_direction",
+        signature="def opposite_direction(a: tuple[int, int], b: tuple[int, int]) -> bool",
+        purpose="Return True when two movement vectors are direct opposites.",
+        examples=[
+            DealExample("opposite_direction((1, 0), (-1, 0))", "True"),
+            DealExample("opposite_direction((1, 0), (0, 1))", "False"),
+        ],
+    ),
+    "next_head": FunctionContract(
+        name="next_head",
+        signature="def next_head(head: tuple[int, int], direction: tuple[int, int]) -> tuple[int, int]",
+        purpose="Return the next grid coordinate after moving one cell.",
+        examples=[DealExample("next_head((5, 5), (1, 0))", "(6, 5)")],
+    ),
+    "hits_wall": FunctionContract(
+        name="hits_wall",
+        signature="def hits_wall(head: tuple[int, int], width: int, height: int) -> bool",
+        purpose="Return True when the head coordinate is outside the board.",
+        examples=[
+            DealExample("hits_wall((-1, 5), 20, 20)", "True"),
+            DealExample("hits_wall((10, 10), 20, 20)", "False"),
+        ],
+    ),
+    "hits_self": FunctionContract(
+        name="hits_self",
+        signature="def hits_self(head: tuple[int, int], body: list[tuple[int, int]]) -> bool",
+        purpose="Return True when the head coordinate overlaps the snake body.",
+        examples=[DealExample("hits_self((3, 3), [(1, 1), (3, 3)])", "True")],
+    ),
+}
+
+FALLBACK_DEPENDENCIES = {
+    "SnakeState": ["Direction"],
+    "spawn_food": ["hits_self"],
+    "choose_food": ["hits_self"],
+    "check_collision": ["hits_wall", "hits_self"],
+    "update_state": ["SnakeState", "GameConfig", "next_head", "hits_wall", "hits_self", "spawn_food"],
+    "step_state": ["SnakeState", "GameConfig", "next_head", "hits_wall", "hits_self", "choose_food"],
+    "create_initial_state": ["GameConfig", "SnakeState", "Direction", "spawn_food"],
+    "handle_input": ["SnakeState", "Direction", "opposite_direction"],
+    "render": [],
+    "main": ["GameConfig", "create_initial_state", "handle_input", "update_state", "render"],
+}
+
+
+@dataclass
+class ContractExecutionResult:
+    name: str
+    status: str
+    source: str = ""
+    issues: list[dict] = field(default_factory=list)
+    prompt_size: int = 0
+    dependencies: list[str] = field(default_factory=list)
+    repair_attempts: list[dict] = field(default_factory=list)
 
 
 def _contract_queue_from_architect(plan_packet: str, plan_context: str, profile) -> tuple[ContractQueue, dict]:
@@ -76,50 +142,70 @@ def _contract_queue_from_architect(plan_packet: str, plan_context: str, profile)
 
 
 def _fallback_contract_queue(plan) -> tuple[ContractQueue, bool]:
-    if plan.app_name != "snake":
+    component_names = [_normalize_symbol(component) for component in plan.components]
+    component_names = [name for name in component_names if name]
+    entrypoint_names = [_normalize_symbol(entrypoint) for entrypoint in plan.entrypoints]
+    entrypoint_names = [name for name in entrypoint_names if name]
+    names = _ordered_unique([*component_names, *entrypoint_names])
+    if not names:
         return ContractQueue(), False
-    contracts = [
-        FunctionContract(
-            name="opposite_direction",
-            signature="def opposite_direction(a: tuple[int, int], b: tuple[int, int]) -> bool",
-            purpose="Return True when two movement vectors are direct opposites.",
-            examples=[
-                DealExample("opposite_direction((1, 0), (-1, 0))", "True"),
-                DealExample("opposite_direction((1, 0), (0, 1))", "False"),
-            ],
-        ),
-        FunctionContract(
-            name="next_head",
-            signature="def next_head(head: tuple[int, int], direction: tuple[int, int]) -> tuple[int, int]",
-            purpose="Return the next grid coordinate after moving one cell.",
-            examples=[DealExample("next_head((5, 5), (1, 0))", "(6, 5)")],
-        ),
-        FunctionContract(
-            name="hits_wall",
-            signature="def hits_wall(head: tuple[int, int], width: int, height: int) -> bool",
-            purpose="Return True when the head coordinate is outside the board.",
-            examples=[
-                DealExample("hits_wall((-1, 5), 20, 20)", "True"),
-                DealExample("hits_wall((10, 10), 20, 20)", "False"),
-            ],
-        ),
-        FunctionContract(
-            name="hits_self",
-            signature="def hits_self(head: tuple[int, int], body: list[tuple[int, int]]) -> bool",
-            purpose="Return True when the head coordinate overlaps the snake body.",
-            examples=[DealExample("hits_self((3, 3), [(1, 1), (3, 3)])", "True")],
-        ),
-    ]
-    for name in FALLBACK_SNAKE_CONTRACTS:
-        if name not in {contract.name for contract in contracts}:
-            contracts.append(
-                FunctionContract(
-                    name=name,
-                    signature=f"def {name}(*args, **kwargs)",
-                    purpose=f"Implement the `{name}` component required by the structured spec.",
-                )
+    seed_names = _fallback_dependency_closure(names)
+    contracts: list[FunctionContract] = []
+    seen: set[str] = set()
+    for name in [*seed_names, *names]:
+        if name in seen:
+            continue
+        seen.add(name)
+        if name in FALLBACK_CONTRACT_LIBRARY:
+            contracts.append(FALLBACK_CONTRACT_LIBRARY[name])
+            continue
+        dependencies = [
+            dependency
+            for dependency in FALLBACK_DEPENDENCIES.get(name, [])
+            if dependency in seen or dependency in names or dependency in FALLBACK_CONTRACT_LIBRARY
+        ]
+        kind = "class" if name[:1].isupper() else "function"
+        signature = f"class {name}:" if kind == "class" else f"def {name}(*args, **kwargs)"
+        contracts.append(
+            FunctionContract(
+                name=name,
+                kind=kind,
+                signature=signature,
+                purpose=f"Implement the `{name}` component required by the structured spec.",
+                dependencies=dependencies,
             )
+        )
     return ContractQueue(contracts), True
+
+
+def _ordered_unique(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for item in items:
+        if not item or item in seen:
+            continue
+        seen.add(item)
+        ordered.append(item)
+    return ordered
+
+
+def _fallback_dependency_closure(names: list[str]) -> list[str]:
+    ordered: list[str] = []
+    seen: set[str] = set()
+
+    def visit(name: str) -> None:
+        for dependency in FALLBACK_DEPENDENCIES.get(name, []):
+            if dependency in seen:
+                continue
+            if dependency not in FALLBACK_CONTRACT_LIBRARY and dependency not in FALLBACK_DEPENDENCIES:
+                continue
+            seen.add(dependency)
+            visit(dependency)
+            ordered.append(dependency)
+
+    for name in names:
+        visit(name)
+    return _ordered_unique(ordered)
 
 
 def _initial_prompt(plan_packet: str, queue: ContractQueue) -> str:
@@ -155,6 +241,495 @@ def _initial_prompt(plan_packet: str, queue: ContractQueue) -> str:
         ]
     )
     return "\n".join(sections)
+
+
+def _symbol_terms(contract: FunctionContract, dependencies: list[str]) -> set[str]:
+    terms = {contract.name, *dependencies}
+    for text in [
+        contract.signature,
+        contract.purpose,
+        contract.output,
+        *contract.inputs,
+        *contract.invariants,
+        *(f"{example.call} {example.expected}" for example in contract.examples),
+    ]:
+        terms.update(re.findall(r"[A-Za-z_][A-Za-z0-9_]*", text))
+    return {term.lower() for term in terms if len(term) > 2}
+
+
+def _local_graph_context(plan, contract: FunctionContract, dependencies: list[str]) -> str:
+    terms = _symbol_terms(contract, dependencies)
+
+    def matching(lines: list[str]) -> list[str]:
+        matched = []
+        for line in lines:
+            lowered = line.lower()
+            if any(term in lowered for term in terms):
+                matched.append(line)
+        return matched
+
+    graph_lines = matching(plan.dependency_graph_context)
+    state_lines = matching(plan.state_machine_constraints)
+    behavior_lines = [
+        f"{case.call} == {case.expected}"
+        for case in plan.behavior_cases
+        if any(term in f"{case.call} {case.expected}".lower() for term in terms)
+    ]
+
+    sections = [
+        "LOCAL GRAPH CONTEXT:",
+        f"- Language: {plan.language or 'python'}",
+        f"- Task type: {plan.task_type or 'code'}",
+    ]
+    if plan.app_name:
+        sections.append(f"- App: {plan.app_name}")
+    if plan.allowed_libraries:
+        sections.append(f"- Allowed libraries: {', '.join(plan.allowed_libraries)}")
+    sections.extend(
+        [
+            f"- Current contract: {contract.name}",
+            f"- Contract kind: {contract.kind}",
+            f"- Direct dependencies: {', '.join(dependencies) if dependencies else 'none'}",
+        ]
+    )
+    if graph_lines:
+        sections.append("Dependency graph slice:")
+        sections.extend(f"- {line}" for line in graph_lines)
+    if state_lines:
+        sections.append("State/rule slice:")
+        sections.extend(f"- {line}" for line in state_lines[:8])
+    if behavior_lines:
+        sections.append("Behavior examples for this contract:")
+        sections.extend(f"- {line}" for line in behavior_lines)
+    if plan.performance_constraints:
+        sections.append("Performance constraints:")
+        sections.extend(f"- {line}" for line in plan.performance_constraints)
+    if plan.security_constraints:
+        sections.append("Safety constraints:")
+        sections.extend(f"- {line}" for line in plan.security_constraints)
+    return "\n".join(sections)
+
+
+def _single_contract_prompt(
+    plan,
+    contract: FunctionContract,
+    dependency_sources: list[str],
+    dependencies: list[str],
+) -> str:
+    sections = [
+        "You are a Python coding worker inside a verified Plan-Execute-Verify harness.",
+        "Implement exactly one function contract.",
+        "Return only complete Python code for this function and any tiny local helpers it needs.",
+        "Do not return markdown fences or prose.",
+        "",
+        _local_graph_context(plan, contract, dependencies),
+        "",
+        contract.to_worker_packet(),
+    ]
+    if dependency_sources:
+        sections.extend(
+            [
+                "",
+                "ACCEPTED DIRECT DEPENDENCIES:",
+                "\n\n".join(dependency_sources),
+                "",
+                "Use these accepted dependencies only when needed. Do not rewrite them.",
+            ]
+        )
+    sections.extend(
+        [
+            "",
+            "VALIDATION:",
+            "- The harness will parse this function immediately.",
+            "- The harness will run the listed Deal examples immediately.",
+            "- If this function fails, the queue stops before later contracts run.",
+        ]
+    )
+    return "\n".join(sections)
+
+
+def _contract_repair_prompt(
+    plan,
+    contract: FunctionContract,
+    current_source: str,
+    issues: list[dict],
+    dependency_sources: list[str],
+    dependencies: list[str],
+    worker_name: str,
+) -> str:
+    sections = [
+        "FUNCTION CONTRACT REPAIR",
+        "",
+        f"Worker: {worker_name}",
+        "Repair only the failed contract below.",
+        "Return only complete Python code for this one contract and required tiny local helpers.",
+        "Do not return markdown fences or prose.",
+        "",
+        _local_graph_context(plan, contract, dependencies),
+        "",
+        contract.to_worker_packet(),
+        "",
+        "CURRENT FAILED SOURCE:",
+        current_source,
+        "",
+        "VALIDATION FAILURES:",
+        json.dumps(issues, indent=2),
+    ]
+    if dependency_sources:
+        sections.extend(
+            [
+                "",
+                "ACCEPTED DIRECT DEPENDENCIES:",
+                "\n\n".join(dependency_sources),
+                "",
+                "Use these accepted dependencies. Do not rewrite them.",
+            ]
+        )
+    sections.extend(
+        [
+            "",
+            "REPAIR RULES:",
+            "- Fix the listed validation failures directly.",
+            "- Preserve the contract signature and examples.",
+            "- Keep the implementation small enough for parse/static checks.",
+            "- If the source is truncated, return a complete replacement for this contract.",
+        ]
+    )
+    return "\n".join(sections)
+
+
+def _contract_dependencies(contract: FunctionContract, known_names: set[str]) -> list[str]:
+    dependencies: list[str] = []
+    dependency_texts = list(contract.dependencies)
+    dependency_texts.append(contract.signature)
+    dependency_texts.extend(f"{example.call} == {example.expected}" for example in contract.examples)
+    dependency_texts.extend(contract.inputs)
+    if contract.output:
+        dependency_texts.append(contract.output)
+    dependency_texts.extend(contract.invariants)
+    for item in dependency_texts:
+        normalized = _normalize_symbol(item)
+        if normalized in known_names and normalized != contract.name:
+            dependencies.append(normalized)
+            continue
+        for token in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", item):
+            if token in known_names and token != contract.name:
+                dependencies.append(token)
+    return sorted(set(dependencies), key=dependencies.index)
+
+
+def _validate_contract_source(
+    source: str,
+    contract: FunctionContract,
+    accepted_sources: list[str] | None = None,
+) -> list[dict]:
+    issues: list[dict] = []
+    try:
+        tree = ast.parse(source)
+    except SyntaxError as exc:
+        return [
+            {
+                "kind": "contract_parse_error",
+                "summary": f"Contract `{contract.name}` source does not parse",
+                "details": str(exc),
+            }
+        ]
+    if contract.kind == "class":
+        has_required_symbol = any(isinstance(node, ast.ClassDef) and node.name == contract.name for node in ast.walk(tree))
+    else:
+        has_required_symbol = any(
+            isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == contract.name for node in ast.walk(tree)
+        )
+    if not has_required_symbol:
+        issues.append(
+            {
+                "kind": "contract_missing_function",
+                "summary": f"Contract `{contract.name}` did not define the required symbol",
+                "details": contract.normalized_signature(),
+            }
+        )
+    if not contract.examples:
+        return issues
+    namespace: dict[str, object] = {}
+    try:
+        for accepted_source in accepted_sources or []:
+            exec(accepted_source, namespace)  # noqa: S102 - generated code is already executed by harness validators.
+        exec(source, namespace)  # noqa: S102 - generated code is already executed by harness validators.
+    except Exception as exc:  # noqa: BLE001 - reported as validation evidence
+        issues.append(
+            {
+                "kind": "contract_execution_error",
+                "summary": f"Contract `{contract.name}` crashed during example setup",
+                "details": f"{type(exc).__name__}: {exc}",
+            }
+        )
+        return issues
+    for example in contract.examples:
+        expression = f"{example.call} == {example.expected}"
+        try:
+            passed = bool(eval(expression, namespace))  # noqa: S307 - concrete contract examples are test code.
+        except Exception as exc:  # noqa: BLE001 - reported as validation evidence
+            issues.append(
+                {
+                    "kind": "contract_example_error",
+                    "summary": f"Contract `{contract.name}` example crashed",
+                    "details": f"{expression}: {type(exc).__name__}: {exc}",
+                }
+            )
+            continue
+        if not passed:
+            issues.append(
+                {
+                    "kind": "contract_example_failed",
+                    "summary": f"Contract `{contract.name}` example failed",
+                    "details": expression,
+                }
+            )
+    return issues
+
+
+def _run_contract_queue_sequentially(
+    queue: ContractQueue,
+    plan,
+    generate_draft: Callable[[str], str],
+    repair_draft: Callable[[str, str], str] | None = None,
+    architect_repair_draft: Callable[[str, str], str] | None = None,
+    small_retries_per_contract: int = 1,
+    architect_retries_per_contract: int = 1,
+) -> tuple[list[str], list[ContractExecutionResult]]:
+    accepted_sources: list[str] = []
+    accepted_source_by_name: dict[str, str] = {}
+    accepted_names: set[str] = set()
+    results: list[ContractExecutionResult] = []
+    total = len(queue.contracts)
+    known_names = {contract.name for contract in queue.contracts}
+    ready_queue = list(queue.contracts)
+    blocked_stack: list[FunctionContract] = []
+    generated_count = 0
+
+    while ready_queue or blocked_stack:
+        if not ready_queue and blocked_stack:
+            remaining = [
+                (contract.name, _contract_dependencies(contract, known_names))
+                for contract in blocked_stack
+            ]
+            progressable = [
+                contract
+                for contract in reversed(blocked_stack)
+                if all(dep in accepted_names for dep in _contract_dependencies(contract, known_names))
+            ]
+            if not progressable:
+                names = ", ".join(
+                    f"{name} waiting on {', '.join(dep for dep in deps if dep not in accepted_names) or 'unknown'}"
+                    for name, deps in remaining
+                )
+                print(f"[contract-stack] blocked: {names}", flush=True)
+                results.append(
+                    ContractExecutionResult(
+                        name="<queue>",
+                        status="dependency_blocked",
+                        issues=[
+                            {
+                                "kind": "contract_dependency_blocked",
+                                "summary": "Contract queue could not make progress",
+                                "details": names,
+                            }
+                        ],
+                    )
+                )
+                break
+            ready_queue.extend(progressable)
+            blocked_stack = [contract for contract in blocked_stack if contract not in progressable]
+
+        contract = ready_queue.pop(0)
+        dependencies = _contract_dependencies(contract, known_names)
+        unmet = [dependency for dependency in dependencies if dependency not in accepted_names]
+        if unmet:
+            print(
+                f"[contract-queue] {contract.name}: waiting on {', '.join(unmet)}; pushing to dependency stack",
+                flush=True,
+            )
+            blocked_stack.append(contract)
+            continue
+
+        generated_count += 1
+        dependency_sources = [accepted_source_by_name[name] for name in dependencies if name in accepted_source_by_name]
+        prompt = _single_contract_prompt(plan, contract, dependency_sources, dependencies)
+        print(
+            f"[contract-queue] {generated_count}/{total} {contract.name}: sending to small worker",
+            flush=True,
+        )
+        repair_attempts: list[dict] = []
+        try:
+            source = generate_draft(prompt)
+        except Exception as exc:  # noqa: BLE001 - surfaced in artifact metadata
+            print(
+                f"[contract-queue] {generated_count}/{total} {contract.name}: backend failed: {type(exc).__name__}: {exc}",
+                flush=True,
+            )
+            results.append(
+                ContractExecutionResult(
+                    name=contract.name,
+                    status="backend_failed",
+                    issues=[
+                        {
+                            "kind": "contract_backend_failure",
+                            "summary": f"Small worker failed while implementing `{contract.name}`",
+                            "details": f"{type(exc).__name__}: {exc}",
+                        }
+                    ],
+                    prompt_size=len(prompt),
+                    dependencies=dependencies,
+                )
+            )
+            break
+        issues = _validate_contract_source(source, contract, accepted_sources=accepted_sources)
+        small_repair = repair_draft or (lambda draft, retry_prompt: generate_draft(retry_prompt))
+        for retry_index in range(small_retries_per_contract):
+            if not issues:
+                break
+            retry_prompt = _contract_repair_prompt(
+                plan,
+                contract,
+                source,
+                issues,
+                dependency_sources,
+                dependencies,
+                worker_name="small_worker",
+            )
+            print(
+                f"[contract-queue] {generated_count}/{total} {contract.name}: retry {retry_index + 1} with small worker",
+                flush=True,
+            )
+            try:
+                repaired_source = small_repair(source, retry_prompt)
+            except Exception as exc:  # noqa: BLE001 - surfaced in artifact metadata
+                repair_attempts.append(
+                    {
+                        "worker": "small_worker",
+                        "status": "backend_failed",
+                        "issues": [
+                            {
+                                "kind": "contract_backend_failure",
+                                "summary": f"Small worker failed while repairing `{contract.name}`",
+                                "details": f"{type(exc).__name__}: {exc}",
+                            }
+                        ],
+                        "prompt_size": len(retry_prompt),
+                    }
+                )
+                break
+            source = repaired_source
+            issues = _validate_contract_source(source, contract, accepted_sources=accepted_sources)
+            repair_attempts.append(
+                {
+                    "worker": "small_worker",
+                    "status": "accepted" if not issues else "validation_failed",
+                    "issues": issues,
+                    "prompt_size": len(retry_prompt),
+                }
+            )
+        for retry_index in range(architect_retries_per_contract):
+            if not issues or architect_repair_draft is None:
+                break
+            retry_prompt = _contract_repair_prompt(
+                plan,
+                contract,
+                source,
+                issues,
+                dependency_sources,
+                dependencies,
+                worker_name="architect_llm",
+            )
+            print(
+                f"[contract-queue] {generated_count}/{total} {contract.name}: escalating contract to architect",
+                flush=True,
+            )
+            try:
+                architect_source = architect_repair_draft(source, retry_prompt)
+            except Exception as exc:  # noqa: BLE001 - surfaced in artifact metadata
+                repair_attempts.append(
+                    {
+                        "worker": "architect_llm",
+                        "status": "backend_failed",
+                        "issues": [
+                            {
+                                "kind": "contract_backend_failure",
+                                "summary": f"Architect failed while repairing `{contract.name}`",
+                                "details": f"{type(exc).__name__}: {exc}",
+                            }
+                        ],
+                        "prompt_size": len(retry_prompt),
+                    }
+                )
+                break
+            source = architect_source
+            issues = _validate_contract_source(source, contract, accepted_sources=accepted_sources)
+            repair_attempts.append(
+                {
+                    "worker": "architect_llm",
+                    "status": "accepted" if not issues else "validation_failed",
+                    "issues": issues,
+                    "prompt_size": len(retry_prompt),
+                }
+            )
+        if issues:
+            print(f"[contract-queue] {generated_count}/{total} {contract.name}: failed validation", flush=True)
+            results.append(
+                ContractExecutionResult(
+                    name=contract.name,
+                    status="validation_failed",
+                    source=source,
+                    issues=issues,
+                    prompt_size=len(prompt),
+                    dependencies=dependencies,
+                    repair_attempts=repair_attempts,
+                )
+            )
+            break
+        print(f"[contract-queue] {generated_count}/{total} {contract.name}: accepted", flush=True)
+        accepted_sources.append(source)
+        accepted_source_by_name[contract.name] = source
+        accepted_names.add(contract.name)
+        results.append(
+            ContractExecutionResult(
+                name=contract.name,
+                status="accepted",
+                source=source,
+                prompt_size=len(prompt),
+                dependencies=dependencies,
+                repair_attempts=repair_attempts,
+            )
+        )
+    return accepted_sources, results
+
+
+def _integration_prompt(plan_packet: str, accepted_sources: list[str], results: list[ContractExecutionResult]) -> str:
+    return "\n".join(
+        [
+            "FUNCTIONWISE CONTRACT INTEGRATION",
+            "",
+            "The small worker implemented function contracts sequentially.",
+            "Build the final complete Python module from the accepted functions and the structured spec.",
+            "Return code only. Do not return prose or markdown fences.",
+            "",
+            "PLAN PACKET:",
+            plan_packet,
+            "",
+            "CONTRACT QUEUE RESULTS:",
+            json.dumps([asdict(result) for result in results], indent=2),
+            "",
+            "ACCEPTED FUNCTION SOURCES:",
+            "\n\n".join(accepted_sources) or "(none)",
+            "",
+            "FINAL INTEGRATION RULES:",
+            "- Preserve accepted helper behavior.",
+            "- Add any required classes, adapters, entrypoints, and glue code from the spec.",
+            "- Do not use file I/O, network calls, eval, or exec.",
+            "- Keep the main loop guarded by if __name__ == \"__main__\" when an app entrypoint is required.",
+            "- The final code will be scanned by all engines and formal/Deal gates.",
+        ]
+    )
 
 
 def _normalize_symbol(text: str) -> str:
@@ -262,10 +837,9 @@ def run_spec(
                 return 1
 
     supplier = OllamaModelSupplier(model=model)
+    architect_model_supplier = ArchitectModelSupplier(config=ArchitectConfig(repair_profile=config.execution.architect.repair))
     architect_supplier = (
-        ArchitectModelSupplier(config=ArchitectConfig(repair_profile=config.execution.architect.repair)).repair_draft
-        if architect_after_repair_attempts is not None
-        else None
+        architect_model_supplier.repair_draft if architect_after_repair_attempts is not None else None
     )
     controller = GenerationController(
         max_retries=max_retries,
@@ -279,9 +853,100 @@ def run_spec(
         crosshair_timeout_seconds=config.engines.formal.crosshair_timeout_seconds,
         repair_strategy=RepairStrategyAgent(),
     )
-    prompt = _initial_prompt(plan_packet, queue)
-    result = controller.run(target=spec_text, initial_prompt=prompt)
-    session = result.payload
+    contract_execution_results: list[ContractExecutionResult] = []
+    if queue.contracts:
+        accepted_sources, contract_execution_results = _run_contract_queue_sequentially(
+            queue,
+            plan,
+            supplier.generate_draft,
+            repair_draft=supplier.repair_draft,
+            architect_repair_draft=architect_supplier,
+            small_retries_per_contract=max_retries,
+            architect_retries_per_contract=1 if architect_supplier is not None else 0,
+        )
+        if len(accepted_sources) != len(queue.contracts):
+            session = {
+                "target": spec_text,
+                "route": "function_contract_queue",
+                "max_retries": max_retries,
+                "attempts": [],
+                "final_status": "manual_review_required",
+                "human_review": {
+                    "status": "manual_review_required",
+                    "reason": "function_contract_queue_failed",
+                    "blocking_findings": [],
+                    "blocking_violations": [
+                        issue
+                        for result in contract_execution_results
+                        for issue in result.issues
+                    ],
+                    "behavior_issues": [],
+                    "formal_issues": [],
+                    "last_retry_prompt": "",
+                    "diagnostic_deltas": [],
+                    "repair_directives": [],
+                    "suggested_human_decision": (
+                        "Review the failed function contract or reduce the contract before continuing the queue."
+                    ),
+                },
+            }
+        else:
+            integration_prompt = _integration_prompt(plan_packet, accepted_sources, contract_execution_results)
+            print("[contract-queue] all contracts accepted; sending accepted functions to architect integrator", flush=True)
+            try:
+                integrated_source = architect_model_supplier.repair_draft("", integration_prompt)
+            except Exception as exc:  # noqa: BLE001 - surfaced in run output and metadata
+                session = {
+                    "target": spec_text,
+                    "route": "function_contract_queue",
+                    "max_retries": max_retries,
+                    "attempts": [],
+                    "final_status": "manual_review_required",
+                    "human_review": {
+                        "status": "manual_review_required",
+                        "reason": "architect_contract_integration_failed",
+                        "blocking_findings": [],
+                        "blocking_violations": [
+                            {
+                                "kind": "architect_contract_integration_failed",
+                                "summary": "Architect failed while integrating accepted function contracts",
+                                "details": f"{type(exc).__name__}: {exc}",
+                            }
+                        ],
+                        "behavior_issues": [],
+                        "formal_issues": [],
+                        "last_retry_prompt": integration_prompt,
+                        "diagnostic_deltas": [],
+                        "repair_directives": [],
+                        "suggested_human_decision": (
+                            "Retry architect integration or inspect the accepted function snippets manually."
+                        ),
+                    },
+                }
+            else:
+                integration_controller = GenerationController(
+                    max_retries=max_retries,
+                    draft_supplier=supplier.generate_draft,
+                    repair_supplier=supplier.repair_draft,
+                    architect_supplier=architect_supplier,
+                    architect_after_repair_attempts=0 if architect_supplier is not None else None,
+                    policy=config.engines.policy.to_validation_policy(),
+                    behavior_spec=None,
+                    crosshair_enabled=config.engines.formal.crosshair_enabled,
+                    crosshair_timeout_seconds=config.engines.formal.crosshair_timeout_seconds,
+                    repair_strategy=RepairStrategyAgent(),
+                )
+                result = integration_controller.run(
+                    target=spec_text,
+                    initial_prompt=integration_prompt,
+                    draft_override=integrated_source,
+                    draft_source_override="architect_integrator",
+                )
+                session = result.payload
+    else:
+        prompt = _initial_prompt(plan_packet, queue)
+        result = controller.run(target=spec_text, initial_prompt=prompt)
+        session = result.payload
     final_attempt = session.get("attempts", [{}])[-1] if session.get("attempts") else {}
     final_source = final_attempt.get("draft", "")
     spec_issues = _validate_structured_spec_output(final_source, plan)
@@ -327,6 +992,7 @@ def run_spec(
                     **contract_metadata,
                     "deal_scaffold": queue.to_deal_scaffold() if queue.contracts else "",
                     "worker_packets": queue.to_worker_packets(),
+                    "sequential_execution": [asdict(result) for result in contract_execution_results],
                 },
                 "structured_spec_validation": {
                     "is_compliant": not spec_issues,
@@ -353,6 +1019,15 @@ def run_spec(
                 "architect_contracts_parsed": contract_metadata["architect_contracts_parsed"],
                 "architect_contract_count": contract_metadata["architect_contract_count"],
                 "architect_contract_error": contract_metadata["architect_contract_error"],
+                "contract_queue_mode": "sequential" if queue.contracts else "bulk",
+                "contract_queue_results": [
+                    {
+                        "name": result.name,
+                        "status": result.status,
+                        "issues": result.issues,
+                    }
+                    for result in contract_execution_results
+                ],
                 "final_static_compliant": validation.get("is_compliant", True),
                 "final_static_violations": validation.get("violations", []),
                 "structured_spec_compliant": not spec_issues,

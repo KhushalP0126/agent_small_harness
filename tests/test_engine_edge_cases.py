@@ -100,6 +100,34 @@ def label(status):
         self.assertEqual(finding.metrics["cyclomatic_complexity"], 1)
         self.assertTrue(validate_findings([finding]).is_compliant)
 
+    def test_multifunction_module_blocks_on_max_function_not_module_total(self) -> None:
+        source = """
+def first(value):
+    if value == 1:
+        return "one"
+    if value == 2:
+        return "two"
+    if value == 3:
+        return "three"
+    return "other"
+
+def second(value):
+    if value < 0:
+        return "negative"
+    if value == 0:
+        return "zero"
+    if value > 10:
+        return "large"
+    if value == 7:
+        return "lucky"
+    return "small"
+"""
+        finding = BranchingEngine().scan(source)[0]
+        self.assertGreater(finding.metrics["module_cyclomatic_complexity"], 7)
+        self.assertEqual(finding.metrics["max_function_cyclomatic_complexity"], 5)
+        self.assertEqual(finding.metrics["cyclomatic_complexity"], 5)
+        self.assertTrue(validate_findings([finding]).is_compliant)
+
 
 class HazardsEngineEdgeCaseTests(unittest.TestCase):
     def test_local_container_mutation_is_not_module_state_hazard(self) -> None:
@@ -405,6 +433,57 @@ class LintEngineEdgeCaseTests(unittest.TestCase):
         result = validate_findings([finding])
         self.assertFalse(result.is_compliant)
         self.assertEqual(result.violations[0].kind, "lint_error")
+
+    def test_registered_dynamic_library_constant_is_lint_warning(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fake_pylint = Path(tmpdir) / "fake_pylint"
+            fake_pylint.write_text(
+                "#!/usr/bin/env python3\n"
+                "import json\n"
+                "print(json.dumps([{\n"
+                "    'type': 'error',\n"
+                "    'module': 'tmp',\n"
+                "    'obj': '',\n"
+                "    'line': 2,\n"
+                "    'column': 6,\n"
+                "    'path': 'tmp.py',\n"
+                "    'symbol': 'no-member',\n"
+                "    'message': \"Module 'pygame' has no 'K_UP' member\",\n"
+                "    'message-id': 'E1101'\n"
+                "}]))\n",
+                encoding="utf-8",
+            )
+            fake_pylint.chmod(fake_pylint.stat().st_mode | stat.S_IXUSR)
+            finding = LintEngine(executable=str(fake_pylint)).scan("import pygame\nkey = pygame.K_UP\n")[0]
+        self.assertEqual(finding.summary, "Registered dynamic library member warning")
+        self.assertEqual(finding.severity, "Warn")
+        self.assertTrue(validate_findings([finding]).is_compliant)
+
+    def test_unregistered_dynamic_library_member_remains_lint_blocking(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fake_pylint = Path(tmpdir) / "fake_pylint"
+            fake_pylint.write_text(
+                "#!/usr/bin/env python3\n"
+                "import json\n"
+                "print(json.dumps([{\n"
+                "    'type': 'error',\n"
+                "    'module': 'tmp',\n"
+                "    'obj': '',\n"
+                "    'line': 2,\n"
+                "    'column': 6,\n"
+                "    'path': 'tmp.py',\n"
+                "    'symbol': 'no-member',\n"
+                "    'message': \"Module 'pygame' has no 'NOT_A_REAL_KEY' member\",\n"
+                "    'message-id': 'E1101'\n"
+                "}]))\n",
+                encoding="utf-8",
+            )
+            fake_pylint.chmod(fake_pylint.stat().st_mode | stat.S_IXUSR)
+            finding = LintEngine(executable=str(fake_pylint)).scan(
+                "import pygame\nkey = pygame.NOT_A_REAL_KEY\n"
+            )[0]
+        self.assertEqual(finding.summary, "Pylint error")
+        self.assertFalse(validate_findings([finding]).is_compliant)
 
 
 if __name__ == "__main__":

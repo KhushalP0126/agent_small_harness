@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import tempfile
 from pathlib import Path
 
 from engines.base import BaseEngine, EngineDiagnostic, EngineFinding
+from engines.library_registry import LibraryRegistry
 
 
 PYLINT_TIMEOUT_SECONDS = 8
@@ -19,9 +21,11 @@ class LintEngine(BaseEngine):
         self,
         executable: str | None = None,
         timeout_seconds: int = PYLINT_TIMEOUT_SECONDS,
+        library_registry: LibraryRegistry | None = None,
     ) -> None:
         self.executable = executable if executable is not None else shutil.which("pylint")
         self.timeout_seconds = timeout_seconds
+        self.library_registry = library_registry or LibraryRegistry()
 
     def scan(self, source: str) -> list[EngineFinding]:
         if not self.executable:
@@ -87,11 +91,21 @@ class LintEngine(BaseEngine):
         else:
             messages = []
 
+        dynamic_member_messages = [
+            message for message in messages if self._is_registered_dynamic_member(message)
+        ]
         blocking_messages = [
-            message for message in messages if str(message.get("type", "")).lower() in {"error", "fatal"}
+            message
+            for message in messages
+            if str(message.get("type", "")).lower() in {"error", "fatal"}
+            and message not in dynamic_member_messages
+        ]
+        warning_findings = [
+            self._warning_for_registered_dynamic_member(message)
+            for message in dynamic_member_messages
         ]
         if not blocking_messages:
-            return [
+            return warning_findings or [
                 EngineFinding(
                     engine=self.name,
                     severity="Low",
@@ -101,7 +115,46 @@ class LintEngine(BaseEngine):
                 )
             ]
 
-        return [self._finding_for_message(message) for message in blocking_messages]
+        return [*warning_findings, *[self._finding_for_message(message) for message in blocking_messages]]
+
+    def _is_registered_dynamic_member(self, message: dict) -> bool:
+        if str(message.get("symbol", "")) != "no-member":
+            return False
+        text = str(message.get("message", ""))
+        match = re.search(r"Module '([^']+)' has no '([^']+)' member", text)
+        if not match:
+            return False
+        module_name, member_name = match.groups()
+        schema = self.library_registry.get(module_name)
+        return schema is not None and member_name in schema.allowed_constants
+
+    def _warning_for_registered_dynamic_member(self, message: dict) -> EngineFinding:
+        symbol = str(message.get("symbol", "no-member"))
+        message_id = str(message.get("message-id", ""))
+        line = int(message.get("line") or 0)
+        column = int(message.get("column") or 0)
+        text = str(message.get("message", "Pylint reported a registered dynamic member."))
+        return EngineFinding(
+            engine=self.name,
+            severity="Warn",
+            summary="Registered dynamic library member warning",
+            details=text,
+            metrics={
+                "message_id": message_id,
+                "symbol": symbol,
+                "line": line,
+                "column": column,
+                "category": "warning",
+                "blocking": False,
+            },
+            diagnostic=EngineDiagnostic(
+                violation="",
+                threshold="registered dynamic library constants are advisory",
+                actual=f"{message_id} {symbol}".strip(),
+                location=f"line {line}:{column}",
+                recommended_refactor="",
+            ),
+        )
 
     def _finding_for_message(self, message: dict) -> EngineFinding:
         category = str(message.get("type", "")).lower()

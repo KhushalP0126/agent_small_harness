@@ -10,6 +10,8 @@ from backends.architect_client import (
     ContractArchitectSupplier,
 )
 from scripts.run_structured_spec import _fallback_contract_queue, _validate_structured_spec_output
+from scripts.run_structured_spec import _run_contract_queue_sequentially, _single_contract_prompt
+from kernel.function_contracts import ContractQueue, DealExample, FunctionContract
 
 
 class StructuredSpecRunnerTests(unittest.TestCase):
@@ -94,6 +96,7 @@ class StructuredSpecRunnerTests(unittest.TestCase):
 ## Required Components
 
 - `main()`
+- `update_state()`
 """
         )
 
@@ -101,9 +104,223 @@ class StructuredSpecRunnerTests(unittest.TestCase):
 
         self.assertTrue(fallback_used)
         names = [contract.name for contract in queue.contracts]
-        self.assertIn("opposite_direction", names)
-        self.assertIn("next_head", names)
+        self.assertLess(names.index("GameConfig"), names.index("update_state"))
+        self.assertLess(names.index("SnakeState"), names.index("update_state"))
+        self.assertIn("update_state", names)
         self.assertIn("main", names)
+        main = next(contract for contract in queue.contracts if contract.name == "main")
+        self.assertIn("update_state", main.dependencies)
+        self.assertIn("render", main.dependencies)
+
+    def test_contract_queue_uses_dependency_stack_before_generation(self) -> None:
+        plan = PlanModeAgent().plan(
+            """
+## Dependency Graph
+
+- helper_value -> final_value
+- unrelated_ui -> render
+"""
+        )
+        queue = ContractQueue(
+            [
+                FunctionContract(
+                    name="final_value",
+                    signature="def final_value() -> int",
+                    purpose="Return helper value plus one.",
+                    examples=[DealExample("final_value()", "2")],
+                    dependencies=["helper_value"],
+                ),
+                FunctionContract(
+                    name="helper_value",
+                    signature="def helper_value() -> int",
+                    purpose="Return the base value.",
+                    examples=[DealExample("helper_value()", "1")],
+                ),
+            ]
+        )
+        calls = []
+
+        def generate(prompt: str) -> str:
+            if "NAME: helper_value" in prompt:
+                calls.append("helper_value")
+                return "def helper_value() -> int:\n    return 1\n"
+            if "NAME: final_value" in prompt:
+                calls.append("final_value")
+                return "def final_value() -> int:\n    return helper_value() + 1\n"
+            raise AssertionError("unexpected prompt")
+
+        accepted_sources, results = _run_contract_queue_sequentially(queue, plan, generate)
+
+        self.assertEqual(calls, ["helper_value", "final_value"])
+        self.assertEqual([result.status for result in results], ["accepted", "accepted"])
+        self.assertEqual(len(accepted_sources), 2)
+
+    def test_contract_queue_infers_class_dependencies_from_examples(self) -> None:
+        plan = PlanModeAgent().plan(
+            """
+## Dependency Graph
+
+- SnakeState -> step_state
+"""
+        )
+        queue = ContractQueue(
+            [
+                FunctionContract(
+                    name="step_state",
+                    signature="def step_state(state: SnakeState) -> SnakeState",
+                    examples=[DealExample("step_state(SnakeState(1)).value", "2")],
+                ),
+                FunctionContract(
+                    name="SnakeState",
+                    kind="class",
+                    signature="class SnakeState:",
+                    purpose="Hold a value.",
+                ),
+            ]
+        )
+        calls = []
+
+        def generate(prompt: str) -> str:
+            if "NAME: SnakeState" in prompt:
+                calls.append("SnakeState")
+                return "class SnakeState:\n    def __init__(self, value):\n        self.value = value\n"
+            if "NAME: step_state" in prompt:
+                calls.append("step_state")
+                return "def step_state(state: SnakeState) -> SnakeState:\n    return SnakeState(state.value + 1)\n"
+            raise AssertionError("unexpected prompt")
+
+        accepted_sources, results = _run_contract_queue_sequentially(queue, plan, generate)
+
+        self.assertEqual(calls, ["SnakeState", "step_state"])
+        self.assertEqual([result.status for result in results], ["accepted", "accepted"])
+        self.assertEqual(len(accepted_sources), 2)
+
+    def test_contract_queue_retries_failed_contract_without_discarding_queue(self) -> None:
+        plan = PlanModeAgent().plan("")
+        queue = ContractQueue(
+            [
+                FunctionContract(name="first", signature="def first() -> int"),
+                FunctionContract(
+                    name="second",
+                    signature="def second() -> int",
+                    examples=[DealExample("second()", "2")],
+                    dependencies=["first"],
+                ),
+            ]
+        )
+        calls = []
+
+        def generate(prompt: str) -> str:
+            if "NAME: first" in prompt:
+                calls.append("generate:first")
+                return "def first() -> int:\n    return 1\n"
+            if "NAME: second" in prompt:
+                calls.append("generate:second")
+                return "def second() -> int:\n    return\n        2\n"
+            raise AssertionError("unexpected prompt")
+
+        def repair(draft: str, prompt: str) -> str:
+            calls.append("repair:second")
+            self.assertIn("FUNCTION CONTRACT REPAIR", prompt)
+            self.assertIn("contract_parse_error", prompt)
+            self.assertIn("def first", prompt)
+            return "def second() -> int:\n    return first() + 1\n"
+
+        accepted_sources, results = _run_contract_queue_sequentially(
+            queue,
+            plan,
+            generate,
+            repair_draft=repair,
+            small_retries_per_contract=1,
+        )
+
+        self.assertEqual(calls, ["generate:first", "generate:second", "repair:second"])
+        self.assertEqual([result.status for result in results], ["accepted", "accepted"])
+        self.assertEqual(results[1].repair_attempts[0]["worker"], "small_worker")
+        self.assertEqual(results[1].repair_attempts[0]["status"], "accepted")
+        self.assertEqual(len(accepted_sources), 2)
+
+    def test_contract_queue_escalates_single_failed_contract_to_architect(self) -> None:
+        plan = PlanModeAgent().plan("")
+        queue = ContractQueue(
+            [
+                FunctionContract(
+                    name="stubborn",
+                    signature="def stubborn() -> int",
+                    examples=[DealExample("stubborn()", "3")],
+                ),
+            ]
+        )
+        calls = []
+
+        def generate(prompt: str) -> str:
+            calls.append("generate")
+            return "def stubborn() -> int:\n    return 0\n"
+
+        def repair(draft: str, prompt: str) -> str:
+            calls.append("repair")
+            return "def stubborn() -> int:\n    return 1\n"
+
+        def architect(draft: str, prompt: str) -> str:
+            calls.append("architect")
+            self.assertIn("architect_llm", prompt)
+            self.assertIn("contract_example_failed", prompt)
+            return "def stubborn() -> int:\n    return 3\n"
+
+        accepted_sources, results = _run_contract_queue_sequentially(
+            queue,
+            plan,
+            generate,
+            repair_draft=repair,
+            architect_repair_draft=architect,
+            small_retries_per_contract=1,
+            architect_retries_per_contract=1,
+        )
+
+        self.assertEqual(calls, ["generate", "repair", "architect"])
+        self.assertEqual(results[0].status, "accepted")
+        self.assertEqual([attempt["worker"] for attempt in results[0].repair_attempts], ["small_worker", "architect_llm"])
+        self.assertEqual(results[0].repair_attempts[-1]["status"], "accepted")
+        self.assertEqual(len(accepted_sources), 1)
+
+    def test_small_worker_contract_prompt_uses_local_graph_slice(self) -> None:
+        plan = PlanModeAgent().plan(
+            """
+## Game Spec
+
+- name: snake
+- language: python
+- library: pygame
+
+## Dependency Graph
+
+- SnakeState -> step_state -> render
+- unrelated_menu -> splash_screen
+
+## Update Rules
+
+- step_state updates the snake body.
+- render draws the current frame.
+"""
+        )
+        contract = FunctionContract(
+            name="step_state",
+            signature="def step_state(state: SnakeState) -> SnakeState",
+            dependencies=["SnakeState"],
+        )
+
+        prompt = _single_contract_prompt(
+            plan,
+            contract,
+            ["class SnakeState:\n    pass\n"],
+            ["SnakeState"],
+        )
+
+        self.assertIn("LOCAL GRAPH CONTEXT:", prompt)
+        self.assertIn("SnakeState -> step_state -> render", prompt)
+        self.assertIn("step_state updates the snake body", prompt)
+        self.assertIn("class SnakeState", prompt)
+        self.assertNotIn("unrelated_menu", prompt)
 
     def test_placeholder_main_fails_structured_spec_gate(self) -> None:
         plan = PlanModeAgent().plan(

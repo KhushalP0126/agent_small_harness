@@ -6,7 +6,7 @@
       "expected_by_engine": {
         "engine-1-math": ["Loop nesting depth 1 detected"],
         "engine-2-hazards": ["No global mutation hazard detected"],
-        "engine-3-branching": ["Cyclomatic complexity 2 with 0 conditional branches"]
+        "engine-3-branching": ["Max function cyclomatic complexity 2; module complexity 2 with 0 conditional branches"]
       }
     },
     {
@@ -21,7 +21,7 @@
       "path": "data/snippets/global_and_branch_heavy.py",
       "expected_by_engine": {
         "engine-2-hazards": ["Global mutation hazard"],
-        "engine-3-branching": ["Cyclomatic complexity 8 with 6 conditional branches"]
+        "engine-3-branching": ["Max function cyclomatic complexity 8; module complexity 8 with 6 conditional branches"]
       }
     },
     {
@@ -30,7 +30,7 @@
       "expected_by_engine": {
         "engine-1-math": ["Loop nesting depth 1 detected"],
         "engine-2-hazards": ["No global mutation hazard detected"],
-        "engine-3-branching": ["Cyclomatic complexity 6 with 4 conditional branches"]
+        "engine-3-branching": ["Max function cyclomatic complexity 6; module complexity 6 with 4 conditional branches"]
       }
     },
     {
@@ -45,7 +45,7 @@
       "path": "data/snippets/global_in_helper.py",
       "expected_by_engine": {
         "engine-2-hazards": ["Global mutation hazard"],
-        "engine-3-branching": ["Cyclomatic complexity 3 with 1 conditional branches"]
+        "engine-3-branching": ["Max function cyclomatic complexity 3; module complexity 3 with 1 conditional branches"]
       }
     },
     {
@@ -54,7 +54,7 @@
       "expected_by_engine": {
         "engine-1-math": ["Loop nesting depth 2 detected"],
         "engine-2-hazards": ["Module-level subscript mutation hazard"],
-        "engine-3-branching": ["Cyclomatic complexity 8 with 5 conditional branches"]
+        "engine-3-branching": ["Max function cyclomatic complexity 8; module complexity 8 with 5 conditional branches"]
       }
     }
   ]

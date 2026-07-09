@@ -696,7 +696,7 @@ class GenerationController(BaseAgent):
         )
         return self.run(
             target=target,
-            initial_prompt=initial_prompt,
+            initial_prompt=retry_prompt,
             draft_override=architect_draft,
             draft_source_override="architect_llm",
             pre_attempts=[backend_attempt],

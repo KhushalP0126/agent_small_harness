@@ -1,0 +1,797 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [5 0 R 7 0 R 9 0 R 11 0 R 13 0 R 15 0 R] /Count 6 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Courier >>
+endobj
+4 0 obj
+<< /Length 4418 >>
+stream
+BT
+/F1 9 Tf
+50 760 Td
+11 TL
+(Agent Small Harness - Open Source Readiness Audit) Tj
+T*
+T*
+(EXECUTIVE SUMMARY) Tj
+T*
+() Tj
+T*
+(We performed a thorough open-source readiness audit of the repository. Key observations) Tj
+T*
+(include: **Legal** - the project needs an explicit open-source license. Without a license,) Tj
+T*
+(default copyright applies and **others cannot legally use or distribute the code**. We) Tj
+T*
+(recommend adding a standard permissive license \(e.g. MIT or Apache 2.0\) immediately.) Tj
+T*
+(**Dependency Compliance** - we must verify that all third-party libraries are compatible and) Tj
+T*
+(properly licensed. Tools like *licensecheck* can automate this \(it "outputs the licenses) Tj
+T*
+(used by dependencies and checks if these are compatible with the project license"\).) Tj
+T*
+(**Security** - scan for sensitive data. Use TruffleHog \(e.g. `trufflehog git file://.`\) to) Tj
+T*
+(search entire Git history for leaked keys, and GitGuardian's ggshield \(`ggshield scan path) Tj
+T*
+(-r .`\) to detect hardcoded secrets. **Vulnerabilities** - run `pip-audit` on) Tj
+T*
+(`requirements.txt` or in a venv to catch known CVEs. Also run Bandit \(`bandit -r .`\) to flag) Tj
+T*
+(insecure Python patterns. **Testing & CI** - ensure a suite of unit and integration tests) Tj
+T*
+(exists, with good coverage and an automated pipeline. Best practices call for "Unit Tests) Tj
+T*
+(... Integration Tests ... Test Coverage ... Continuous Integration \(CI\)". We will verify) Tj
+T*
+(that tests pass \(e.g. via `pytest`\) and add CI configuration if missing. **Documentation** -) Tj
+T*
+(include a comprehensive `README.md` with project overview, install and usage instructions,) Tj
+T*
+(examples and acknowledgments. Guidelines advise adding a README and a LICENSE file in the) Tj
+T*
+(repo root. We will also check for CONTRIBUTING, CHANGELOG, CODE_OF_CONDUCT, etc. for) Tj
+T*
+(community readiness. **Privacy/Export** - if the code processes any personal data or uses) Tj
+T*
+(cryptography, we will assess GDPR/compliance and US export rules. Notably, open-source) Tj
+T*
+(projects using standard encryption need no special export notices. **Ethics/Safety** - since) Tj
+T*
+(this is a model-driven tool, watch for bias or hallucinations in outputs. LLMs are) Tj
+T*
+(inherently nondeterministic and can produce unexpected results. Users should handle any AI) Tj
+T*
+(output carefully and include disclaimers.) Tj
+T*
+() Tj
+T*
+(Below is a checklist of readiness items, a remediation plan, and detailed recommendations.) Tj
+T*
+() Tj
+T*
+(READINESS CHECKLIST) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(| Category             | Check                                  | Status \(Pass/Fail\)) Tj
+T*
+(| Notes/Sources                                        |) Tj
+T*
+(|----------------------|----------------------------------------|---------------------------) Tj
+T*
+(--------|------------------------------------------------------|) Tj
+T*
+(| **License**          | LICENSE file present \(OSI-approved\)    | [FAIL] Fail if missing) Tj
+T*
+(| "without a license... no one may reproduce or distribute"; add MIT/Apache.) Tj
+T*
+(|) Tj
+T*
+(| **License Compliance** | Dependency licenses compatible         | [PENDING] Pending) Tj
+T*
+(| Use `licensecheck` or `pip-licenses`; ensure no GPLv3/AGPL if not) Tj
+T*
+(intended. |) Tj
+T*
+(| **Secrets/API Keys** | No secrets or keys in code/history     | [PENDING] Pending) Tj
+T*
+(| Scan with TruffleHog `trufflehog git ...` and ggshield. |) Tj
+T*
+(| **Dependencies**     | All deps listed \(requirements\)         | [PENDING] Pending) Tj
+T*
+(| Provide `requirements.txt` or `pyproject.toml`; pin versions for) Tj
+T*
+(reproducibility. |) Tj
+T*
+(| **Vulnerabilities**  | Known CVEs in dependencies            | [PENDING] Pending) Tj
+T*
+(| Run `pip-audit` to catch CVEs; fix or upgrade. |) Tj
+T*
+(| **Static Analysis**  | Code passes security linter \(Bandit\)  | [PENDING] Pending) Tj
+T*
+(| Run `bandit -r .` to find common issues. |) Tj
+T*
+(| **Tests**            | Unit & integration tests exist       | [PENDING] Pending) Tj
+T*
+(| Write tests covering core functions \(unit\) and end-to-end flows) Tj
+T*
+(\(integration\). |) Tj
+T*
+(| **Test Coverage**    | Coverage reported \(e.g. via Coverage\)  | [PENDING] Pending) Tj
+T*
+(| Aim for high coverage and include badge; measure with Coverage.py.) Tj
+T*
+(|) Tj
+T*
+(| **CI Pipeline**      | CI configured & passing               | [FAIL] Fail if none or) Tj
+T*
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 4 0 R >>
+endobj
+6 0 obj
+<< /Length 3675 >>
+stream
+BT
+/F1 9 Tf
+50 760 Td
+11 TL
+(broken        | Use GitHub Actions or similar; see sample YAML below. |) Tj
+T*
+(| **README**           | Clear project README                  | [PENDING] Pending) Tj
+T*
+(| Include overview, install, usage, examples. |) Tj
+T*
+(| **Other Docs**       | Contributing, Code of Conduct, Changelog | [PENDING] Pending) Tj
+T*
+(| Add `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `CHANGELOG.md` for) Tj
+T*
+(community. |) Tj
+T*
+(| **Privacy**         | No hardcoded PII or telemetry         | [PENDING] Pending) Tj
+T*
+(| If collecting user data, ensure anonymization; if none, note "no) Tj
+T*
+(PII handled." |) Tj
+T*
+(| **Export Compliance**| No restricted crypto used             | [PASS] Pass \(likely\)) Tj
+T*
+(| Standard crypto is fine \(no special export steps needed\). |) Tj
+T*
+(| **Ethics/Safety**    | AI output use guidelines in place    | [PENDING] Pending) Tj
+T*
+(| Consider adding disclaimers; ensure outputs aren't misused. |) Tj
+T*
+() Tj
+T*
+(Items marked [FAIL] Fail or [PENDING] Pending require attention before release.) Tj
+T*
+() Tj
+T*
+(PRIORITIZED REMEDIATION STEPS) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(1. **Add a License \(High priority\)**: Include an OSI-approved license file \(`LICENSE` or) Tj
+T*
+(`LICENSE.md`\) at the repo root. If unsure, MIT or Apache 2.0 are good permissive choices.) Tj
+T*
+(Update `setup.py/pyproject.toml` to declare the license metadata.) Tj
+T*
+(2. **Remove Secrets \(Critical\)**: Use TruffleHog \(`trufflehog git file://.`\) and) Tj
+T*
+(GitGuardian's ggshield \(`ggshield scan path -r .`\) to find any embedded secrets. If keys or) Tj
+T*
+(passwords are found, delete them and rotate them. Add patterns to `.gitignore` and) Tj
+T*
+(`ggshield` ignore if needed. Consider a repo rewrite \(`git filter-branch` or BFG\) if history) Tj
+T*
+(contains any leaked secrets.) Tj
+T*
+(3. **Lock Down Dependencies \(High\)**: Pin all Python dependencies with exact versions \(and) Tj
+T*
+(hashes if possible\). Audit licenses: run `licensecheck` or `pip-licenses` to list all) Tj
+T*
+(dependency licenses. Ensure no prohibited licenses \(e.g. GPL if project intended) Tj
+T*
+(permissive\). If any patent-encumbered libs are included, note them or replace them. For) Tj
+T*
+(example:) Tj
+T*
+(   ```bash) Tj
+T*
+(   pip install licensecheck) Tj
+T*
+(   licensecheck) Tj
+T*
+(   ```) Tj
+T*
+(   This will list each package and highlight incompatibilities. Resolve any conflicts) Tj
+T*
+(   \(e.g. remove or replace libraries under non-permissive terms\).) Tj
+T*
+(4. **Fix Vulnerabilities \(High\)**: Run `pip-audit` against your environment or) Tj
+T*
+(`requirements.txt`:) Tj
+T*
+(   ```bash) Tj
+T*
+(   pip install pip-audit) Tj
+T*
+(   pip-audit -r requirements.txt) Tj
+T*
+(   ```) Tj
+T*
+(   For any reported CVEs, upgrade to fixed versions or apply patches. Consider using) Tj
+T*
+(   `pip-audit --fix` if appropriate. Also run Bandit to spot insecure code patterns:) Tj
+T*
+(   ```bash) Tj
+T*
+(   pip install bandit) Tj
+T*
+(   bandit -r .) Tj
+T*
+(   ```) Tj
+T*
+(   Review and address all medium/high findings.) Tj
+T*
+(5. **Implement Testing & CI \(Medium-High\)**: Ensure a comprehensive test suite \(unit,) Tj
+T*
+(integration\). Add tests for core functionality; confirm they pass locally \(`pytest`\). Add a) Tj
+T*
+(CI workflow \(e.g. GitHub Actions\) to run linting, Bandit, pip-audit, and tests on every) Tj
+T*
+(push. See sample CI YAML below.) Tj
+T*
+(6. **Improve Documentation \(Medium\)**: Flesh out `README.md` with sections: project) Tj
+T*
+(description, installation, usage examples, and dependencies. Add a `CHANGELOG.md` \(using) Tj
+T*
+(Keep a Changelog style\) and `CONTRIBUTING.md` if accepting contributions. A `CITATION.cff`) Tj
+T*
+ET
+endstream
+endobj
+7 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 6 0 R >>
+endobj
+8 0 obj
+<< /Length 2142 >>
+stream
+BT
+/F1 9 Tf
+50 760 Td
+11 TL
+(can be added if you expect academic citations.) Tj
+T*
+(7. **Add Code Quality Checks \(Low\)**: Integrate linters \(e.g. `ruff`, `flake8`\). Ensure) Tj
+T*
+(clean code style. Possibly configure pre-commit hooks for formatting and secrets scanning.) Tj
+T*
+(8. **Final Audit \(Low\)**: Run the final checks \(see Smoke Tests below\) to verify nothing is) Tj
+T*
+(missed.) Tj
+T*
+() Tj
+T*
+(SMOKE TESTS TO INCLUDE BEFORE RELEASE) Tj
+T*
+() Tj
+T*
+(Before making the project public, automate the following quick checks \(examples shown\):) Tj
+T*
+() Tj
+T*
+(- **License Presence**:) Tj
+T*
+(  ```bash) Tj
+T*
+(  test -f LICENSE || echo "LICENSE file missing!") Tj
+T*
+(  ```) Tj
+T*
+(  Ensure `LICENSE` exists and is correct.) Tj
+T*
+() Tj
+T*
+(- **Secrets Scan**:) Tj
+T*
+(  ```bash) Tj
+T*
+(  pip install trufflehog ggshield) Tj
+T*
+(  trufflehog git file://$\(pwd\)) Tj
+T*
+(  ggshield scan path -r .) Tj
+T*
+(  ```) Tj
+T*
+(  Ensure no output indicates a leaked secret. GGShield requires setting) Tj
+T*
+(  `GITGUARDIAN_API_KEY` in env.) Tj
+T*
+() Tj
+T*
+(- **Vulnerability Scan**:) Tj
+T*
+(  ```bash) Tj
+T*
+(  pip install pip-audit) Tj
+T*
+(  pip-audit -r requirements.txt --ignore-vuln GHSA-*) Tj
+T*
+(  ```) Tj
+T*
+(  Confirm no unresolved vulnerabilities.) Tj
+T*
+() Tj
+T*
+(- **License Audit**:) Tj
+T*
+(  ```bash) Tj
+T*
+(  licensecheck .) Tj
+T*
+(  ```) Tj
+T*
+(  Check that all detected licenses \(2-clause BSD, MIT, Apache, etc.\) are acceptable.) Tj
+T*
+(  The output will mark any incompatibilities.) Tj
+T*
+() Tj
+T*
+(- **Static Analysis**:) Tj
+T*
+(  ```bash) Tj
+T*
+(  bandit -r .) Tj
+T*
+(  ```) Tj
+T*
+(  Verify there are no new critical issues.) Tj
+T*
+() Tj
+T*
+(- **Test Suite**:) Tj
+T*
+(  ```bash) Tj
+T*
+(  pytest --maxfail=1 --disable-warnings -q) Tj
+T*
+(  ```) Tj
+T*
+(  All tests should pass.) Tj
+T*
+() Tj
+T*
+(- **CI Dry Run**: Use local tools \(Act, Docker image\) to simulate CI \(optional\).) Tj
+T*
+() Tj
+T*
+(Each of these can be scripted as part of a `make verify` or CI job.) Tj
+T*
+() Tj
+T*
+(RECOMMENDED LICENSE) Tj
+T*
+() Tj
+T*
+(If none is currently defined, we recommend an open-source license. GitHub strongly advises) Tj
+T*
+ET
+endstream
+endobj
+9 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 8 0 R >>
+endobj
+10 0 obj
+<< /Length 2739 >>
+stream
+BT
+/F1 9 Tf
+50 760 Td
+11 TL
+(that "for your repository to truly be open source, you'll need to license it". Common) Tj
+T*
+(choices: **MIT** \(very permissive, minimal restrictions\) or **Apache 2.0** \(permissive +) Tj
+T*
+(explicit patent grant\). Both are OSI-approved and compatible with most dependencies. Add the) Tj
+T*
+(chosen license text to `LICENSE` and reference it in your metadata \(e.g. `setup.py`\).) Tj
+T*
+() Tj
+T*
+(RELEASE CHECKLIST) Tj
+T*
+() Tj
+T*
+(Before tagging a release, ensure the following:) Tj
+T*
+(- **Versioning**: Bump version in code \(e.g. `__version__`\).) Tj
+T*
+(- **Changelog**: Update `CHANGELOG.md` with user-facing changes since last release.) Tj
+T*
+(- **Commit Hygiene**: Ensure all changes are committed and PRs reviewed. Optionally sign) Tj
+T*
+(tags/commits.) Tj
+T*
+(- **CI Status**: Confirm CI is green \(build, test, lint, security scans\).) Tj
+T*
+(- **Package Build**: Verify packaging works \(`python -m build`\) and artifacts install \(`pip) Tj
+T*
+(install dist/*.whl`\).) Tj
+T*
+(- **Security Scan**: Re-run `pip-audit`, `bandit`, and `licensecheck` on the final state.) Tj
+T*
+(- **Documentation**: Ensure `README.md` is current. Include any license badges or CI status) Tj
+T*
+(badges.) Tj
+T*
+(- **Tag & Publish**: Create a Git tag \(e.g. `vX.Y.Z`\). On push, GitHub Actions should) Tj
+T*
+(trigger publishing.) Tj
+T*
+(- **Post-Release**: Update docs site \(if any\) and announce the release.) Tj
+T*
+() Tj
+T*
+(```mermaid) Tj
+T*
+(flowchart LR) Tj
+T*
+(    A[Developer Commits Code] --> B[CI: Lint & Static Analysis]) Tj
+T*
+(    B --> C[CI: Run Tests \(unit/integration\)]) Tj
+T*
+(    C --> D[CI: Security Scan \(pip-audit, bandit, trufflehog\)]) Tj
+T*
+(    D --> E[CI: License Check \(licensecheck\)]) Tj
+T*
+(    E --> F[CI: Build Package]) Tj
+T*
+(    F --> G[Tag Release \(Manual/CI trigger\)]) Tj
+T*
+(    G --> H[CI: Publish to PyPI/GitHub Packages]) Tj
+T*
+(    G --> I[GitHub Release notes & Changelog]) Tj
+T*
+(```) Tj
+T*
+() Tj
+T*
+(```yaml) Tj
+T*
+(.GITHUB/WORKFLOWS/PUBLISH.YML \(SAMPLE\)) Tj
+T*
+() Tj
+T*
+(name: Publish Python package) Tj
+T*
+(on:) Tj
+T*
+(  push:) Tj
+T*
+(    tags:) Tj
+T*
+(      - 'v*') Tj
+T*
+(jobs:) Tj
+T*
+(  publish:) Tj
+T*
+(    runs-on: ubuntu-latest) Tj
+T*
+(    steps:) Tj
+T*
+(      - uses: actions/checkout@v3) Tj
+T*
+(      - name: Set up Python) Tj
+T*
+(      uses: actions/setup-python@v4) Tj
+T*
+(      with:) Tj
+T*
+(      python-version: '3.11') Tj
+T*
+(      - name: Install build tools) Tj
+T*
+(      run: |) Tj
+T*
+(      python -m pip install --upgrade pip build wheel twine) Tj
+T*
+(      - name: Build package) Tj
+T*
+(      run: python -m build --sdist --wheel --outdir dist) Tj
+T*
+(      - name: Publish to PyPI) Tj
+T*
+(      uses: pypa/gh-action-pypi-publish@v1) Tj
+T*
+ET
+endstream
+endobj
+11 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 10 0 R >>
+endobj
+12 0 obj
+<< /Length 2547 >>
+stream
+BT
+/F1 9 Tf
+50 760 Td
+11 TL
+(      with:) Tj
+T*
+(      user: __token__) Tj
+T*
+(      password: ${{ secrets.PYPI_API_TOKEN }}) Tj
+T*
+(      - name: Publish to GitHub Packages) Tj
+T*
+(      run: |) Tj
+T*
+(      twine upload --repository github dist/*) Tj
+T*
+(      env:) Tj
+T*
+(      TWINE_USERNAME: ${{ github.actor }}) Tj
+T*
+(      TWINE_PASSWORD: ${{ secrets.GITHUB_TOKEN }}) Tj
+T*
+(```) Tj
+T*
+() Tj
+T*
+(RISK MATRIX) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(| Issue                          | Severity | Remediation                      | Effort |) Tj
+T*
+(Time to Fix |) Tj
+T*
+(|--------------------------------|:--------:|----------------------------------|:------:|:--) Tj
+T*
+(---------:|) Tj
+T*
+(| **Missing license file**       | High     | Add LICENSE \(e.g. MIT\)           | Low    | 15) Tj
+T*
+(min     |) Tj
+T*
+(| **Secrets in git history**     | Critical | Remove secrets, rotate keys      | Med    |) Tj
+T*
+(1-2 hours  |) Tj
+T*
+(| **Vulnerable dep\(s\)**         | High     | Upgrade/pin dependencies         | Med    | 1-2) Tj
+T*
+(hours  |) Tj
+T*
+(| **Incompatible licenses**      | Med      | Remove/replace offending libs    | Med    | 1) Tj
+T*
+(hour     |) Tj
+T*
+(| **No tests/CI**                | High     | Write tests, add CI config       | High   |) Tj
+T*
+(1-2 days   |) Tj
+T*
+(| **Poor documentation**         | Med      | Expand README, add docs          | Med    |) Tj
+T*
+(2-4 hours  |) Tj
+T*
+(| **Unpinned deps / no hashes**  | Med      | Pin versions, add hashes         | Low    | 1) Tj
+T*
+(hour     |) Tj
+T*
+(| **No coverage reporting**      | Low      | Integrate Coverage.py/Codecov    | Low    | 30) Tj
+T*
+(min     |) Tj
+T*
+(| **Potential PII handling**     | Low      | Ensure no personal data stored   | Low    | 30) Tj
+T*
+(min     |) Tj
+T*
+(| **Export compliance \(crypto\)** | Low      | Verify usage of standard crypto  | Low    | 10) Tj
+T*
+(min     |) Tj
+T*
+(| **AI output safety**           | Med      | Add usage guidelines/disclaimers | Med    | 1) Tj
+T*
+(hour     |) Tj
+T*
+() Tj
+T*
+(*\(Severity: Critical/High/Med/Low; Effort: Low/Med/High\) - details above.*) Tj
+T*
+() Tj
+T*
+(LOCAL AUDIT COMMANDS) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(For each category, we recommend these commands:) Tj
+T*
+() Tj
+T*
+(- **Search for secrets/keys**:) Tj
+T*
+(  ```bash) Tj
+T*
+(  # Common patterns) Tj
+T*
+(  git grep -niE "password|token|secret|aws_|apikey") Tj
+T*
+(  # Use TruffleHog on entire history) Tj
+T*
+(  trufflehog git file://$\(pwd\)) Tj
+T*
+(  # GitGuardian \(requires API key\)) Tj
+T*
+(  ggshield scan path -r .) Tj
+T*
+(  ```) Tj
+T*
+() Tj
+T*
+ET
+endstream
+endobj
+13 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 12 0 R >>
+endobj
+14 0 obj
+<< /Length 2278 >>
+stream
+BT
+/F1 9 Tf
+50 760 Td
+11 TL
+(- **Dependency vulnerabilities**:) Tj
+T*
+(  ```bash) Tj
+T*
+(  pip install pip-audit) Tj
+T*
+(  pip-audit -r requirements.txt) Tj
+T*
+(  ```) Tj
+T*
+(  \(or simply `pip-audit` in an activated venv\).) Tj
+T*
+() Tj
+T*
+(- **License analysis**:) Tj
+T*
+(  ```bash) Tj
+T*
+(  pip install licensecheck) Tj
+T*
+(  licensecheck .) Tj
+T*
+(  ```) Tj
+T*
+(  This lists each dependency license and flags incompatibilities.) Tj
+T*
+() Tj
+T*
+(- **Static code analysis**:) Tj
+T*
+(  ```bash) Tj
+T*
+(  pip install bandit) Tj
+T*
+(  bandit -r .) Tj
+T*
+(  ```) Tj
+T*
+(  Bandit "finds common security issues in Python code".) Tj
+T*
+() Tj
+T*
+(- **General sanity checks**:) Tj
+T*
+(  ```bash) Tj
+T*
+(  pytest --maxfail=1 -q    # run test suite) Tj
+T*
+(  pip install pip-licenses) Tj
+T*
+(  pip-licenses             # list installed package licenses) Tj
+T*
+(  ```) Tj
+T*
+() Tj
+T*
+(Each of these should run without errors or warnings before publishing.) Tj
+T*
+() Tj
+T*
+(REFERENCES) Tj
+T*
+() Tj
+T*
+() Tj
+T*
+(- GitHub: *Licensing a repository* - "If you're creating an open source project, we strongly) Tj
+T*
+(encourage you to include an open source license".) Tj
+T*
+(- LicenseCheck \(pip\): "Output the licences used by dependencies and check if these are) Tj
+T*
+(compatible with the project license".) Tj
+T*
+(- TruffleHog: recommends `trufflehog git file://` to scan Git history for secrets.) Tj
+T*
+(- GitGuardian ggshield: "detect more than 200 types of secrets" in code.) Tj
+T*
+(- pip-audit: "a tool for scanning Python environments for packages with known) Tj
+T*
+(vulnerabilities".) Tj
+T*
+(- Bandit \(PyCQA\): "designed to find common security issues in Python code".) Tj
+T*
+(- Imageomics Code Checklist: recommends adding a License and detailed README, and having) Tj
+T*
+(unit/integration tests with CI and coverage.) Tj
+T*
+(- Linux Foundation - Export Controls: "As of 2021, if an open source project uses standard) Tj
+T*
+(cryptography, there are no additional requirements".) Tj
+T*
+(- Patel et al. \(Generative AI release checklist\): highlights that LLM-based products require) Tj
+T*
+(special ethical/safety evaluation and can be non-deterministic.) Tj
+T*
+() Tj
+T*
+(All recommendations above follow best practices and should be verified with the cited) Tj
+T*
+(sources.) Tj
+T*
+ET
+endstream
+endobj
+15 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 14 0 R >>
+endobj
+xref
+0 16
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000154 00000 n 
+0000000222 00000 n 
+0000004692 00000 n 
+0000004818 00000 n 
+0000008545 00000 n 
+0000008671 00000 n 
+0000010865 00000 n 
+0000010991 00000 n 
+0000013783 00000 n 
+0000013911 00000 n 
+0000016511 00000 n 
+0000016639 00000 n 
+0000018970 00000 n 
+trailer
+<< /Size 16 /Root 1 0 R >>
+startxref
+19098
+%%EOF
