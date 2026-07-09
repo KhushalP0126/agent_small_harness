@@ -122,7 +122,7 @@ Prompt builders convert structured context and findings into model-facing text.
 Model integrations.
 
 - `backends/ollama_client.py` - Local Ollama supplier and code extraction.
-- `backends/architect_client.py` - API-backed architect client, `.env` loading, response cleanup, and formalization prompt helpers.
+- `backends/architect_client.py` - API-backed architect client, split contract/repair profiles, contract queue supplier, `.env` loading, response cleanup, and formalization prompt helpers.
 - `backends/__init__.py` - Package marker.
 
 ## `data/`

@@ -38,6 +38,21 @@ execution:
       1-2: qwen2.5-coder:1.5b
       3-5: qwen2.5-coder:3b
       6+: qwen2.5-coder:3b
+  architect:
+    contract:
+      model: deepseek-chat
+      timeout_seconds: 60
+      temperature: 0.0
+      max_tokens: 3000
+      thinking_type: disabled
+      reasoning_effort: low
+    repair:
+      model: deepseek-chat
+      timeout_seconds: 90
+      temperature: 0.1
+      max_tokens: 4000
+      thinking_type: disabled
+      reasoning_effort: medium
   routing:
     architect_after_repair_attempts: 1
     complexity_threshold: 0.7

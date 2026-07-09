@@ -849,6 +849,104 @@ def analyze(value):
         self.assertEqual(result.payload["attempts"][0]["repair_worker"], "small_worker")
         self.assertEqual(result.payload["attempts"][1]["repair_worker"], "architect_llm")
 
+    def test_initial_worker_timeout_routes_to_architect(self) -> None:
+        architect_calls = []
+
+        def draft_supplier(_prompt: str) -> str:
+            raise TimeoutError("timed out")
+
+        def architect_supplier(_draft: str, retry_prompt: str) -> str:
+            architect_calls.append(retry_prompt)
+            return LINEAR.read_text(encoding="utf-8")
+
+        controller = GenerationController(
+            max_retries=1,
+            draft_supplier=draft_supplier,
+            architect_supplier=architect_supplier,
+        )
+        result = controller.run(target="backend-timeout", initial_prompt="PLAN PACKET:\nFUNCTION: analyze")
+
+        self.assertEqual(result.payload["final_status"], "completed")
+        self.assertEqual(len(architect_calls), 1)
+        self.assertIn("SMALL WORKER BACKEND FAILURE", architect_calls[0])
+        self.assertEqual(result.payload["attempts"][0]["backend_failure"]["reason"], "small_worker_initial_timeout")
+        self.assertEqual(result.payload["attempts"][1]["draft_source_worker"], "architect_llm")
+
+    def test_initial_worker_empty_response_routes_to_architect(self) -> None:
+        def draft_supplier(_prompt: str) -> str:
+            raise RuntimeError("Ollama returned an empty response.")
+
+        controller = GenerationController(
+            max_retries=1,
+            draft_supplier=draft_supplier,
+            architect_supplier=lambda _draft, _prompt: LINEAR.read_text(encoding="utf-8"),
+        )
+        result = controller.run(target="backend-empty", initial_prompt="PLAN PACKET:\nFUNCTION: analyze")
+
+        self.assertEqual(result.payload["final_status"], "completed")
+        self.assertEqual(result.payload["attempts"][0]["backend_failure"]["reason"], "small_worker_initial_empty_response")
+
+    def test_backend_failure_payload_includes_contract_count(self) -> None:
+        initial_prompt = """
+PLAN PACKET:
+FUNCTION: snake
+FUNCTIONWISE WORKER PACKETS:
+FUNCTION CONTRACT PACKET:
+NAME: next_head
+FUNCTION CONTRACT PACKET:
+NAME: hits_wall
+"""
+
+        def draft_supplier(_prompt: str) -> str:
+            raise TimeoutError("timed out")
+
+        controller = GenerationController(
+            max_retries=1,
+            draft_supplier=draft_supplier,
+            architect_supplier=lambda _draft, _prompt: LINEAR.read_text(encoding="utf-8"),
+        )
+        result = controller.run(target="contract-backend-timeout", initial_prompt=initial_prompt)
+
+        backend_failure = result.payload["attempts"][0]["backend_failure"]
+        self.assertEqual(backend_failure["contract_count"], 2)
+        self.assertEqual(backend_failure["contract_queue_summary"], ["next_head", "hits_wall"])
+        self.assertIn("Contract count: 2", result.payload["attempts"][0]["retry_prompt"])
+
+    def test_architect_output_after_backend_failure_is_validated(self) -> None:
+        bad_architect_source = "import numpy\n\ndef analyze(value):\n    return value\n"
+
+        controller = GenerationController(
+            max_retries=1,
+            draft_supplier=lambda _prompt: (_ for _ in ()).throw(TimeoutError("timed out")),
+            architect_supplier=lambda _draft, _prompt: bad_architect_source,
+        )
+        result = controller.run(target="architect-after-timeout-static-fail", initial_prompt="PLAN PACKET:")
+
+        self.assertEqual(result.payload["final_status"], "manual_review_required")
+        self.assertEqual(
+            result.payload["human_review"]["reason"],
+            "architect_after_backend_failure_static_gate_failed",
+        )
+        self.assertEqual(result.payload["attempts"][1]["validation"]["violations"][0]["kind"], "external_dependency")
+
+    def test_architect_failure_after_worker_timeout_becomes_manual_review(self) -> None:
+        def draft_supplier(_prompt: str) -> str:
+            raise TimeoutError("timed out")
+
+        def architect_supplier(_draft: str, _prompt: str) -> str:
+            raise RuntimeError("architect failed")
+
+        controller = GenerationController(
+            max_retries=1,
+            draft_supplier=draft_supplier,
+            architect_supplier=architect_supplier,
+        )
+        result = controller.run(target="backend-timeout-architect-fails", initial_prompt="PLAN PACKET:")
+
+        self.assertEqual(result.payload["final_status"], "manual_review_required")
+        self.assertEqual(result.payload["human_review"]["reason"], "architect_after_backend_failure_failed")
+        self.assertIn("architect failed", result.payload["attempts"][0]["repair_error"])
+
     def test_architect_supplier_handles_small_worker_stagnation_after_threshold(self) -> None:
         bad_source = """
 def analyze(value):

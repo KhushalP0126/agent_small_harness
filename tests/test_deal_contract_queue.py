@@ -1,9 +1,12 @@
 import unittest
 
 from agents.generation_controller import GenerationController
+from engines.hazards_engine import HazardsEngine
 from kernel.function_contracts import ContractQueue, DealExample, FunctionContract, parse_contract_queue_json
 from prompt.contract_builder import build_deal_contract_architect_prompt
+from scripts.run_structured_spec import _initial_prompt
 from validation.deal_contracts import is_deal_available, validate_deal_examples
+from validation.policy import validate_findings
 
 
 class DealContractQueueTests(unittest.TestCase):
@@ -88,6 +91,40 @@ class DealContractQueueTests(unittest.TestCase):
         self.assertIn("DEAL EXAMPLES:", packet)
         self.assertIn("parse_token('+3') == 3", packet)
         self.assertIn("Implement only this function contract.", packet)
+
+    def test_structured_spec_prompt_includes_contract_queue(self) -> None:
+        queue = ContractQueue(
+            contracts=[
+                FunctionContract(
+                    name="next_head",
+                    signature="def next_head(head: tuple[int, int], direction: tuple[int, int]) -> tuple[int, int]",
+                    purpose="Move one grid cell.",
+                    examples=[DealExample(call="next_head((5, 5), (1, 0))", expected="(6, 5)")],
+                )
+            ]
+        )
+
+        prompt = _initial_prompt("PLAN PACKET:\nFUNCTION: app", queue)
+
+        self.assertIn("ARCHITECT FUNCTION CONTRACT QUEUE:", prompt)
+        self.assertIn("import deal", prompt)
+        self.assertIn("@deal.example(lambda: next_head((5, 5), (1, 0)) == (6, 5))", prompt)
+        self.assertIn("FUNCTIONWISE WORKER PACKETS:", prompt)
+
+    def test_deal_import_is_allowed_for_contract_decorators(self) -> None:
+        source = """
+import deal
+
+@deal.example(lambda: identity(1) == 1)
+def identity(value):
+    return value
+"""
+
+        findings = HazardsEngine().scan(source)
+        summaries = {finding.summary for finding in findings}
+
+        self.assertNotIn("External dependency usage", summaries)
+        self.assertTrue(validate_findings(findings).is_compliant)
 
     @unittest.skipUnless(is_deal_available(), "deal is not installed")
     def test_deal_validator_executes_examples_with_deal_library(self) -> None:

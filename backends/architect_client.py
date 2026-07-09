@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass
+import socket
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from backends.ollama_client import FENCED_CODE_RE, LANGUAGE_TAG_LINE_RE
+from kernel.function_contracts import ContractQueue, parse_contract_queue_json
+from prompt.contract_builder import build_deal_contract_architect_prompt
 
 
 DEFAULT_ARCHITECT_API_KEY_ENV = "ARCHITECT_API_KEY"
@@ -23,6 +26,42 @@ DEFAULT_ARCHITECT_REASONING_EFFORT_ENV = "ARCHITECT_REASONING_EFFORT"
 DEFAULT_ARCHITECT_MODEL = "deepseek-v4-pro"
 DEFAULT_ARCHITECT_API_BASE_URL = "https://api.deepseek.com/chat/completions"
 DEFAULT_ARCHITECT_ENV_FILE = ".env"
+
+
+@dataclass(frozen=True)
+class ArchitectProfile:
+    model: str
+    timeout_seconds: int
+    temperature: float
+    max_tokens: int
+    thinking_type: str
+    reasoning_effort: str
+
+
+CONTRACT_PROFILE = ArchitectProfile(
+    model="deepseek-chat",
+    timeout_seconds=60,
+    temperature=0.0,
+    max_tokens=3000,
+    thinking_type="disabled",
+    reasoning_effort="low",
+)
+
+
+REPAIR_PROFILE = ArchitectProfile(
+    model="deepseek-chat",
+    timeout_seconds=90,
+    temperature=0.1,
+    max_tokens=4000,
+    thinking_type="disabled",
+    reasoning_effort="medium",
+)
+
+
+class ContractArchitectError(RuntimeError):
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
 
 
 def _dotenv_values(path: str) -> dict[str, str]:
@@ -61,11 +100,8 @@ class ArchitectConfig:
     thinking_type_env: str = DEFAULT_ARCHITECT_THINKING_TYPE_ENV
     reasoning_effort_env: str = DEFAULT_ARCHITECT_REASONING_EFFORT_ENV
     env_file: str = DEFAULT_ARCHITECT_ENV_FILE
-    timeout_seconds: int = 120
-    temperature: float = 0.1
-    max_tokens: int = 4000
-    thinking_type: str = "enabled"
-    reasoning_effort: str = "high"
+    repair_profile: ArchitectProfile = field(default_factory=lambda: REPAIR_PROFILE)
+    contract_profile: ArchitectProfile = field(default_factory=lambda: CONTRACT_PROFILE)
 
     @property
     def api_key_configured(self) -> bool:
@@ -80,7 +116,7 @@ class ArchitectConfig:
 
     @property
     def model(self) -> str:
-        return self._config_value(self.model_env) or DEFAULT_ARCHITECT_MODEL
+        return self.repair_profile_from_env.model
 
     @property
     def base_url(self) -> str:
@@ -88,23 +124,48 @@ class ArchitectConfig:
 
     @property
     def request_timeout_seconds(self) -> int:
-        return self._int_config_value(self.timeout_seconds_env, self.timeout_seconds, minimum=1)
+        return self.repair_profile_from_env.timeout_seconds
 
     @property
     def request_temperature(self) -> float:
-        return self._float_config_value(self.temperature_env, self.temperature, minimum=0.0)
+        return self.repair_profile_from_env.temperature
 
     @property
     def request_max_tokens(self) -> int:
-        return self._int_config_value(self.max_tokens_env, self.max_tokens, minimum=1)
+        return self.repair_profile_from_env.max_tokens
 
     @property
     def request_thinking_type(self) -> str:
-        return self._config_value(self.thinking_type_env) or self.thinking_type
+        return self.repair_profile_from_env.thinking_type
 
     @property
     def request_reasoning_effort(self) -> str:
-        return self._config_value(self.reasoning_effort_env) or self.reasoning_effort
+        return self.repair_profile_from_env.reasoning_effort
+
+    @property
+    def repair_profile_from_env(self) -> ArchitectProfile:
+        return ArchitectProfile(
+            model=self._config_value(self.model_env) or self.repair_profile.model,
+            timeout_seconds=self._int_config_value(
+                self.timeout_seconds_env,
+                self.repair_profile.timeout_seconds,
+                minimum=1,
+            ),
+            temperature=self._float_config_value(
+                self.temperature_env,
+                self.repair_profile.temperature,
+                minimum=0.0,
+            ),
+            max_tokens=self._int_config_value(
+                self.max_tokens_env,
+                self.repair_profile.max_tokens,
+                minimum=1,
+            ),
+            thinking_type=self._config_value(self.thinking_type_env) or self.repair_profile.thinking_type,
+            reasoning_effort=(
+                self._config_value(self.reasoning_effort_env) or self.repair_profile.reasoning_effort
+            ),
+        )
 
     def _config_value(self, name: str) -> str:
         return os.environ.get(name, "").strip() or _dotenv_values(self.env_file).get(name, "").strip()
@@ -136,23 +197,24 @@ class ArchitectApiClient:
     def __init__(self, config: ArchitectConfig | None = None) -> None:
         self.config = config or ArchitectConfig()
 
-    def generate(self, prompt: str, system: str) -> str:
+    def generate(self, prompt: str, system: str, profile: ArchitectProfile | None = None) -> str:
         if not self.config.api_key_configured:
             raise RuntimeError(
                 "Architect model API key is not configured. "
                 f"Set {self.config.api_key_env} or {self.config.fallback_api_key_env} "
                 "before using big-LLM escalation."
             )
+        profile = profile or self.config.repair_profile_from_env
         payload: dict[str, Any] = {
-            "model": self.config.model,
+            "model": profile.model,
             "messages": [
                 {"role": "system", "content": system},
                 {"role": "user", "content": prompt},
             ],
-            "temperature": self.config.request_temperature,
-            "max_tokens": self.config.request_max_tokens,
-            "thinking": {"type": self.config.request_thinking_type},
-            "reasoning_effort": self.config.request_reasoning_effort,
+            "temperature": profile.temperature,
+            "max_tokens": profile.max_tokens,
+            "thinking": {"type": profile.thinking_type},
+            "reasoning_effort": profile.reasoning_effort,
             "stream": False,
         }
         request = Request(
@@ -165,8 +227,10 @@ class ArchitectApiClient:
             method="POST",
         )
         try:
-            with urlopen(request, timeout=self.config.request_timeout_seconds) as response:
+            with urlopen(request, timeout=profile.timeout_seconds) as response:
                 body = json.loads(response.read().decode("utf-8"))
+        except socket.timeout as exc:
+            raise TimeoutError(f"Architect API timed out after {profile.timeout_seconds}s") from exc
         except HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
             raise RuntimeError(f"Architect API failed with HTTP {exc.code}: {detail}") from exc
@@ -202,6 +266,7 @@ class ArchitectModelSupplier:
     ) -> None:
         self.config = config or ArchitectConfig()
         self.client = client or ArchitectApiClient(self.config)
+        self.profile = self.config.repair_profile_from_env
         self.system_prompt = system_prompt
 
     def repair_draft(self, draft: str, retry_prompt: str) -> str:
@@ -218,7 +283,7 @@ class ArchitectModelSupplier:
                 retry_prompt,
             ]
         )
-        response = self.client.generate(prompt=prompt, system=self.system_prompt)
+        response = self.client.generate(prompt=prompt, system=self.system_prompt, profile=self.profile)
         return self._extract_code(response)
 
     def formalize_for_nagini(
@@ -258,6 +323,7 @@ class ArchitectModelSupplier:
                 "You are the architect formal verification tier in a verified code harness. "
                 "Return Nagini-oriented Python code only; do not include prose."
             ),
+            profile=self.profile,
         )
         return self._extract_code(response)
 
@@ -268,3 +334,54 @@ class ArchitectModelSupplier:
         if lines and LANGUAGE_TAG_LINE_RE.match(lines[0]):
             text = "\n".join(lines[1:]).strip()
         return text
+
+
+class ContractArchitectSupplier:
+    def __init__(
+        self,
+        client: ArchitectApiClient | None = None,
+        profile: ArchitectProfile | None = None,
+    ) -> None:
+        self.profile = profile or CONTRACT_PROFILE
+        self.client = client or ArchitectApiClient()
+
+    def build_contract_queue(self, plan_packet: str, preserved_context: str = "") -> ContractQueue:
+        prompt = build_deal_contract_architect_prompt(
+            plan_packet=plan_packet,
+            preserved_context=preserved_context,
+        )
+        try:
+            response = self.client.generate(
+                prompt=prompt,
+                system="Return strict JSON contract queues only.",
+                profile=self.profile,
+            )
+        except TimeoutError as exc:
+            raise ContractArchitectError("architect_contract_timeout", str(exc)) from exc
+        except RuntimeError as exc:
+            message = str(exc)
+            if "empty response" in message.lower():
+                raise ContractArchitectError("architect_contract_empty_response", message) from exc
+            raise
+
+        if not response.strip():
+            raise ContractArchitectError("architect_contract_empty_response", "Architect returned an empty contract response.")
+        try:
+            queue = parse_contract_queue_json(response)
+        except json.JSONDecodeError as exc:
+            code = "architect_contract_truncated_json" if _looks_truncated_json(response) else "architect_contract_invalid_json"
+            raise ContractArchitectError(code, str(exc)) from exc
+        except ValueError as exc:
+            raise ContractArchitectError("architect_contract_invalid_json", str(exc)) from exc
+        if not queue.contracts:
+            raise ContractArchitectError("architect_contract_zero_contracts", "Architect returned zero function contracts.")
+        return queue
+
+
+def _looks_truncated_json(response: str) -> bool:
+    stripped = response.strip()
+    if stripped.startswith("```"):
+        stripped = stripped.rstrip("`").strip()
+    if not stripped.startswith("{"):
+        return False
+    return stripped.count("{") != stripped.count("}") or stripped.count("[") != stripped.count("]")

@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from backends.architect_client import CONTRACT_PROFILE, REPAIR_PROFILE, ArchitectProfile
 from validation.policy import DEFAULT_POLICY
 
 
@@ -131,8 +132,15 @@ class GatesConfig:
 
 
 @dataclass(frozen=True)
+class ArchitectProfilesConfig:
+    contract: ArchitectProfile = field(default_factory=lambda: CONTRACT_PROFILE)
+    repair: ArchitectProfile = field(default_factory=lambda: REPAIR_PROFILE)
+
+
+@dataclass(frozen=True)
 class ExecutionConfig:
     models: ModelsConfig = field(default_factory=ModelsConfig)
+    architect: ArchitectProfilesConfig = field(default_factory=ArchitectProfilesConfig)
     routing: RoutingConfig = field(default_factory=RoutingConfig)
     gates: GatesConfig = field(default_factory=GatesConfig)
 
@@ -151,13 +159,14 @@ class HarnessConfig:
         execution = _mapping(raw.get("execution", {}), "execution")
         _ensure_known_keys(platform, {"environment", "log_level"}, "platform")
         _ensure_known_keys(engines, {"syntax", "policy", "behavior", "formal"}, "engines")
-        _ensure_known_keys(execution, {"models", "routing", "gates"}, "execution")
+        _ensure_known_keys(execution, {"models", "architect", "routing", "gates"}, "execution")
 
         syntax = _mapping(engines.get("syntax", {}), "engines.syntax")
         policy = _mapping(engines.get("policy", {}), "engines.policy")
         behavior = _mapping(engines.get("behavior", {}), "engines.behavior")
         formal = _mapping(engines.get("formal", {}), "engines.formal")
         models = _mapping(execution.get("models", {}), "execution.models")
+        architect = _mapping(execution.get("architect", {}), "execution.architect")
         routing = _mapping(execution.get("routing", {}), "execution.routing")
         gates = _mapping(execution.get("gates", {}), "execution.gates")
         _ensure_known_keys(syntax, {"enabled", "strict_mode"}, "engines.syntax")
@@ -188,6 +197,19 @@ class HarnessConfig:
             models,
             {"worker_model", "architect_model", "profiles", "difficulty_models"},
             "execution.models",
+        )
+        _ensure_known_keys(architect, {"contract", "repair"}, "execution.architect")
+        contract_profile = _mapping(architect.get("contract", {}), "execution.architect.contract")
+        repair_profile = _mapping(architect.get("repair", {}), "execution.architect.repair")
+        _ensure_known_keys(
+            contract_profile,
+            {"model", "timeout_seconds", "temperature", "max_tokens", "thinking_type", "reasoning_effort"},
+            "execution.architect.contract",
+        )
+        _ensure_known_keys(
+            repair_profile,
+            {"model", "timeout_seconds", "temperature", "max_tokens", "thinking_type", "reasoning_effort"},
+            "execution.architect.repair",
         )
         _ensure_known_keys(
             routing,
@@ -260,6 +282,10 @@ class HarnessConfig:
                             "6+": "qwen2.5-coder:7b",
                         },
                     ),
+                ),
+                architect=ArchitectProfilesConfig(
+                    contract=_architect_profile(contract_profile, CONTRACT_PROFILE, "execution.architect.contract"),
+                    repair=_architect_profile(repair_profile, REPAIR_PROFILE, "execution.architect.repair"),
                 ),
                 routing=RoutingConfig(
                     architect_after_repair_attempts=_optional_int(
@@ -423,6 +449,17 @@ def _float(raw: dict[str, Any], key: str, default: float, minimum: float | None 
     if minimum is not None and value < minimum:
         raise ConfigError(f"{key} must be >= {minimum}.")
     return value
+
+
+def _architect_profile(raw: dict[str, Any], default: ArchitectProfile, path: str) -> ArchitectProfile:
+    return ArchitectProfile(
+        model=_str(raw, "model", default.model),
+        timeout_seconds=_int(raw, "timeout_seconds", default.timeout_seconds, minimum=1),
+        temperature=_float(raw, "temperature", default.temperature, minimum=0.0),
+        max_tokens=_int(raw, "max_tokens", default.max_tokens, minimum=1),
+        thinking_type=_str(raw, "thinking_type", default.thinking_type),
+        reasoning_effort=_str(raw, "reasoning_effort", default.reasoning_effort),
+    )
 
 
 def _difficulty_matches(difficulty: int, range_text: str) -> bool:

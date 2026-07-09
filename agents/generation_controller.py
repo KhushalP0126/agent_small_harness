@@ -10,6 +10,7 @@ from agents.parse_contract import ParseContractAgent, ParseFailure
 from agents.repair_strategy import MANUAL_REVIEW, RepairStrategyAgent
 from engines.base import EngineFinding
 from prompt.architect_builder import build_state_machine_architect_prompt
+from prompt.backend_failure_builder import build_backend_failure_architect_prompt
 from prompt.retry_builder import build_retry_prompt, build_small_worker_retry_prompt
 from validation.behavior import FunctionBehaviorSpec, serialize_behavior_result, validate_function_behavior
 from validation.branch_loop_detector import build_branch_state_signature, detect_branching_loop
@@ -51,6 +52,20 @@ class GenerationAttempt:
     diff: str = ""
     branch_state_signature: dict = field(default_factory=dict)
     branch_loop: dict = field(default_factory=dict)
+    backend_failure: dict = field(default_factory=dict)
+
+
+@dataclass
+class BackendFailurePayload:
+    backend: str
+    stage: str
+    reason: str
+    error: str
+    worker_model: str = ""
+    prompt_size: int = 0
+    contract_count: int = 0
+    plan_packet: str = ""
+    contract_queue_summary: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -517,6 +532,21 @@ class GenerationController(BaseAgent):
             "same_failure_after_branch_switch": (
                 "Review the repair route manually; switching branch actions still led to the same unresolved failure."
             ),
+            "small_worker_initial_timeout": (
+                "The local worker timed out before returning code. Escalate to the architect or split the task into smaller function packets."
+            ),
+            "small_worker_initial_empty_response": (
+                "The local worker returned no code. Escalate to the architect or reduce the prompt size."
+            ),
+            "small_worker_initial_backend_unreachable": (
+                "The local worker backend was not reachable. Start the backend, switch models, or use architect fallback."
+            ),
+            "architect_after_backend_failure_failed": (
+                "The architect fallback also failed after the local worker backend failure. Review API settings and retry manually."
+            ),
+            "architect_after_backend_failure_static_gate_failed": (
+                "The architect produced code after a worker backend failure, but that code failed validation."
+            ),
         }
         return suggestions.get(
             reason,
@@ -544,17 +574,159 @@ class GenerationController(BaseAgent):
             suggested_human_decision=self._suggest_human_decision(reason),
         )
 
-    def run(self, target: str, initial_prompt: str) -> AgentResult:
-        initial_draft = self.draft_supplier(initial_prompt)
+    def _backend_failure_reason(self, exc: Exception) -> str:
+        text = f"{exc.__class__.__name__}: {exc}".lower()
+        if "timed out" in text or "timeout" in text:
+            return "small_worker_initial_timeout"
+        if "empty response" in text or "returned no" in text:
+            return "small_worker_initial_empty_response"
+        if "not reachable" in text or "connection" in text or "unreachable" in text:
+            return "small_worker_initial_backend_unreachable"
+        return "small_worker_initial_backend_failure"
+
+    def _contract_summary_from_prompt(self, initial_prompt: str) -> list[str]:
+        summary: list[str] = []
+        for raw_line in initial_prompt.splitlines():
+            line = raw_line.strip()
+            if line.startswith("NAME: "):
+                name = line.split(":", 1)[1].strip()
+                if name:
+                    summary.append(name)
+        return summary
+
+    def _backend_failure_payload(self, initial_prompt: str, exc: Exception) -> BackendFailurePayload:
+        contract_summary = self._contract_summary_from_prompt(initial_prompt)
+        return BackendFailurePayload(
+            backend="small_worker",
+            stage="initial_draft",
+            reason=self._backend_failure_reason(exc),
+            error=f"{exc.__class__.__name__}: {exc}",
+            prompt_size=len(initial_prompt),
+            contract_count=len(contract_summary),
+            plan_packet=initial_prompt,
+            contract_queue_summary=contract_summary,
+        )
+
+    def _backend_failure_attempt(
+        self,
+        target: str,
+        initial_prompt: str,
+        exc: Exception,
+        retry_prompt: str = "",
+        repair_error: str = "",
+        repair_worker: str = "",
+    ) -> GenerationAttempt:
+        payload = self._backend_failure_payload(initial_prompt, exc)
+        attempt = GenerationAttempt(
+            attempt=0,
+            draft="",
+            findings=[],
+            validation={
+                "is_compliant": False,
+                "violations": [
+                    {
+                        "kind": payload.reason,
+                        "engine": "backend-small-worker",
+                        "severity": "High",
+                        "summary": "Small worker failed before producing a draft",
+                        "rationale": payload.error,
+                        "current_value": payload.backend,
+                        "allowed_value": "backend returns complete Python code",
+                        "repair_hint": "architect_fallback",
+                        "evidence": asdict(payload),
+                    }
+                ],
+            },
+            behavior_validation={"is_compliant": True, "issues": []},
+            formal_validation={"is_compliant": True, "skipped": True, "tool": "formal", "issues": []},
+            retry_prompt=retry_prompt,
+            repair_worker=repair_worker,
+            repair_error=repair_error,
+            draft_source_worker="backend_failure",
+            changed=False,
+            backend_failure=asdict(payload),
+        )
+        attempt.branch_state_signature = build_branch_state_signature(target, attempt).to_dict()
+        return attempt
+
+    def _handle_initial_backend_failure(
+        self,
+        target: str,
+        initial_prompt: str,
+        exc: Exception,
+    ) -> AgentResult:
+        reason = self._backend_failure_reason(exc)
+        retry_prompt = build_backend_failure_architect_prompt(
+            stage="initial_draft",
+            backend="small_worker",
+            error=f"{exc.__class__.__name__}: {exc}",
+            plan_packet=initial_prompt,
+            contract_count=len(self._contract_summary_from_prompt(initial_prompt)),
+            contract_queue_summary=self._contract_summary_from_prompt(initial_prompt),
+        )
+        if self.architect_supplier is None:
+            session = GenerationSession(target=target, route="backend_failure", max_retries=self.max_retries)
+            attempt = self._backend_failure_attempt(target, initial_prompt, exc, retry_prompt=retry_prompt)
+            session.attempts.append(attempt)
+            session.final_status = "manual_review_required"
+            session.human_review = self._human_review_payload(reason, attempt)
+            return AgentResult(agent=self.name, payload=asdict(session))
+        try:
+            architect_draft = self.architect_supplier("", retry_prompt)
+        except Exception as architect_exc:
+            session = GenerationSession(target=target, route="backend_failure", max_retries=self.max_retries)
+            attempt = self._backend_failure_attempt(
+                target,
+                initial_prompt,
+                exc,
+                retry_prompt=retry_prompt,
+                repair_worker="architect_llm",
+                repair_error=f"{architect_exc.__class__.__name__}: {architect_exc}",
+            )
+            session.attempts.append(attempt)
+            session.final_status = "manual_review_required"
+            session.human_review = self._human_review_payload("architect_after_backend_failure_failed", attempt)
+            return AgentResult(agent=self.name, payload=asdict(session))
+        backend_attempt = self._backend_failure_attempt(
+            target,
+            initial_prompt,
+            exc,
+            retry_prompt=retry_prompt,
+            repair_worker="architect_llm",
+        )
+        return self.run(
+            target=target,
+            initial_prompt=initial_prompt,
+            draft_override=architect_draft,
+            draft_source_override="architect_llm",
+            pre_attempts=[backend_attempt],
+        )
+
+    def run(
+        self,
+        target: str,
+        initial_prompt: str,
+        draft_override: str | None = None,
+        draft_source_override: str = "draft_supplier",
+        pre_attempts: list[GenerationAttempt] | None = None,
+    ) -> AgentResult:
+        if draft_override is None:
+            try:
+                initial_draft = self.draft_supplier(initial_prompt)
+            except Exception as exc:
+                return self._handle_initial_backend_failure(target, initial_prompt, exc)
+        else:
+            initial_draft = draft_override
         initial_findings = self._scan(initial_draft)
         route = self._route(initial_findings)
         session = GenerationSession(target=target, route=route, max_retries=self.max_retries)
+        failed_attempts: list[GenerationAttempt] = list(pre_attempts or [])
+        session.attempts.extend(failed_attempts)
 
         draft = initial_draft
-        draft_source_worker = "draft_supplier"
+        draft_source_worker = draft_source_override if draft_override is not None else "draft_supplier"
         previous_draft = ""
-        failed_attempts: list[GenerationAttempt] = []
-        for attempt_index in range(self.max_retries + 1):
+        for attempt_index in range(len(failed_attempts), self.max_retries + 1):
             findings = self._scan(draft)
             validation_result: ValidationResult = validate_findings(findings, policy=self.policy)
             if self.behavior_spec is None:
@@ -637,7 +809,11 @@ class GenerationController(BaseAgent):
                         "Stopping for metric-scope manual review."
                     )
                 else:
-                    manual_review_reason = "architect_static_gate_failed"
+                    manual_review_reason = (
+                        "architect_after_backend_failure_static_gate_failed"
+                        if failed_attempts and failed_attempts[0].backend_failure
+                        else "architect_static_gate_failed"
+                    )
                     self._debug_print(
                         "Architect output failed static engine gates. Stopping instead of retrying architect."
                     )

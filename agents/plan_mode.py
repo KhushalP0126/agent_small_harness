@@ -222,8 +222,11 @@ class PlanModeAgent(BaseAgent):
             line = raw_line.strip()
             if not line:
                 continue
-            if re.fullmatch(r"[A-Z][A-Z0-9 /_-]*", line):
-                current = line
+            heading = line.lstrip("#").strip() if line.startswith("#") else line
+            is_heading = line.startswith("#") or re.fullmatch(r"[A-Z][A-Z0-9 /_-]*", line) is not None
+            normalized_heading = heading.upper()
+            if is_heading and re.fullmatch(r"[A-Z][A-Z0-9 /_-]*", normalized_heading) and not heading.startswith("- "):
+                current = normalized_heading
                 sections.setdefault(current, [])
                 continue
             if current:
@@ -233,6 +236,8 @@ class PlanModeAgent(BaseAgent):
     def _structured_field(self, sections: dict[str, list[str]], section: str, field_name: str) -> str:
         prefix = f"{field_name.lower()}:"
         for line in sections.get(section, []):
+            if line.startswith("- "):
+                line = line[2:].strip()
             if line.lower().startswith(prefix):
                 return line.split(":", 1)[1].strip()
         return ""
@@ -241,7 +246,9 @@ class PlanModeAgent(BaseAgent):
         items: list[str] = []
         for line in sections.get(section, []):
             if line.startswith("- "):
-                items.append(line[2:].strip())
+                item = line[2:].strip()
+                if ":" not in item:
+                    items.append(item)
             elif line and ":" not in line:
                 items.append(line.strip())
         return items
