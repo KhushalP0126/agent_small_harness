@@ -13,6 +13,7 @@ from prompt.architect_builder import build_state_machine_architect_prompt
 from prompt.retry_builder import build_retry_prompt, build_small_worker_retry_prompt
 from validation.behavior import FunctionBehaviorSpec, serialize_behavior_result, validate_function_behavior
 from validation.branch_loop_detector import build_branch_state_signature, detect_branching_loop
+from validation.deal_contracts import serialize_deal_contract_result, validate_deal_examples
 from validation.finding_aggregator import aggregate_violations, serialize_repair_directives
 from validation.formal import serialize_formal_result, validate_with_crosshair
 from validation.policy import serialize_validation_result, validate_findings
@@ -202,10 +203,11 @@ class GenerationController(BaseAgent):
     def _formal_violations(self, result: dict) -> list[Violation]:
         violations: list[Violation] = []
         for issue in result.get("issues", []):
+            tool = result.get("tool", "formal")
             violations.append(
                 Violation(
                     kind="formal_counterexample",
-                    engine="formal-crosshair",
+                    engine=f"formal-{tool}",
                     severity="High",
                     summary=issue.get("summary", "Formal validation failed"),
                     rationale=issue.get("details", ""),
@@ -216,6 +218,30 @@ class GenerationController(BaseAgent):
                 )
             )
         return violations
+
+    def _validate_formal_contracts(self, source: str) -> dict:
+        deal_result = validate_deal_examples(source, timeout_seconds=self.crosshair_timeout_seconds)
+        if not deal_result.is_compliant:
+            result = serialize_deal_contract_result(deal_result)
+            result["tool"] = "deal"
+            return result
+        if not deal_result.skipped:
+            result = serialize_deal_contract_result(deal_result)
+            result["tool"] = "deal"
+            return result
+        if self.crosshair_enabled:
+            return serialize_formal_result(
+                validate_with_crosshair(
+                    source,
+                    timeout_seconds=self.crosshair_timeout_seconds,
+                )
+            )
+        return {
+            "is_compliant": True,
+            "skipped": True,
+            "tool": "formal",
+            "issues": [],
+        }
 
     def _violation_key(self, violation: Violation | dict) -> str:
         if isinstance(violation, dict):
@@ -543,20 +569,7 @@ class GenerationController(BaseAgent):
                         else 1.0,
                     )
                 )
-            if self.crosshair_enabled:
-                formal_validation = serialize_formal_result(
-                    validate_with_crosshair(
-                        draft,
-                        timeout_seconds=self.crosshair_timeout_seconds,
-                    )
-                )
-            else:
-                formal_validation = {
-                    "is_compliant": True,
-                    "skipped": True,
-                    "tool": "crosshair",
-                    "issues": [],
-                }
+            formal_validation = self._validate_formal_contracts(draft)
             is_complete = (
                 validation_result.is_compliant
                 and behavior_validation["is_compliant"]

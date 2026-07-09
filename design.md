@@ -66,17 +66,18 @@ Bounds and state-flow have different policy defaults:
 Formal tooling is layered by responsibility:
 
 ```text
-Plan Mode -> Deal contract candidates
-Controller validation -> optional CrossHair counterexample checks
+Plan Mode / architect -> Deal function-contract queue
+Controller validation -> Deal example checks and optional CrossHair counterexample checks
 Architect tier -> Nagini-oriented formalization candidates
 ```
 
 Rules:
 
-- Deal belongs in the Plan layer. It turns extracted examples and explicit requirements into executable contract candidates.
+- Deal belongs in the Plan/architect layer and in controller validation. The architect can decompose a task into small function contracts, render them as `@deal.example` scaffolds, and the controller runs those Deal examples as an executable gate.
 - CrossHair belongs beside behavior validation. It is a semantic counterexample finder and may block completion only when enabled and available.
 - Nagini belongs behind the architect model. The big model may rewrite small critical helpers into typed, proof-friendly Python and add pre/postconditions, but that output is still rechecked by the harness.
 - The small worker should not be expected to invent formal contracts reliably. It should implement code against contracts supplied by Plan Mode or the architect.
+- Deal examples are not a full proof. They are concrete executable contracts that narrow the worker's target and catch known edge cases before code can complete.
 - Missing optional verifier dependencies must not break the default harness; they should skip or remain disabled unless explicitly enabled.
 
 ## Escalation Design

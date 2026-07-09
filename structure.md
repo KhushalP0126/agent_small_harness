@@ -69,6 +69,7 @@ The kernel names the shared execution boundary. It wraps the stable controller
 instead of replacing it.
 
 - `kernel/task_ir.py` - `TaskIR`, `TemplateRoute`, and `ValidationPlan` dataclasses.
+- `kernel/function_contracts.py` - Function contract queue, Deal examples, scaffold rendering, and worker packets.
 - `kernel/execution_kernel.py` - Thin wrapper that delegates `TaskIR` execution to `GenerationController`.
 - `kernel/__init__.py` - Public kernel exports.
 
@@ -99,6 +100,7 @@ Validation turns findings and runtime checks into pass/fail decisions.
 - `validation/types.py` - `Violation`, `ValidationResult`, violation kinds, and repair hints.
 - `validation/policy.py` - Maps engine findings to blocking or advisory violations.
 - `validation/behavior.py` - Timeout-bound behavioral validation for generated Python.
+- `validation/deal_contracts.py` - Executes explicit `@deal.example` contracts from generated code.
 - `validation/formal.py` - Optional CrossHair semantic validation.
 - `validation/finding_aggregator.py` - Coordination layer for grouped findings.
 - `validation/branch_loop_detector.py` - Branch-state fingerprinting and no-progress cycle detection.
@@ -112,6 +114,7 @@ Prompt builders convert structured context and findings into model-facing text.
 - `prompt/builder.py` - Initial structured prompt builder.
 - `prompt/retry_builder.py` - Low-noise small-worker and richer retry-prompt builder.
 - `prompt/architect_builder.py` - Architect-tier state-machine repair prompt builder.
+- `prompt/contract_builder.py` - Architect-tier prompt builder for Deal-compatible function contracts.
 - `prompt/__init__.py` - Package marker.
 
 ## `backends/`

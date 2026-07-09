@@ -131,10 +131,11 @@ flowchart TD
 | `agents/repair_strategy.py` | Converts violations into scoped repair instructions |
 | `agents/template_registry.py` | Optional injected template-route selector, with no built-in app-specific route |
 | `kernel/task_ir.py` | Structured task/spec handoff types |
+| `kernel/function_contracts.py` | Function-level contract queue and Deal scaffold rendering |
 | `kernel/execution_kernel.py` | Thin execution wrapper around the controller |
 | `engines/` | Static analysis engines |
-| `validation/` | Policy, behavior, formal validation, branch-loop detection, and violation types |
-| `prompt/` | Initial, retry, and architect prompt builders |
+| `validation/` | Policy, behavior, Deal/CrossHair formal validation, branch-loop detection, and violation types |
+| `prompt/` | Initial, retry, architect, and contract-architect prompt builders |
 | `backends/` | Ollama worker and API architect clients |
 | `scripts/` | Ladder runners, raw-vs-harness comparison, history aggregation, review tools |
 | `tests/` | Unit, integration, edge-case, ladder, and pipeline tests |

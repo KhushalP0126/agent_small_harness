@@ -104,8 +104,11 @@ include the full finding set plus deltas and preserved graph/state context.
 
 ## Plan-Layer Contracts
 
-Plan Mode may emit Deal contract candidates from extracted examples. These are
-specification scaffolds, not proof.
+Plan Mode or the architect may emit Deal contract candidates from extracted
+examples. These contracts serve two jobs:
+
+- narrow the small worker's function-level implementation target
+- provide executable `@deal.example` checks for the controller
 
 ```python
 import deal
@@ -116,14 +119,19 @@ def parse_int_list(text: str) -> list[int]:
     ...
 ```
 
-The small worker should implement against contracts. It should not be expected
-to invent reliable formal contracts.
+The small worker should implement against one function contract at a time. It
+should not be expected to invent reliable formal contracts.
+
+The controller runs explicit Deal examples when generated code contains Deal
+decorators. A failed `@deal.example` becomes a formal validation failure and
+routes to repair or manual review like any other blocking gate.
 
 ## Optional Formal Validation
 
 Formal tooling is tiered:
 
-- Deal belongs in the Plan layer as contract scaffolding.
+- Deal belongs in the Plan/architect layer as function contract scaffolding and
+  in the controller as an executable example gate.
 - CrossHair belongs beside behavior validation as an optional semantic validator.
 - Nagini belongs at the architect tier for proof-friendly rewrites of critical helpers.
 
