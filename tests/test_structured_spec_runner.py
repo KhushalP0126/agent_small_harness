@@ -17,16 +17,16 @@ from kernel.function_contracts import ContractQueue, DealExample, FunctionContra
 class StructuredSpecRunnerTests(unittest.TestCase):
     def test_plan_mode_extracts_markdown_structured_spec(self) -> None:
         prompt = """
-## Game Spec
+## App Spec
 
-- name: snake
+- name: workflow_app
 - language: python
-- library: pygame
+- library: visualkit
 - kernel_mode: generate_from_spec
 
 ## Required Components
 
-- `GameConfig`
+- `AppConfig`
 - `main()`
 
 ## Entrypoint
@@ -40,9 +40,9 @@ class StructuredSpecRunnerTests(unittest.TestCase):
 
         plan = PlanModeAgent().plan(prompt)
 
-        self.assertEqual(plan.app_name, "snake")
-        self.assertIn("pygame", plan.allowed_libraries)
-        self.assertIn("`GameConfig`", plan.components)
+        self.assertEqual(plan.app_name, "workflow_app")
+        self.assertIn("visualkit", plan.allowed_libraries)
+        self.assertIn("`AppConfig`", plan.components)
         self.assertIn("`main()`", plan.components)
         self.assertIn("`main()`", plan.entrypoints)
         self.assertIn("state -> render", plan.dependency_graph_context)
@@ -52,7 +52,7 @@ class StructuredSpecRunnerTests(unittest.TestCase):
             """
 ## Required Components
 
-- `GameConfig`
+- `AppConfig`
 - `main()`
 
 ## Entrypoint
@@ -66,14 +66,14 @@ class StructuredSpecRunnerTests(unittest.TestCase):
 
         self.assertEqual(len(issues), 1)
         self.assertEqual(issues[0]["kind"], "missing_component")
-        self.assertIn("GameConfig", issues[0]["summary"])
+        self.assertIn("AppConfig", issues[0]["summary"])
 
     def test_structured_spec_gate_accepts_required_components(self) -> None:
         plan = PlanModeAgent().plan(
             """
 ## Required Components
 
-- `GameConfig`
+- `AppConfig`
 - `main()`
 
 ## Entrypoint
@@ -81,22 +81,43 @@ class StructuredSpecRunnerTests(unittest.TestCase):
 - `main()`
 """
         )
-        source = "class GameConfig:\n    pass\n\ndef main():\n    pass\n"
+        source = "class AppConfig:\n    pass\n\ndef main():\n    pass\n"
 
         self.assertEqual(_validate_structured_spec_output(source, plan), [])
 
-    def test_structured_snake_spec_gets_fallback_contract_queue(self) -> None:
+    def test_structured_spec_gets_generic_fallback_contract_queue(self) -> None:
         plan = PlanModeAgent().plan(
             """
-## Game Spec
+## App Spec
 
-- name: snake
+- name: workflow_app
 - language: python
 
 ## Required Components
 
+- `AppConfig`
+- `DataState`
 - `main()`
 - `update_state()`
+- `render()`
+
+## Entrypoint
+
+- `main()`
+
+## State Rules
+
+- `normalize_value(value: int) -> int` converts input values before state updates.
+
+## Behavior Examples
+
+- normalize_value(-1) == 0
+
+## Dependency Graph
+
+- AppConfig -> update_state -> main
+- DataState -> update_state -> render -> main
+- normalize_value -> update_state
 """
         )
 
@@ -104,10 +125,15 @@ class StructuredSpecRunnerTests(unittest.TestCase):
 
         self.assertTrue(fallback_used)
         names = [contract.name for contract in queue.contracts]
-        self.assertLess(names.index("GameConfig"), names.index("update_state"))
-        self.assertLess(names.index("SnakeState"), names.index("update_state"))
+        self.assertLess(names.index("AppConfig"), names.index("update_state"))
+        self.assertLess(names.index("DataState"), names.index("update_state"))
+        self.assertLess(names.index("normalize_value"), names.index("update_state"))
         self.assertIn("update_state", names)
+        self.assertIn("render", names)
         self.assertIn("main", names)
+        normalize_value = next(contract for contract in queue.contracts if contract.name == "normalize_value")
+        self.assertEqual(normalize_value.signature, "def normalize_value(value: int) -> int")
+        self.assertEqual(normalize_value.examples[0].call, "normalize_value(-1)")
         main = next(contract for contract in queue.contracts if contract.name == "main")
         self.assertIn("update_state", main.dependencies)
         self.assertIn("render", main.dependencies)
@@ -160,20 +186,20 @@ class StructuredSpecRunnerTests(unittest.TestCase):
             """
 ## Dependency Graph
 
-- SnakeState -> step_state
+- DataState -> apply_delta
 """
         )
         queue = ContractQueue(
             [
                 FunctionContract(
-                    name="step_state",
-                    signature="def step_state(state: SnakeState) -> SnakeState",
-                    examples=[DealExample("step_state(SnakeState(1)).value", "2")],
+                    name="apply_delta",
+                    signature="def apply_delta(state: DataState) -> DataState",
+                    examples=[DealExample("apply_delta(DataState(1)).value", "2")],
                 ),
                 FunctionContract(
-                    name="SnakeState",
+                    name="DataState",
                     kind="class",
-                    signature="class SnakeState:",
+                    signature="class DataState:",
                     purpose="Hold a value.",
                 ),
             ]
@@ -181,17 +207,17 @@ class StructuredSpecRunnerTests(unittest.TestCase):
         calls = []
 
         def generate(prompt: str) -> str:
-            if "NAME: SnakeState" in prompt:
-                calls.append("SnakeState")
-                return "class SnakeState:\n    def __init__(self, value):\n        self.value = value\n"
-            if "NAME: step_state" in prompt:
-                calls.append("step_state")
-                return "def step_state(state: SnakeState) -> SnakeState:\n    return SnakeState(state.value + 1)\n"
+            if "NAME: DataState" in prompt:
+                calls.append("DataState")
+                return "class DataState:\n    def __init__(self, value):\n        self.value = value\n"
+            if "NAME: apply_delta" in prompt:
+                calls.append("apply_delta")
+                return "def apply_delta(state: DataState) -> DataState:\n    return DataState(state.value + 1)\n"
             raise AssertionError("unexpected prompt")
 
         accepted_sources, results = _run_contract_queue_sequentially(queue, plan, generate)
 
-        self.assertEqual(calls, ["SnakeState", "step_state"])
+        self.assertEqual(calls, ["DataState", "apply_delta"])
         self.assertEqual([result.status for result in results], ["accepted", "accepted"])
         self.assertEqual(len(accepted_sources), 2)
 
@@ -286,60 +312,60 @@ class StructuredSpecRunnerTests(unittest.TestCase):
     def test_small_worker_contract_prompt_uses_local_graph_slice(self) -> None:
         plan = PlanModeAgent().plan(
             """
-## Game Spec
+## App Spec
 
-- name: snake
+- name: workflow_app
 - language: python
-- library: pygame
+- library: visualkit
 
 ## Dependency Graph
 
-- SnakeState -> step_state -> render
+- DataState -> apply_delta -> render
 - unrelated_menu -> splash_screen
 
 ## Update Rules
 
-- step_state updates the snake body.
+- apply_delta updates the accumulated value.
 - render draws the current frame.
 """
         )
         contract = FunctionContract(
-            name="step_state",
-            signature="def step_state(state: SnakeState) -> SnakeState",
-            dependencies=["SnakeState"],
+            name="apply_delta",
+            signature="def apply_delta(state: DataState) -> DataState",
+            dependencies=["DataState"],
         )
 
         prompt = _single_contract_prompt(
             plan,
             contract,
-            ["class SnakeState:\n    pass\n"],
-            ["SnakeState"],
+            ["class DataState:\n    pass\n"],
+            ["DataState"],
         )
 
         self.assertIn("LOCAL GRAPH CONTEXT:", prompt)
-        self.assertIn("SnakeState -> step_state -> render", prompt)
-        self.assertIn("step_state updates the snake body", prompt)
-        self.assertIn("class SnakeState", prompt)
+        self.assertIn("DataState -> apply_delta -> render", prompt)
+        self.assertIn("apply_delta updates the accumulated value", prompt)
+        self.assertIn("class DataState", prompt)
         self.assertNotIn("unrelated_menu", prompt)
 
     def test_placeholder_main_fails_structured_spec_gate(self) -> None:
         plan = PlanModeAgent().plan(
             """
-## Game Spec
+## App Spec
 
-- name: snake
+- name: workflow_app
 
 ## Required Components
 
-- `GameConfig`
+- `AppConfig`
 - `main()`
 """
         )
 
-        issues = _validate_structured_spec_output('def main():\n    print("snake")\n', plan)
+        issues = _validate_structured_spec_output('def main():\n    print("placeholder")\n', plan)
 
         self.assertEqual([issue["kind"] for issue in issues], ["missing_component"])
-        self.assertIn("GameConfig", issues[0]["summary"])
+        self.assertIn("AppConfig", issues[0]["summary"])
 
     def test_contract_architect_uses_light_profile(self) -> None:
         class StubClient:

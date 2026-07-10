@@ -459,6 +459,31 @@ class LintEngineEdgeCaseTests(unittest.TestCase):
         self.assertEqual(finding.severity, "Warn")
         self.assertTrue(validate_findings([finding]).is_compliant)
 
+    def test_registered_dynamic_library_call_is_lint_warning(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fake_pylint = Path(tmpdir) / "fake_pylint"
+            fake_pylint.write_text(
+                "#!/usr/bin/env python3\n"
+                "import json\n"
+                "print(json.dumps([{\n"
+                "    'type': 'error',\n"
+                "    'module': 'tmp',\n"
+                "    'obj': '',\n"
+                "    'line': 2,\n"
+                "    'column': 0,\n"
+                "    'path': 'tmp.py',\n"
+                "    'symbol': 'no-member',\n"
+                "    'message': \"Module 'pygame' has no 'init' member\",\n"
+                "    'message-id': 'E1101'\n"
+                "}]))\n",
+                encoding="utf-8",
+            )
+            fake_pylint.chmod(fake_pylint.stat().st_mode | stat.S_IXUSR)
+            finding = LintEngine(executable=str(fake_pylint)).scan("import pygame\npygame.init()\n")[0]
+        self.assertEqual(finding.summary, "Registered dynamic library member warning")
+        self.assertEqual(finding.severity, "Warn")
+        self.assertTrue(validate_findings([finding]).is_compliant)
+
     def test_unregistered_dynamic_library_member_remains_lint_blocking(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             fake_pylint = Path(tmpdir) / "fake_pylint"

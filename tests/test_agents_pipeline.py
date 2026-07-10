@@ -889,12 +889,12 @@ def analyze(value):
     def test_backend_failure_payload_includes_contract_count(self) -> None:
         initial_prompt = """
 PLAN PACKET:
-FUNCTION: snake
+FUNCTION: workflow
 FUNCTIONWISE WORKER PACKETS:
 FUNCTION CONTRACT PACKET:
-NAME: next_head
+NAME: prepare_record
 FUNCTION CONTRACT PACKET:
-NAME: hits_wall
+NAME: validate_record
 """
 
         def draft_supplier(_prompt: str) -> str:
@@ -909,7 +909,7 @@ NAME: hits_wall
 
         backend_failure = result.payload["attempts"][0]["backend_failure"]
         self.assertEqual(backend_failure["contract_count"], 2)
-        self.assertEqual(backend_failure["contract_queue_summary"], ["next_head", "hits_wall"])
+        self.assertEqual(backend_failure["contract_queue_summary"], ["prepare_record", "validate_record"])
         self.assertIn("Contract count: 2", result.payload["attempts"][0]["retry_prompt"])
 
     def test_architect_output_after_backend_failure_is_validated(self) -> None:

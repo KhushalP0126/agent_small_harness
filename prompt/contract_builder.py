@@ -39,7 +39,7 @@ def build_deal_contract_architect_prompt(
             "",
             "CONTRACT RULES:",
             "- Include data/class contracts before functions that use those types.",
-            "- For classes, use kind='class' and a signature such as 'class SnakeState:'.",
+            "- For classes, use kind='class' and a signature such as 'class DataState:'.",
             "- For constants/enums, use kind='class' when a small namespace class is enough.",
             "- Each contract must be independently implementable.",
             "- Keep each contract small enough for a local worker to implement.",

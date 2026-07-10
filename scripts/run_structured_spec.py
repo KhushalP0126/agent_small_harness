@@ -29,70 +29,9 @@ from kernel.function_contracts import ContractQueue, DealExample, FunctionContra
 
 
 DEFAULT_ARTIFACT_ROOT = Path("artifacts/runs")
-FALLBACK_CONTRACT_LIBRARY = {
-    "GameConfig": FunctionContract(
-        name="GameConfig",
-        kind="class",
-        signature="class GameConfig:",
-        purpose="Hold width, height, cell_size, and fps settings.",
-    ),
-    "Direction": FunctionContract(
-        name="Direction",
-        kind="class",
-        signature="class Direction:",
-        purpose="Expose UP, DOWN, LEFT, and RIGHT direction constants.",
-    ),
-    "SnakeState": FunctionContract(
-        name="SnakeState",
-        kind="class",
-        signature="class SnakeState:",
-        purpose="Hold snake body, direction, next_direction, food, score, and game_over state.",
-        dependencies=["Direction"],
-    ),
-    "opposite_direction": FunctionContract(
-        name="opposite_direction",
-        signature="def opposite_direction(a: tuple[int, int], b: tuple[int, int]) -> bool",
-        purpose="Return True when two movement vectors are direct opposites.",
-        examples=[
-            DealExample("opposite_direction((1, 0), (-1, 0))", "True"),
-            DealExample("opposite_direction((1, 0), (0, 1))", "False"),
-        ],
-    ),
-    "next_head": FunctionContract(
-        name="next_head",
-        signature="def next_head(head: tuple[int, int], direction: tuple[int, int]) -> tuple[int, int]",
-        purpose="Return the next grid coordinate after moving one cell.",
-        examples=[DealExample("next_head((5, 5), (1, 0))", "(6, 5)")],
-    ),
-    "hits_wall": FunctionContract(
-        name="hits_wall",
-        signature="def hits_wall(head: tuple[int, int], width: int, height: int) -> bool",
-        purpose="Return True when the head coordinate is outside the board.",
-        examples=[
-            DealExample("hits_wall((-1, 5), 20, 20)", "True"),
-            DealExample("hits_wall((10, 10), 20, 20)", "False"),
-        ],
-    ),
-    "hits_self": FunctionContract(
-        name="hits_self",
-        signature="def hits_self(head: tuple[int, int], body: list[tuple[int, int]]) -> bool",
-        purpose="Return True when the head coordinate overlaps the snake body.",
-        examples=[DealExample("hits_self((3, 3), [(1, 1), (3, 3)])", "True")],
-    ),
-}
-
-FALLBACK_DEPENDENCIES = {
-    "SnakeState": ["Direction"],
-    "spawn_food": ["hits_self"],
-    "choose_food": ["hits_self"],
-    "check_collision": ["hits_wall", "hits_self"],
-    "update_state": ["SnakeState", "GameConfig", "next_head", "hits_wall", "hits_self", "spawn_food"],
-    "step_state": ["SnakeState", "GameConfig", "next_head", "hits_wall", "hits_self", "choose_food"],
-    "create_initial_state": ["GameConfig", "SnakeState", "Direction", "spawn_food"],
-    "handle_input": ["SnakeState", "Direction", "opposite_direction"],
-    "render": [],
-    "main": ["GameConfig", "create_initial_state", "handle_input", "update_state", "render"],
-}
+HELPER_SIGNATURE_RE = re.compile(
+    r"`?(?P<name>[A-Za-z_][A-Za-z0-9_]*)\((?P<args>[^`]*)\)\s*(?:->|=>)\s*(?P<returns>[^`]+)`?"
+)
 
 
 @dataclass
@@ -142,40 +81,124 @@ def _contract_queue_from_architect(plan_packet: str, plan_context: str, profile)
 
 
 def _fallback_contract_queue(plan) -> tuple[ContractQueue, bool]:
-    component_names = [_normalize_symbol(component) for component in plan.components]
-    component_names = [name for name in component_names if name]
-    entrypoint_names = [_normalize_symbol(entrypoint) for entrypoint in plan.entrypoints]
-    entrypoint_names = [name for name in entrypoint_names if name]
-    names = _ordered_unique([*component_names, *entrypoint_names])
+    contracts_by_name = _fallback_contracts_from_plan(plan)
+    names = _ordered_unique(list(contracts_by_name))
     if not names:
         return ContractQueue(), False
-    seed_names = _fallback_dependency_closure(names)
     contracts: list[FunctionContract] = []
     seen: set[str] = set()
-    for name in [*seed_names, *names]:
+    for name in _topological_contract_names(names, contracts_by_name):
         if name in seen:
             continue
         seen.add(name)
-        if name in FALLBACK_CONTRACT_LIBRARY:
-            contracts.append(FALLBACK_CONTRACT_LIBRARY[name])
-            continue
-        dependencies = [
-            dependency
-            for dependency in FALLBACK_DEPENDENCIES.get(name, [])
-            if dependency in seen or dependency in names or dependency in FALLBACK_CONTRACT_LIBRARY
-        ]
-        kind = "class" if name[:1].isupper() else "function"
-        signature = f"class {name}:" if kind == "class" else f"def {name}(*args, **kwargs)"
-        contracts.append(
+        contracts.append(contracts_by_name[name])
+    return ContractQueue(contracts), True
+
+
+def _fallback_contracts_from_plan(plan) -> dict[str, FunctionContract]:
+    raw_items = [*plan.components, *plan.entrypoints]
+    helper_items = _helper_contract_items(plan.state_machine_constraints)
+    contracts: dict[str, FunctionContract] = {}
+    known_names = {
+        _normalize_symbol(item)
+        for item in [*raw_items, *helper_items]
+        if _normalize_symbol(item)
+    }
+    examples_by_name: dict[str, list[DealExample]] = {}
+    for case in plan.behavior_cases:
+        name = _normalize_symbol(case.call)
+        if name:
+            examples_by_name.setdefault(name, []).append(DealExample(case.call, case.expected))
+            known_names.add(name)
+
+    for item in [*raw_items, *helper_items]:
+        contract = _contract_from_spec_item(item)
+        if contract.name:
+            contracts[contract.name] = contract
+    for name, examples in examples_by_name.items():
+        contracts.setdefault(
+            name,
             FunctionContract(
                 name=name,
-                kind=kind,
-                signature=signature,
+                signature=f"def {name}(*args, **kwargs)",
                 purpose=f"Implement the `{name}` component required by the structured spec.",
-                dependencies=dependencies,
-            )
+            ),
         )
-    return ContractQueue(contracts), True
+        contracts[name].examples.extend(examples)
+    dependencies_by_name = _dependencies_from_graph(plan.dependency_graph_context, known_names)
+    for name, contract in contracts.items():
+        contract.dependencies.extend(
+            dependency
+            for dependency in dependencies_by_name.get(name, [])
+            if dependency != name and dependency in contracts and dependency not in contract.dependencies
+        )
+    return contracts
+
+
+def _helper_contract_items(items: list[str]) -> list[str]:
+    return [item for item in items if HELPER_SIGNATURE_RE.search(item)]
+
+
+def _contract_from_spec_item(item: str) -> FunctionContract:
+    value = item.strip().strip("- ").strip()
+    helper_match = HELPER_SIGNATURE_RE.search(value)
+    if helper_match:
+        name = helper_match.group("name")
+        args = helper_match.group("args").strip()
+        returns = helper_match.group("returns").strip().strip(".")
+        return FunctionContract(
+            name=name,
+            signature=f"def {name}({args}) -> {returns}",
+            purpose=f"Implement the `{name}` component required by the structured spec.",
+        )
+    name = _normalize_symbol(value)
+    kind = "class" if name[:1].isupper() else "function"
+    signature = f"class {name}:" if kind == "class" else f"def {name}(*args, **kwargs)"
+    return FunctionContract(
+        name=name,
+        kind=kind,
+        signature=signature,
+        purpose=f"Implement the `{name}` component required by the structured spec.",
+    )
+
+
+def _dependencies_from_graph(graph_lines: list[str], known_names: set[str]) -> dict[str, list[str]]:
+    dependencies: dict[str, list[str]] = {name: [] for name in known_names}
+    for line in graph_lines:
+        symbols = [
+            token
+            for token in re.findall(r"`?([A-Za-z_][A-Za-z0-9_]*)`?", line)
+            if token in known_names
+        ]
+        for left, right in zip(symbols, symbols[1:]):
+            if left == right:
+                continue
+            dependencies.setdefault(right, [])
+            if left not in dependencies[right]:
+                dependencies[right].append(left)
+    return dependencies
+
+
+def _topological_contract_names(names: list[str], contracts: dict[str, FunctionContract]) -> list[str]:
+    ordered: list[str] = []
+    temporary: set[str] = set()
+    permanent: set[str] = set()
+
+    def visit(name: str) -> None:
+        if name in permanent or name not in contracts:
+            return
+        if name in temporary:
+            return
+        temporary.add(name)
+        for dependency in contracts[name].dependencies:
+            visit(dependency)
+        temporary.remove(name)
+        permanent.add(name)
+        ordered.append(name)
+
+    for name in names:
+        visit(name)
+    return ordered
 
 
 def _ordered_unique(items: list[str]) -> list[str]:
@@ -187,25 +210,6 @@ def _ordered_unique(items: list[str]) -> list[str]:
         seen.add(item)
         ordered.append(item)
     return ordered
-
-
-def _fallback_dependency_closure(names: list[str]) -> list[str]:
-    ordered: list[str] = []
-    seen: set[str] = set()
-
-    def visit(name: str) -> None:
-        for dependency in FALLBACK_DEPENDENCIES.get(name, []):
-            if dependency in seen:
-                continue
-            if dependency not in FALLBACK_CONTRACT_LIBRARY and dependency not in FALLBACK_DEPENDENCIES:
-                continue
-            seen.add(dependency)
-            visit(dependency)
-            ordered.append(dependency)
-
-    for name in names:
-        visit(name)
-    return _ordered_unique(ordered)
 
 
 def _initial_prompt(plan_packet: str, queue: ContractQueue) -> str:
@@ -725,6 +729,8 @@ def _integration_prompt(plan_packet: str, accepted_sources: list[str], results: 
             "FINAL INTEGRATION RULES:",
             "- Preserve accepted helper behavior.",
             "- Add any required classes, adapters, entrypoints, and glue code from the spec.",
+            "- Do not drop, rename, or omit required components or entrypoints from the structured spec.",
+            "- The final module must define every required symbol even when a helper is implemented differently internally.",
             "- Do not use file I/O, network calls, eval, or exec.",
             "- Keep the main loop guarded by if __name__ == \"__main__\" when an app entrypoint is required.",
             "- The final code will be scanned by all engines and formal/Deal gates.",

@@ -126,7 +126,9 @@ class LintEngine(BaseEngine):
             return False
         module_name, member_name = match.groups()
         schema = self.library_registry.get(module_name)
-        return schema is not None and member_name in schema.allowed_constants
+        return schema is not None and (
+            member_name in schema.allowed_constants or member_name in schema.allowed_calls
+        )
 
     def _warning_for_registered_dynamic_member(self, message: dict) -> EngineFinding:
         symbol = str(message.get("symbol", "no-member"))
@@ -149,7 +151,7 @@ class LintEngine(BaseEngine):
             },
             diagnostic=EngineDiagnostic(
                 violation="",
-                threshold="registered dynamic library constants are advisory",
+                threshold="registered dynamic library members are advisory",
                 actual=f"{message_id} {symbol}".strip(),
                 location=f"line {line}:{column}",
                 recommended_refactor="",

@@ -109,7 +109,15 @@ class PlanModeAgent(BaseAgent):
         state_machine_constraints = self._state_machine_constraints(normalized.normalized_prompt)
         for item in self._structured_constraints(
             structured_sections,
-            ("STATE", "GAME LOOP", "INPUT RULES", "UPDATE RULES", "VALIDATION RULES", "PURE TESTABLE HELPERS"),
+            (
+                "STATE",
+                "STATE RULES",
+                "GAME LOOP",
+                "INPUT RULES",
+                "UPDATE RULES",
+                "VALIDATION RULES",
+                "PURE TESTABLE HELPERS",
+            ),
         ):
             if item not in state_machine_constraints:
                 state_machine_constraints.append(item)
@@ -129,9 +137,9 @@ class PlanModeAgent(BaseAgent):
             goal=normalized.normalized_prompt,
             task_type=classification.task_type,
             language=classification.language,
-            app_name=self._structured_field(structured_sections, "GAME SPEC", "name"),
-            game_kind=self._structured_field(structured_sections, "GAME SPEC", "game_kind"),
-            kernel_mode=self._structured_field(structured_sections, "GAME SPEC", "kernel_mode") or "generate_from_spec",
+            app_name=self._structured_meta_field(structured_sections, "name"),
+            game_kind=self._structured_meta_field(structured_sections, "game_kind"),
+            kernel_mode=self._structured_meta_field(structured_sections, "kernel_mode") or "generate_from_spec",
             files=self._structured_items(structured_sections, "FILES"),
             entrypoints=self._structured_items(structured_sections, "ENTRYPOINT"),
             components=self._structured_items(structured_sections, "REQUIRED COMPONENTS"),
@@ -212,6 +220,13 @@ class PlanModeAgent(BaseAgent):
                 return match.group("name")
         return ""
 
+    def _structured_meta_field(self, sections: dict[str, list[str]], field_name: str) -> str:
+        for section in ("APP SPEC", "GAME SPEC", "SPEC"):
+            value = self._structured_field(sections, section, field_name)
+            if value:
+                return value
+        return ""
+
     def _is_structured_app_spec(self, sections: dict[str, list[str]]) -> bool:
         return any(name in sections for name in ("FILES", "REQUIRED COMPONENTS", "ENTRYPOINT"))
 
@@ -260,7 +275,10 @@ class PlanModeAgent(BaseAgent):
     ) -> list[str]:
         constraints: list[str] = []
         for name in names:
-            for item in self._structured_items(sections, name):
+            for line in sections.get(name, []):
+                item = line[2:].strip() if line.startswith("- ") else line.strip()
+                if not item:
+                    continue
                 if item not in constraints:
                     constraints.append(item)
         return constraints
@@ -268,8 +286,16 @@ class PlanModeAgent(BaseAgent):
     def _behavior_cases(self, prompt: str) -> list[PlannedBehaviorCase]:
         cases: list[PlannedBehaviorCase] = []
         for index, match in enumerate(CALL_EXPECTATION_RE.finditer(prompt), start=1):
+            if re.search(r"(^|,)\s*[A-Za-z_][A-Za-z0-9_]*\s*:", match.group("args")):
+                continue
+            expected = match.group("expected").strip().rstrip(".").strip("`")
+            expected_type = expected.split("[", 1)[0]
+            if "->" in match.group(0) and (
+                expected_type in {"bool", "int", "str", "float", "list", "dict", "tuple", "set"}
+                or re.fullmatch(r"[A-Z][A-Za-z0-9_]*(?:\[.*\])?", expected) is not None
+            ):
+                continue
             call = f"{match.group('function')}({match.group('args').strip()})"
-            expected = match.group("expected").strip().rstrip(".")
             cases.append(
                 PlannedBehaviorCase(
                     name=f"case_{index}",
@@ -307,7 +333,7 @@ class PlanModeAgent(BaseAgent):
         libraries = list(classification.libraries)
         structured_sections = structured_sections or {}
         for field in ("library", "libraries", "allowed_libraries"):
-            value = self._structured_field(structured_sections, "GAME SPEC", field)
+            value = self._structured_meta_field(structured_sections, field)
             for item in re.split(r"[, ]+", value):
                 item = item.strip()
                 if item and item not in libraries:
