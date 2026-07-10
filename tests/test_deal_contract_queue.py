@@ -2,8 +2,14 @@ import unittest
 
 from agents.generation_controller import GenerationController
 from engines.hazards_engine import HazardsEngine
-from kernel.function_contracts import ContractQueue, DealExample, FunctionContract, parse_contract_queue_json
-from prompt.contract_builder import build_deal_contract_architect_prompt
+from kernel.function_contracts import (
+    ContractQueue,
+    DealExample,
+    FunctionContract,
+    parse_contract_queue_json,
+    parse_contract_queue_plan_json,
+)
+from prompt.contract_builder import build_contract_queue_planner_prompt, build_deal_contract_architect_prompt
 from scripts.run_structured_spec import _initial_prompt
 from validation.deal_contracts import is_deal_available, validate_deal_examples
 from validation.policy import validate_findings
@@ -23,6 +29,39 @@ class DealContractQueueTests(unittest.TestCase):
         self.assertIn('"dependencies"', prompt)
         self.assertIn("Do not return markdown. Do not implement function bodies.", prompt)
         self.assertIn("DEPENDENCY GRAPH:", prompt)
+
+    def test_contract_planner_prompt_requests_plan_not_full_contracts(self) -> None:
+        prompt = build_contract_queue_planner_prompt(
+            plan_packet="PLAN PACKET:\nTASK: app",
+            preserved_context="DEPENDENCY GRAPH:\n- State -> update -> main",
+            available_contracts=["State", "update", "main"],
+        )
+
+        self.assertIn("CONTRACT QUEUE PLANNER MODE", prompt)
+        self.assertIn('"contract_order"', prompt)
+        self.assertIn('"dependencies"', prompt)
+        self.assertIn('"contract_notes"', prompt)
+        self.assertIn("- State", prompt)
+        self.assertIn("Do not include signatures, examples, code, or full contracts.", prompt)
+        self.assertNotIn('"signature"', prompt)
+        self.assertNotIn('"contracts"', prompt)
+
+    def test_parse_contract_queue_plan_json_accepts_minimal_plan(self) -> None:
+        plan = parse_contract_queue_plan_json(
+            """
+```json
+{
+  "contract_order": ["State", "update", "main"],
+  "dependencies": {"update": ["State"], "main": ["update"]},
+  "contract_notes": {"update": "preserve state transition semantics"}
+}
+```
+"""
+        )
+
+        self.assertEqual(plan.contract_order, ["State", "update", "main"])
+        self.assertEqual(plan.dependencies["main"], ["update"])
+        self.assertEqual(plan.contract_notes["update"], "preserve state transition semantics")
 
     def test_parses_fenced_contract_queue_json(self) -> None:
         queue = parse_contract_queue_json(

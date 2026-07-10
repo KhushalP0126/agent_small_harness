@@ -56,3 +56,53 @@ def build_deal_contract_architect_prompt(
             plan_packet.strip(),
         ]
     )
+
+
+def build_contract_queue_planner_prompt(
+    plan_packet: str,
+    preserved_context: str = "",
+    available_contracts: list[str] | None = None,
+) -> str:
+    """Build a compact architect prompt for ordering spec-derived contracts."""
+
+    available = available_contracts or []
+    return "\n".join(
+        [
+            "CONTRACT QUEUE PLANNER MODE",
+            "",
+            "You are not implementing code and you are not writing full contracts.",
+            "The harness already derived function/class contracts from the structured spec.",
+            "Your job is only to decide the safest sequential queue plan for a small local worker.",
+            "",
+            "Return JSON only. Do not return markdown. Do not include signatures, examples, code, or full contracts.",
+            "",
+            "JSON SCHEMA:",
+            "{",
+            '  "contract_order": ["symbol_name"],',
+            '  "dependencies": {',
+            '    "symbol_name": ["earlier_symbol_required_first"]',
+            "  },",
+            '  "contract_notes": {',
+            '    "symbol_name": "short implementation note for this contract"',
+            "  }",
+            "}",
+            "",
+            "PLANNING RULES:",
+            "- Use only names listed in AVAILABLE CONTRACTS.",
+            "- Put data/classes/constants before helpers that use them.",
+            "- Put pure helpers before state update functions.",
+            "- Put state update functions before render and main.",
+            "- Put integration/entrypoint functions last.",
+            "- Dependencies must point only to earlier required symbols.",
+            "- Keep notes short and focused on state, edge cases, or validation risks.",
+            "",
+            "AVAILABLE CONTRACTS:",
+            "\n".join(f"- {name}" for name in available) if available else "(none)",
+            "",
+            "PRESERVED CONTEXT:",
+            preserved_context.strip() or "(none)",
+            "",
+            "PLAN PACKET:",
+            plan_packet.strip(),
+        ]
+    )

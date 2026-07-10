@@ -1,0 +1,24 @@
+This dataset is genuinely useful — it's the first time you've directly compared "does the harness reshape code" against "does the harness fix correctness," on the same tasks, side by side. And it surfaces a real design flaw, not just a data point: **task 7 is a regression in your harness's own decision logic, and it's worse than it looks.**
+
+**Task 7 is the important finding here — flag it as a bug, not a data point.**
+
+Raw code passed behavior validation — meaning it was *verified correct* against real inputs — and your harness still blocked it for exceeding a complexity threshold. That's the over-strictness failure mode you asked about all the way back in your first message (Q6: "how do I avoid engines becoming too strict and blocking good code"), and now you have a concrete instance of it actually happening. Worse: think about what "fixing" this normally means in your loop — triggering a repair prompt to simplify already-correct code. That's precisely the situation that produced the `key_set` regression on `parse_key_value_lines` a few turns back — an engine finding pushing a *working* solution into a rewrite that risks breaking semantics that weren't broken to begin with. Your policy layer currently can't distinguish "this code is wrong, fix it" from "this code is right but a static heuristic doesn't like its shape," and those need fundamentally different handling:
+
+- **Behavior fails** → block, repair is mandatory, engines drive the repair prompt (current behavior, correct).
+- **Behavior passes, static engine finds a quality issue** → this should never be `manual_review_required` at the same severity as a real failure. It should be a *non-blocking* advisory: surface it to the human as "correct but complex, optional simplification available," and only actually trigger a rewrite if a human explicitly requests it. Otherwise you're spending repair budget — and taking on correctness risk — on code that already works, purely to satisfy a heuristic.
+
+This is a concrete, scoped fix: add a `behavior_verified` flag to the policy decision, and have any purely-structural finding (complexity, loop depth, cost) demote to advisory when that flag is true. Parse contract and hazards findings should probably still hard-block regardless (a security/hazard issue in verified-correct code is still worth stopping on), but complexity/branching/cost specifically should not.
+
+**Task 5 confirms your standing conclusion, cleanly.** LOC and CC both improved (18→15, 9→7) and behavior still failed — the harness successfully changed the *shape* of the code without touching whether it was *right*. This is good supporting evidence for "engines don't solve semantic reasoning," worth keeping as a reference case alongside `parse_int_list`.
+
+**Task 6 is worth a closer look before you file it as "no improvement."** LOC went from 23 to 25 — the harness made the code *bigger* and didn't reduce complexity at all (8→8), and it still fails. That's not neutral, it's a wasted retry that added surface area without progress. Worth pulling that specific artifact and checking: did the repair prompt target the actual complexity finding, or did it chase a different (possibly lower-priority) finding while complexity sat untouched? If your one-finding-at-a-time routing picked something other than complexity as the "highest priority" finding for that task, that's a prioritization bug in the `RetryBuilder`, not a model capability limit — worth ruling out before concluding the 3B worker just couldn't do it.
+
+**On the 1.5B vs 3B question implicit in this test:** the 3B worker is meaningfully cleaner on easy-to-medium tasks (loop depth stayed at 1 for six of seven tasks, vs. what you'd likely see from 1.5B), but it still produces the same branch-heavy pattern on hard tasks (CC 9, 8, 12 on tasks 5–7) that your engines exist to catch. That tells you upgrading the worker model buys you fewer trivial engine triggers on easy tasks, but doesn't change the fundamental shape of the hard-task problem — which is still "harder tasks produce branch-heavy first drafts that need either decomposition or architect intervention." Not a strong enough signal to justify switching production workers yet; more useful as confirmation that your engine/aggregation investment is the right place to keep spending effort rather than chasing a bigger small-model.
+
+**Concrete next step, in order:**
+1. Add the `behavior_verified` demotion for structural findings — this is a correctness-risk fix, not just a nice-to-have, given what nearly happened with the earlier `key_set` case.
+2. Pull the task 6 artifact and check whether the repair prompt targeted the right finding.
+3. Add a new metric to the historian: rate of "behavior-passed-but-structurally-blocked" outcomes, tracked separately from real failures — this is the metric that would have caught task 7's misclassification automatically instead of requiring you to spot it by eye in a table.
+
+
+

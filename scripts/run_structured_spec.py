@@ -22,10 +22,10 @@ from backends.architect_client import (
     ArchitectConfig,
     ArchitectModelSupplier,
     ContractArchitectError,
-    ContractArchitectSupplier,
+    ContractPlannerSupplier,
 )
 from backends.ollama_client import DEFAULT_OLLAMA_MODEL, OllamaModelSupplier
-from kernel.function_contracts import ContractQueue, DealExample, FunctionContract
+from kernel.function_contracts import ContractQueue, ContractQueuePlan, DealExample, FunctionContract
 
 
 DEFAULT_ARTIFACT_ROOT = Path("artifacts/runs")
@@ -45,12 +45,21 @@ class ContractExecutionResult:
     repair_attempts: list[dict] = field(default_factory=list)
 
 
-def _contract_queue_from_architect(plan_packet: str, plan_context: str, profile) -> tuple[ContractQueue, dict]:
+def _contract_queue_from_architect(
+    plan_packet: str,
+    plan_context: str,
+    profile,
+    base_queue: ContractQueue,
+) -> tuple[ContractQueue, dict]:
     config = ArchitectConfig(contract_profile=profile)
     metadata = {
         "architect_contracts_requested": True,
         "architect_api_configured": config.api_key_configured,
         "architect_contracts_parsed": False,
+        "architect_contract_plan_parsed": False,
+        "architect_contract_plan_applied": False,
+        "architect_contract_plan": {},
+        "architect_contract_plan_raw_response": "",
         "architect_contract_count": 0,
         "architect_contract_error_code": "",
         "architect_contract_error": "",
@@ -59,25 +68,74 @@ def _contract_queue_from_architect(plan_packet: str, plan_context: str, profile)
     if not config.api_key_configured:
         metadata["architect_contract_error_code"] = "architect_contract_missing_api_key"
         metadata["architect_contract_error"] = "architect API key not configured"
-        return ContractQueue(), metadata
+        metadata["architect_contracts_fallback_used"] = bool(base_queue.contracts)
+        metadata["architect_contract_count"] = len(base_queue.contracts)
+        return base_queue, metadata
 
     try:
-        queue = ContractArchitectSupplier(profile=profile).build_contract_queue(
+        planner_supplier = ContractPlannerSupplier(profile=profile)
+        contract_plan = planner_supplier.build_contract_plan(
             plan_packet=plan_packet,
             preserved_context=plan_context,
+            available_contracts=[contract.name for contract in base_queue.contracts],
         )
     except ContractArchitectError as exc:
         metadata["architect_contract_error_code"] = exc.code
         metadata["architect_contract_error"] = str(exc)
-        return ContractQueue(), metadata
+        metadata["architect_contracts_fallback_used"] = bool(base_queue.contracts)
+        metadata["architect_contract_count"] = len(base_queue.contracts)
+        return base_queue, metadata
     except Exception as exc:  # noqa: BLE001 - surfaced in run metadata for review
         metadata["architect_contract_error_code"] = "architect_contract_unexpected_failure"
         metadata["architect_contract_error"] = f"{type(exc).__name__}: {exc}"
-        return ContractQueue(), metadata
+        metadata["architect_contracts_fallback_used"] = bool(base_queue.contracts)
+        metadata["architect_contract_count"] = len(base_queue.contracts)
+        return base_queue, metadata
 
-    metadata["architect_contracts_parsed"] = True
+    queue = _apply_contract_plan(base_queue, contract_plan)
+    metadata["architect_contract_plan_parsed"] = True
+    metadata["architect_contract_plan_applied"] = True
+    metadata["architect_contract_plan"] = asdict(contract_plan)
+    metadata["architect_contract_plan_raw_response"] = planner_supplier.last_response
     metadata["architect_contract_count"] = len(queue.contracts)
     return queue, metadata
+
+
+def _apply_contract_plan(base_queue: ContractQueue, contract_plan: ContractQueuePlan) -> ContractQueue:
+    contracts_by_name = {contract.name: contract for contract in base_queue.contracts}
+    for name, dependencies in contract_plan.dependencies.items():
+        if name not in contracts_by_name:
+            continue
+        contract = contracts_by_name[name]
+        for dependency in dependencies:
+            if dependency == name or dependency not in contracts_by_name or dependency in contract.dependencies:
+                continue
+            contract.dependencies.append(dependency)
+    for name, note in contract_plan.contract_notes.items():
+        if name not in contracts_by_name or not note:
+            continue
+        contract = contracts_by_name[name]
+        if note not in contract.purpose:
+            contract.purpose = f"{contract.purpose}\nArchitect note: {note}".strip()
+
+    requested_names = [name for name in contract_plan.contract_order if name in contracts_by_name]
+    remaining_names = [contract.name for contract in base_queue.contracts if contract.name not in requested_names]
+    ordered_names = _topological_contract_names([*requested_names, *remaining_names], contracts_by_name)
+    return ContractQueue([contracts_by_name[name] for name in ordered_names])
+
+
+def _contract_queue_payload(queue: ContractQueue) -> list[dict]:
+    return [
+        {
+            "name": contract.name,
+            "kind": contract.kind,
+            "signature": contract.normalized_signature(),
+            "dependencies": contract.dependencies,
+            "purpose": contract.purpose,
+            "example_count": len(contract.examples),
+        }
+        for contract in queue.contracts
+    ]
 
 
 def _fallback_contract_queue(plan) -> tuple[ContractQueue, bool]:
@@ -800,6 +858,7 @@ def run_spec(
     architect_after_repair_attempts: int | None,
     use_architect_contracts: bool,
     config_path: Path,
+    plan_only: bool = False,
 ) -> int:
     config = load_config(config_path)
     spec_text = spec_path.read_text(encoding="utf-8")
@@ -812,19 +871,24 @@ def run_spec(
         "architect_contracts_requested": False,
         "architect_api_configured": ArchitectConfig().api_key_configured,
         "architect_contracts_parsed": False,
+        "architect_contract_plan_parsed": False,
+        "architect_contract_plan_applied": False,
+        "architect_contract_plan": {},
+        "architect_contract_plan_raw_response": "",
         "architect_contract_count": 0,
         "architect_contract_error_code": "",
         "architect_contract_error": "",
         "architect_contracts_fallback_used": False,
     }
     if use_architect_contracts:
+        fallback_queue, fallback_used = _fallback_contract_queue(plan)
         queue, contract_metadata = _contract_queue_from_architect(
             plan_packet,
             plan_context,
             config.execution.architect.contract,
+            fallback_queue,
         )
         if not queue.contracts:
-            fallback_queue, fallback_used = _fallback_contract_queue(plan)
             if fallback_used:
                 queue = fallback_queue
                 contract_metadata["architect_contracts_fallback_used"] = True
@@ -841,6 +905,59 @@ def run_spec(
                 }
                 print(json.dumps(payload, indent=2))
                 return 1
+    if plan_only:
+        artifact_path = ""
+        session = {
+            "target": spec_text,
+            "route": "structured_spec_contract_plan",
+            "max_retries": max_retries,
+            "attempts": [],
+            "final_status": "planned",
+        }
+        metadata = {
+            "spec_path": str(spec_path),
+            "model": model,
+            "plan": {
+                "task_type": plan.task_type,
+                "language": plan.language,
+                "app_name": plan.app_name,
+                "game_kind": plan.game_kind,
+                "route_hint": plan.route_hint,
+                "allowed_libraries": plan.allowed_libraries,
+                "state_rules": plan.state_machine_constraints,
+                "dependency_graph": plan.dependency_graph_context,
+            },
+            "contract_queue": {
+                **contract_metadata,
+                "contracts": _contract_queue_payload(queue),
+                "worker_packets": queue.to_worker_packets(),
+            },
+        }
+        if save_artifacts:
+            manager = ArtifactManager(artifact_root)
+            paths = manager.create_run(prefix=f"structured_spec_plan_{spec_path.stem}")
+            artifact_path = str(paths.run_dir)
+            manager.save_session(session, paths, metadata=metadata)
+        print(
+            json.dumps(
+                {
+                    "status": "planned",
+                    "architect_contracts_requested": contract_metadata["architect_contracts_requested"],
+                    "architect_api_configured": contract_metadata["architect_api_configured"],
+                    "architect_contract_plan_parsed": contract_metadata["architect_contract_plan_parsed"],
+                    "architect_contract_plan_applied": contract_metadata["architect_contract_plan_applied"],
+                    "architect_contract_plan": contract_metadata["architect_contract_plan"],
+                    "architect_contract_plan_raw_response": contract_metadata["architect_contract_plan_raw_response"],
+                    "architect_contracts_fallback_used": contract_metadata["architect_contracts_fallback_used"],
+                    "architect_contract_error": contract_metadata["architect_contract_error"],
+                    "contract_count": len(queue.contracts),
+                    "contracts": _contract_queue_payload(queue),
+                    "artifact_path": artifact_path,
+                },
+                indent=2,
+            )
+        )
+        return 0
 
     supplier = OllamaModelSupplier(model=model)
     architect_model_supplier = ArchitectModelSupplier(config=ArchitectConfig(repair_profile=config.execution.architect.repair))
@@ -1023,6 +1140,8 @@ def run_spec(
                 "architect_contracts_requested": contract_metadata["architect_contracts_requested"],
                 "architect_api_configured": contract_metadata["architect_api_configured"],
                 "architect_contracts_parsed": contract_metadata["architect_contracts_parsed"],
+                "architect_contract_plan_parsed": contract_metadata["architect_contract_plan_parsed"],
+                "architect_contract_plan_applied": contract_metadata["architect_contract_plan_applied"],
                 "architect_contract_count": contract_metadata["architect_contract_count"],
                 "architect_contract_error": contract_metadata["architect_contract_error"],
                 "contract_queue_mode": "sequential" if queue.contracts else "bulk",
@@ -1059,6 +1178,7 @@ def main() -> int:
     parser.add_argument("--max-retries", type=int, default=2)
     parser.add_argument("--architect-after-repair-attempts", type=int, default=None)
     parser.add_argument("--no-architect-contracts", action="store_true")
+    parser.add_argument("--plan-only", action="store_true", help="Stop after architect queue planning and print the planned contracts.")
     args = parser.parse_args()
     return run_spec(
         spec_path=args.spec,
@@ -1069,6 +1189,7 @@ def main() -> int:
         architect_after_repair_attempts=args.architect_after_repair_attempts,
         use_architect_contracts=not args.no_architect_contracts,
         config_path=args.config,
+        plan_only=args.plan_only,
     )
 
 

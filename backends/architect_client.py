@@ -10,8 +10,8 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from backends.ollama_client import FENCED_CODE_RE, LANGUAGE_TAG_LINE_RE
-from kernel.function_contracts import ContractQueue, parse_contract_queue_json
-from prompt.contract_builder import build_deal_contract_architect_prompt
+from kernel.function_contracts import ContractQueue, ContractQueuePlan, parse_contract_queue_json, parse_contract_queue_plan_json
+from prompt.contract_builder import build_contract_queue_planner_prompt, build_deal_contract_architect_prompt
 
 
 DEFAULT_ARCHITECT_API_KEY_ENV = "ARCHITECT_API_KEY"
@@ -330,6 +330,12 @@ class ArchitectModelSupplier:
     def _extract_code(self, response: str) -> str:
         match = FENCED_CODE_RE.search(response)
         text = match.group(1).strip() if match else response.strip()
+        if not match and text.startswith("```"):
+            lines = text.splitlines()
+            lines = lines[1:]
+            if lines and lines[-1].strip().startswith("```"):
+                lines = lines[:-1]
+            text = "\n".join(lines).strip()
         lines = text.splitlines()
         if lines and LANGUAGE_TAG_LINE_RE.match(lines[0]):
             text = "\n".join(lines[1:]).strip()
@@ -344,6 +350,7 @@ class ContractArchitectSupplier:
     ) -> None:
         self.profile = profile or CONTRACT_PROFILE
         self.client = client or ArchitectApiClient()
+        self.last_response = ""
 
     def build_contract_queue(self, plan_packet: str, preserved_context: str = "") -> ContractQueue:
         prompt = build_deal_contract_architect_prompt(
@@ -376,6 +383,58 @@ class ContractArchitectSupplier:
         if not queue.contracts:
             raise ContractArchitectError("architect_contract_zero_contracts", "Architect returned zero function contracts.")
         return queue
+
+
+class ContractPlannerSupplier:
+    def __init__(
+        self,
+        client: ArchitectApiClient | None = None,
+        profile: ArchitectProfile | None = None,
+    ) -> None:
+        self.profile = profile or CONTRACT_PROFILE
+        self.client = client or ArchitectApiClient()
+
+    def build_contract_plan(
+        self,
+        plan_packet: str,
+        preserved_context: str = "",
+        available_contracts: list[str] | None = None,
+    ) -> ContractQueuePlan:
+        prompt = build_contract_queue_planner_prompt(
+            plan_packet=plan_packet,
+            preserved_context=preserved_context,
+            available_contracts=available_contracts,
+        )
+        try:
+            response = self.client.generate(
+                prompt=prompt,
+                system="Return compact JSON contract queue plans only.",
+                profile=self.profile,
+            )
+        except TimeoutError as exc:
+            raise ContractArchitectError("architect_contract_plan_timeout", str(exc)) from exc
+        except RuntimeError as exc:
+            message = str(exc)
+            if "empty response" in message.lower():
+                raise ContractArchitectError("architect_contract_plan_empty_response", message) from exc
+            raise
+
+        if not response.strip():
+            raise ContractArchitectError(
+                "architect_contract_plan_empty_response",
+                "Architect returned an empty contract plan response.",
+            )
+        self.last_response = response
+        try:
+            plan = parse_contract_queue_plan_json(response)
+        except json.JSONDecodeError as exc:
+            code = "architect_contract_plan_truncated_json" if _looks_truncated_json(response) else "architect_contract_plan_invalid_json"
+            raise ContractArchitectError(code, str(exc)) from exc
+        except ValueError as exc:
+            raise ContractArchitectError("architect_contract_plan_invalid_json", str(exc)) from exc
+        if not plan.contract_order and not plan.dependencies and not plan.contract_notes:
+            raise ContractArchitectError("architect_contract_plan_zero_contracts", "Architect returned an empty contract plan.")
+        return plan
 
 
 def _looks_truncated_json(response: str) -> bool:

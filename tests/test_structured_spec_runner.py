@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import PropertyMock, patch
 
 from agents.plan_mode import PlanModeAgent
 from backends.architect_client import (
@@ -8,10 +9,12 @@ from backends.architect_client import (
     ArchitectModelSupplier,
     ContractArchitectError,
     ContractArchitectSupplier,
+    ContractPlannerSupplier,
 )
-from scripts.run_structured_spec import _fallback_contract_queue, _validate_structured_spec_output
+from scripts.run_structured_spec import _apply_contract_plan, _contract_queue_from_architect, _fallback_contract_queue
+from scripts.run_structured_spec import _validate_structured_spec_output
 from scripts.run_structured_spec import _run_contract_queue_sequentially, _single_contract_prompt
-from kernel.function_contracts import ContractQueue, DealExample, FunctionContract
+from kernel.function_contracts import ContractQueue, ContractQueuePlan, DealExample, FunctionContract
 
 
 class StructuredSpecRunnerTests(unittest.TestCase):
@@ -348,6 +351,29 @@ class StructuredSpecRunnerTests(unittest.TestCase):
         self.assertIn("class DataState", prompt)
         self.assertNotIn("unrelated_menu", prompt)
 
+    def test_contract_plan_applies_order_dependencies_and_notes(self) -> None:
+        queue = ContractQueue(
+            [
+                FunctionContract(name="main", signature="def main()"),
+                FunctionContract(name="update", signature="def update()"),
+                FunctionContract(name="State", kind="class", signature="class State:"),
+            ]
+        )
+        plan = ContractQueuePlan(
+            contract_order=["State", "update", "main"],
+            dependencies={"update": ["State"], "main": ["update"]},
+            contract_notes={"update": "Preserve the state transition graph."},
+        )
+
+        planned = _apply_contract_plan(queue, plan)
+
+        self.assertEqual([contract.name for contract in planned.contracts], ["State", "update", "main"])
+        update = next(contract for contract in planned.contracts if contract.name == "update")
+        main = next(contract for contract in planned.contracts if contract.name == "main")
+        self.assertIn("State", update.dependencies)
+        self.assertIn("update", main.dependencies)
+        self.assertIn("Architect note: Preserve the state transition graph.", update.purpose)
+
     def test_placeholder_main_fails_structured_spec_gate(self) -> None:
         plan = PlanModeAgent().plan(
             """
@@ -384,6 +410,56 @@ class StructuredSpecRunnerTests(unittest.TestCase):
         self.assertEqual(len(queue.contracts), 1)
         self.assertEqual(client.calls[0]["profile"], CONTRACT_PROFILE)
 
+    def test_contract_planner_uses_light_profile(self) -> None:
+        class StubClient:
+            def __init__(self) -> None:
+                self.calls = []
+
+            def generate(self, **kwargs):
+                self.calls.append(kwargs)
+                return '{"contract_order":["f"],"dependencies":{},"contract_notes":{"f":"keep it small"}}'
+
+        client = StubClient()
+        supplier = ContractPlannerSupplier(client=client)
+
+        plan = supplier.build_contract_plan("PLAN PACKET:", "", available_contracts=["f"])
+
+        self.assertEqual(plan.contract_order, ["f"])
+        self.assertEqual(plan.contract_notes["f"], "keep it small")
+        self.assertEqual(client.calls[0]["profile"], CONTRACT_PROFILE)
+
+    def test_contract_planner_failure_uses_spec_derived_fallback_queue(self) -> None:
+        class FailingPlanner:
+            def __init__(self, profile=None):
+                self.profile = profile
+
+            def build_contract_plan(self, **kwargs):
+                raise ContractArchitectError("architect_contract_plan_invalid_json", "bad json")
+
+        base_queue = ContractQueue(
+            [
+                FunctionContract(name="prepare", signature="def prepare() -> int"),
+                FunctionContract(name="main", signature="def main()", dependencies=["prepare"]),
+            ]
+        )
+
+        with patch("scripts.run_structured_spec.ContractPlannerSupplier", FailingPlanner), patch.object(
+            ArchitectConfig,
+            "api_key_configured",
+            new_callable=PropertyMock,
+            return_value=True,
+        ):
+            queue, metadata = _contract_queue_from_architect(
+                "PLAN PACKET:",
+                "CONTEXT",
+                CONTRACT_PROFILE,
+                base_queue,
+            )
+
+        self.assertEqual([contract.name for contract in queue.contracts], ["prepare", "main"])
+        self.assertTrue(metadata["architect_contracts_fallback_used"])
+        self.assertEqual(metadata["architect_contract_count"], 2)
+
     def test_repair_architect_uses_separate_profile(self) -> None:
         class StubClient:
             def __init__(self) -> None:
@@ -399,6 +475,17 @@ class StructuredSpecRunnerTests(unittest.TestCase):
         supplier.repair_draft("def bad():\n    pass\n", "fix")
 
         self.assertEqual(client.calls[0]["profile"], REPAIR_PROFILE)
+
+    def test_repair_architect_strips_unclosed_markdown_fence(self) -> None:
+        class StubClient:
+            def generate(self, **kwargs):
+                return "```python\n\ndef fixed():\n    return 1\n"
+
+        supplier = ArchitectModelSupplier(config=ArchitectConfig(repair_profile=REPAIR_PROFILE), client=StubClient())
+
+        source = supplier.repair_draft("", "fix")
+
+        self.assertEqual(source, "def fixed():\n    return 1")
 
     def test_empty_contract_response_becomes_typed_failure(self) -> None:
         class StubClient:

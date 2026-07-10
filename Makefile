@@ -11,7 +11,7 @@ ARCHITECT_MAX_RETRIES ?= 2
 SPEC_PATH ?=
 ARTIFACT_ARGS = $(if $(filter 1 true yes,$(SAVE_ARTIFACTS)),--save-artifacts --artifact-root "$(ARTIFACT_ROOT)",)
 
-.PHONY: help install install-formal test test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-fixture test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-worker-limit-architect test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-python-ladder-stateful test-python-ladder-stateful-architect test-plan-mode-ladder test-raw-vs-harness test-formal-experiment structured-spec review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library ollama-smoke inference-smoke live-repair day1 clean-history
+.PHONY: help install install-formal test test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-fixture test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-worker-limit-architect test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-python-ladder-stateful test-python-ladder-stateful-architect test-plan-mode-ladder test-raw-vs-harness test-formal-experiment structured-spec structured-spec-plan review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library ollama-smoke inference-smoke live-repair day1 clean-history
 
 help:
 	@printf "Agent Small Harness commands\n"
@@ -35,6 +35,7 @@ help:
 	@printf "  make test-coding-capability-architect Run model codegen with API architect escalation\n"
 	@printf "  make test-raw-vs-harness             Compare raw one-shot generation with full harness validation\n"
 	@printf "  make structured-spec SPEC_PATH=path   Run any external structured spec through Plan Mode, worker, architect, and gates\n"
+	@printf "  make structured-spec-plan SPEC_PATH=path Ask architect for queue plan, print JSON, then stop before worker generation\n"
 	@printf "\nWorker ladders:\n"
 	@printf "  make test-worker-limit               Push MODEL through harder worker-limit tasks\n"
 	@printf "  make test-worker-limit-auto          Use config.yaml difficulty model routing\n"
@@ -140,6 +141,10 @@ test-formal-experiment:
 structured-spec:
 	@test -n "$(SPEC_PATH)" || (echo "Set SPEC_PATH, e.g. make structured-spec SPEC_PATH=examples/specs/my_spec.md" && exit 1)
 	$(PYTHON) scripts/run_structured_spec.py --spec "$(SPEC_PATH)" --model "$(MODEL)" --max-retries "$(ARCHITECT_MAX_RETRIES)" --architect-after-repair-attempts "$(ARCHITECT_AFTER)" $(ARTIFACT_ARGS)
+
+structured-spec-plan:
+	@test -n "$(SPEC_PATH)" || (echo "Set SPEC_PATH, e.g. make structured-spec-plan SPEC_PATH=examples/specs/my_spec.md" && exit 1)
+	$(PYTHON) scripts/run_structured_spec.py --spec "$(SPEC_PATH)" --model "$(MODEL)" --max-retries "$(ARCHITECT_MAX_RETRIES)" --architect-after-repair-attempts "$(ARCHITECT_AFTER)" --plan-only $(ARTIFACT_ARGS)
 
 review-run:
 	@test -n "$(RUN)" || (echo "Set RUN, e.g. make review-run RUN=worker_limit_6" && exit 1)

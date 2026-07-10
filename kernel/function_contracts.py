@@ -119,6 +119,15 @@ class ContractQueue:
         return [contract.to_worker_packet() for contract in self.contracts]
 
 
+@dataclass
+class ContractQueuePlan:
+    """Compact architect plan applied to spec-derived contracts."""
+
+    contract_order: list[str] = field(default_factory=list)
+    dependencies: dict[str, list[str]] = field(default_factory=dict)
+    contract_notes: dict[str, str] = field(default_factory=dict)
+
+
 def parse_contract_queue_json(text: str) -> ContractQueue:
     """Parse architect JSON into a ContractQueue.
 
@@ -134,6 +143,30 @@ def parse_contract_queue_json(text: str) -> ContractQueue:
     if not isinstance(raw_contracts, list):
         raise ValueError("contracts must be a list")
     return ContractQueue(contracts=[_contract_from_mapping(item) for item in raw_contracts])
+
+
+def parse_contract_queue_plan_json(text: str) -> ContractQueuePlan:
+    """Parse compact architect planner JSON.
+
+    This intentionally avoids requiring full signatures/examples from the
+    architect. The harness owns contract construction from the structured spec;
+    the architect only chooses queue order, dependencies, and focused notes.
+    """
+
+    payload = _json_payload(text)
+    data = json.loads(payload)
+    if not isinstance(data, dict):
+        raise ValueError("contract queue plan must be a JSON object")
+    order = _string_list(data.get("contract_order", data.get("order", [])), "contract_order")
+    dependencies = _string_list_mapping(data.get("dependencies", {}), "dependencies")
+    notes = _string_mapping(data.get("contract_notes", data.get("notes", {})), "contract_notes")
+    if not order and not dependencies and not notes:
+        raise ValueError("contract queue plan must contain an order, dependencies, or notes")
+    return ContractQueuePlan(
+        contract_order=order,
+        dependencies=dependencies,
+        contract_notes=notes,
+    )
 
 
 def _json_payload(text: str) -> str:
@@ -183,3 +216,37 @@ def _list(value: Any) -> list[Any]:
     if isinstance(value, list):
         return value
     return [value]
+
+
+def _string_list(value: Any, key: str) -> list[str]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise ValueError(f"{key} must be a list")
+    return [str(item).strip() for item in value if str(item).strip()]
+
+
+def _string_list_mapping(value: Any, key: str) -> dict[str, list[str]]:
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError(f"{key} must be an object")
+    result: dict[str, list[str]] = {}
+    for raw_name, raw_dependencies in value.items():
+        name = str(raw_name).strip()
+        if not name:
+            continue
+        result[name] = _string_list(raw_dependencies, f"{key}.{name}")
+    return result
+
+
+def _string_mapping(value: Any, key: str) -> dict[str, str]:
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError(f"{key} must be an object")
+    return {
+        str(raw_name).strip(): str(raw_note).strip()
+        for raw_name, raw_note in value.items()
+        if str(raw_name).strip() and str(raw_note).strip()
+    }
