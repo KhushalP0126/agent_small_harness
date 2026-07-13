@@ -1,3 +1,5 @@
+
+
 This dataset is genuinely useful — it's the first time you've directly compared "does the harness reshape code" against "does the harness fix correctness," on the same tasks, side by side. And it surfaces a real design flaw, not just a data point: **task 7 is a regression in your harness's own decision logic, and it's worse than it looks.**
 
 **Task 7 is the important finding here — flag it as a bug, not a data point.**
@@ -22,3 +24,88 @@ This is a concrete, scoped fix: add a `behavior_verified` flag to the policy dec
 
 
 
+I checked `validation/behavior.py` specifically for this, and it surfaced something worth leading with — a real, previously-undiscussed gap that explains a bug we already found.
+
+## 1. Behavior validation can't test classes at all — this is why `PongState` broke undetected
+
+The sandbox is actually well-built: subprocess isolation via `multiprocessing`, a timeout, a whitelisted `SAFE_BUILTINS` set, and blocked dangerous calls (`eval`, `exec`, `open`, `__import__`). Good security posture. But `BLOCKED_NODES` includes `ast.ClassDef` — any generated source containing a class definition gets rejected outright by `_validate_runtime_ast` before behavior checking even runs. `PongState`, `Ball`, and `Paddle` are all classes. That means the exact bug we found earlier — `PongState.update_score` referencing `self.score1`/`self.score2`, which don't exist in its own `__init__` — is structurally *unreachable* by behavior validation. Not "the test didn't catch it," but "the validator can't test this kind of code at all." Worth adding: a second validation tier that can safely instantiate a class in the sandbox and call its methods with representative arguments, still under the same process-isolation/timeout discipline, so stateful composite code gets the same coverage pure functions get.
+
+## 2. A truncation-aware continuation path, instead of full-context resend
+
+Right now if the architect's response gets cut off (like the Pong integration truncation we found), the only recovery is resending the entire plan packet + all accepted contract sources + the full broken draft — 65K characters — with an instruction to "try again." Add a cheap pre-check: if a response has unbalanced brackets/parens or no closing fence, treat it as `truncated` (a distinct category from `invalid_syntax`) and send a small continuation prompt — just the tail of the broken draft plus "continue from exactly this point" — instead of the full context. This is a new code path, not a fix to an existing one.
+
+## 3. Per-run cost/token telemetry
+
+Nothing in `metadata.json` tracks tokens spent or API cost. Given DeepSeek calls cost real money and we just found a single run burning a 65K-character prompt, this is worth surfacing as its own artifact field — tokens in/out and estimated cost per contract, per repair round, per run. Right now the only way to notice a run got expensive is to manually read `retry_prompt_chars` in `attempt_timeline.json`, which isn't cost, just a proxy for it.
+
+## 4. Regression detection in the historian, not just accumulation
+
+`historian.py` already has `aggregate_run_stats` and `successful_templates` — it accumulates history well but doesn't compare against it. Add a check that runs automatically at the end of a session: "for specs with a similar shape (same `task_type`, similar component count), did this run's violation count / retry count / final status get worse than the historical median?" Right now that comparison only happens if a human manually runs `review-run` and eyeballs it.
+
+## 5. Cross-file generation support (a real, not just stated, gap)
+
+The README's "Current Direction" already says multi-file generation is the goal, but I want to flag what's concretely missing to get there rather than just repeat that intention: there's no import-graph resolver and no cross-file symbol table anywhere in the codebase. `spec.files` only ever contains one entry in both example specs. When you do build this, it'll need the same shared-IR fix from the compiler discussion — a symbol table that spans files, not just spans engines within one file — so it's worth sequencing after that architectural work rather than before it.
+
+## 6. A prompt-size budget, enforced structurally, not by hoping the model behaves
+
+Related to #2 but more general: nothing currently stops a prompt from growing unbounded across repair rounds. A hard ceiling (e.g., "if the assembled prompt exceeds N tokens, drop the oldest failed-attempt context first, then drop full contract sources in favor of signatures-only") would prevent the 65K-character case from recurring in other failure shapes, not just the truncation one.
+
+Ranked by leverage: **#1 first** — it's cheap relative to the others, and it would have caught the exact bug we spent the most time diagnosing this session. Want me to sketch the class-instantiation sandbox extension for #1?
+
+
+
+Walking the README's execution-flow diagram node by node, using everything actually verified in this conversation (static trace + the real Pong run artifact):
+
+| Node | Status | Evidence |
+|---|---|---|
+| A. User task | ✅ Complete | Trivial input boundary. |
+| B. PlanModeAgent | ✅ Complete | `plan()` correctly extracts FILES/ENTRYPOINT/REQUIRED COMPONENTS plus the catch-all `STATE`/`GAME LOOP`/`UPDATE RULES` block — confirmed for real against the Pong run, not just static reading. |
+| C. Compact worker packet | ✅ Complete | `to_worker_packet` output matched exactly what showed up in the real retry prompt. |
+| D. Small local worker | 🟡 Partial | Calls work, but `OllamaGenerationConfig.num_predict = 512` is a fixed cap regardless of task size — fine for a single function contract, not enough for anything larger. Works within its lane, breaks outside it. |
+| E. Generated draft | ✅ Complete | Drafts are produced and flow through the pipeline. |
+| F. ParseContractAgent | ✅ Complete | Actually the most solid node in the whole diagram — it correctly caught the fence/truncation bug in the real run instead of letting bad code through. Doing its job. |
+| G. EngineRegistry + H1–H7 engines | 🟡 Partial | All seven engines run and produce findings — functionally complete. Architecturally shallow: no shared IR (each engine independently re-parses/re-walks source, per the last two answers), so "complete" here means "seven working linters," not "a pass pipeline." |
+| I. Policy validator | ✅ Complete | `validation/policy.py` runs and gates correctly; confirmed in the real run's `validation.is_compliant`. |
+| J. Behavior validator | 🟡 Partial | Runs and gates, but for spec-driven composite functions with no behavior examples it defaults to `is_compliant: true` trivially — present, but has nothing to actually check for most of the Pong functions. Real coverage, not full coverage. |
+| K. Optional CrossHair | ⚪ Present, unexercised | Exists (`validation/formal.py`), `crosshair_enabled: false` by default, showed `"skipped": true` in the real run. Built but effectively off.
+| L. All gates pass? | ✅ Complete | Branch logic works, drives `final_status` correctly. |
+| M. completed | ✅ Complete | Reachable — memory shows a prior 213/213 test run and 13/13-contract Snake pass, so the success path is proven, not just theoretical. |
+| N. RepairStrategyAgent | ✅ Complete | `repair_directives` populated correctly in the real run's `attempt_0_validation.json`. |
+| O. Scoped retry prompt | 🟡 Partial | Exists and works, but "scoped" is aspirational at the integration stage — the real repair prompt was 64,940 chars, the opposite of scoped. Works correctly for single-function contract repair, doesn't stay scoped once you're past that. |
+| P. Small worker repair → loop to E | ✅ Complete | Confirmed operating in the real run (`PongConfig`/`PongState` each went through 2 small-worker repair attempts before escalating). |
+| P → stagnant/hard failure → Q. Architect API worker | 🟡 Partial | Escalation itself works and is reachable (confirmed repeatedly — architect took over `PongConfig`, `PongState`, and the whole integration step). But the *trigger* for "stagnant" is still literal string equality (`_is_stagnant`), not the diagnostic-delta signal that's already computed — this is the ratchet gap from earlier in this conversation. Escalation happens, but on a cruder signal than the harness already has available. |
+| Q loop back to E | 🟡 Partial | Loops back correctly, but this is exactly where the token-truncation bug lives (`architect.repair max_tokens: 4000` too small for whole-module integration) — the loop-back mechanism works, what comes back through it can be broken. |
+| Z. manual_review_required | ✅ Complete | Structured, reachable, with real reason codes (`stagnant_repair`, `max_retries_exhausted`, `architect_contract_integration_failed`) — this is one of the better-built parts of the system. |
+| R. Artifacts and historian | ✅ Complete | Genuinely mature — the file set you uploaded (`metadata.json`, `session_summary.json`, `attempt_timeline.json`, per-attempt findings/validation/retry-prompt) is rich enough that this whole diagnosis was possible from artifacts alone. `historian.py` has real methods beyond logging (`summarize_session`, `record_repair_outcome`, `successful_templates`, `aggregate_run_stats`). |
+
+**One thing worth flagging about the diagram itself:** it only represents one of two real execution paths. The path it draws — single draft, retry, escalate — matches `run_worker_limit.py`-style general code tasks. The path that actually ran for Pong (`kernel/function_contracts.py` + `ContractQueue` + a separate architect integration step) is materially different — sequential per-contract generation with its own repair loop, then a whole separate synthesis-and-validate pass for integration — and isn't represented in the README diagram at all. If someone read only the diagram, they'd have no idea the contract-queue path (which is what actually produces app-scale output like Snake/Pong) exists or that it has its own failure modes.
+
+**Net read:** the "verify and reject" half of the pipeline (parse gate → engines → policy → repair-directive generation → artifacts/historian) is genuinely solid and battle-tested against a real run. The "generate and repair" half is functionally wired end-to-end but has the specific known gaps we've already named: token budgets sized for single functions applied to whole-module synthesis, stagnation detection cruder than the signal already available, and retry prompts that grow instead of staying scoped as failures compound.
+
+I checked `validation/behavior.py` specifically for this, and it surfaced something worth leading with — a real, previously-undiscussed gap that explains a bug we already found.
+
+## 1. Behavior validation can't test classes at all — this is why `PongState` broke undetected
+
+The sandbox is actually well-built: subprocess isolation via `multiprocessing`, a timeout, a whitelisted `SAFE_BUILTINS` set, and blocked dangerous calls (`eval`, `exec`, `open`, `__import__`). Good security posture. But `BLOCKED_NODES` includes `ast.ClassDef` — any generated source containing a class definition gets rejected outright by `_validate_runtime_ast` before behavior checking even runs. `PongState`, `Ball`, and `Paddle` are all classes. That means the exact bug we found earlier — `PongState.update_score` referencing `self.score1`/`self.score2`, which don't exist in its own `__init__` — is structurally *unreachable* by behavior validation. Not "the test didn't catch it," but "the validator can't test this kind of code at all." Worth adding: a second validation tier that can safely instantiate a class in the sandbox and call its methods with representative arguments, still under the same process-isolation/timeout discipline, so stateful composite code gets the same coverage pure functions get.
+
+## 2. A truncation-aware continuation path, instead of full-context resend
+
+Right now if the architect's response gets cut off (like the Pong integration truncation we found), the only recovery is resending the entire plan packet + all accepted contract sources + the full broken draft — 65K characters — with an instruction to "try again." Add a cheap pre-check: if a response has unbalanced brackets/parens or no closing fence, treat it as `truncated` (a distinct category from `invalid_syntax`) and send a small continuation prompt — just the tail of the broken draft plus "continue from exactly this point" — instead of the full context. This is a new code path, not a fix to an existing one.
+
+## 3. Per-run cost/token telemetry
+
+Nothing in `metadata.json` tracks tokens spent or API cost. Given DeepSeek calls cost real money and we just found a single run burning a 65K-character prompt, this is worth surfacing as its own artifact field — tokens in/out and estimated cost per contract, per repair round, per run. Right now the only way to notice a run got expensive is to manually read `retry_prompt_chars` in `attempt_timeline.json`, which isn't cost, just a proxy for it.
+
+## 4. Regression detection in the historian, not just accumulation
+
+`historian.py` already has `aggregate_run_stats` and `successful_templates` — it accumulates history well but doesn't compare against it. Add a check that runs automatically at the end of a session: "for specs with a similar shape (same `task_type`, similar component count), did this run's violation count / retry count / final status get worse than the historical median?" Right now that comparison only happens if a human manually runs `review-run` and eyeballs it.
+
+## 5. Cross-file generation support (a real, not just stated, gap)
+
+The README's "Current Direction" already says multi-file generation is the goal, but I want to flag what's concretely missing to get there rather than just repeat that intention: there's no import-graph resolver and no cross-file symbol table anywhere in the codebase. `spec.files` only ever contains one entry in both example specs. When you do build this, it'll need the same shared-IR fix from the compiler discussion — a symbol table that spans files, not just spans engines within one file — so it's worth sequencing after that architectural work rather than before it.
+
+## 6. A prompt-size budget, enforced structurally, not by hoping the model behaves
+
+Related to #2 but more general: nothing currently stops a prompt from growing unbounded across repair rounds. A hard ceiling (e.g., "if the assembled prompt exceeds N tokens, drop the oldest failed-attempt context first, then drop full contract sources in favor of signatures-only") would prevent the 65K-character case from recurring in other failure shapes, not just the truncation one.
+
+Ranked by leverage: **#1 first** — it's cheap relative to the others, and it would have caught the exact bug we spent the most time diagnosing this session. Want me to sketch the class-instantiation sandbox extension for #1?

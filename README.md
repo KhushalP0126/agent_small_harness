@@ -131,6 +131,24 @@ flowchart TD
     Z --> R
 ```
 
+Structured app specs can also use the function-contract queue path:
+
+```text
+structured spec
+  -> PlanModeAgent
+  -> fallback or architect-ordered contract queue
+  -> sequential function/class contract generation
+  -> per-contract validation and repair
+  -> architect integration of accepted symbols
+  -> normal parse, engine, policy, behavior, and formal gates
+  -> completed or manual_review_required
+```
+
+This path is what app-scale smoke specs such as Pong and Snake exercise. It has
+its own failure modes: contract dependency blocking, oversized integration
+prompts, architect truncation, and final module-level static/spec validation.
+Those outcomes are recorded in artifact metadata and the contract queue results.
+
 ## Important Design Properties
 
 - Python-first: the stable path uses the standard-library `ast` stack.

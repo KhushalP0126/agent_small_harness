@@ -88,7 +88,7 @@ class OllamaModelSupplier:
         response = self.client.generate(
             prompt=prompt,
             model=self.model,
-            config=self.config,
+            config=self._config_for_prompt(prompt),
             system=self.system_prompt,
         )
         return self._extract_code(response)
@@ -101,10 +101,31 @@ class OllamaModelSupplier:
         response = self.client.generate(
             prompt=prompt,
             model=self.model,
-            config=self.config,
+            config=self._config_for_prompt(prompt),
             system=self.system_prompt,
         )
         return self._extract_code(response)
+
+    def _config_for_prompt(self, prompt: str) -> OllamaGenerationConfig:
+        target_predict = self.config.num_predict
+        target_ctx = self.config.num_ctx
+        prompt_chars = len(prompt)
+        if prompt_chars > 24000:
+            target_predict = max(target_predict, 2048)
+            target_ctx = max(target_ctx, 16384)
+        elif prompt_chars > 12000:
+            target_predict = max(target_predict, 1536)
+            target_ctx = max(target_ctx, 8192)
+        elif prompt_chars > 6000:
+            target_predict = max(target_predict, 1024)
+            target_ctx = max(target_ctx, 4096)
+        if target_predict == self.config.num_predict and target_ctx == self.config.num_ctx:
+            return self.config
+        return OllamaGenerationConfig(
+            temperature=self.config.temperature,
+            num_predict=target_predict,
+            num_ctx=target_ctx,
+        )
 
     def _extract_code(self, response: str) -> str:
         match = FENCED_CODE_RE.search(response)

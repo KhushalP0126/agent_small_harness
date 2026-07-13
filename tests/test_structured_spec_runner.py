@@ -88,6 +88,29 @@ class StructuredSpecRunnerTests(unittest.TestCase):
 
         self.assertEqual(_validate_structured_spec_output(source, plan), [])
 
+    def test_structured_spec_gate_rejects_missing_local_imports(self) -> None:
+        plan = PlanModeAgent().plan(
+            """
+## Files
+
+- `app.py`
+- `helpers.py`
+
+## Required Components
+
+- `main()`
+
+## Entrypoint
+
+- `main()`
+"""
+        )
+        source = "from missing_helpers import build\n\ndef main():\n    return build()\n"
+
+        issues = _validate_structured_spec_output(source, plan)
+
+        self.assertEqual(issues[0]["kind"], "missing_local_import")
+
     def test_structured_spec_gets_generic_fallback_contract_queue(self) -> None:
         plan = PlanModeAgent().plan(
             """

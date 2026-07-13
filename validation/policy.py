@@ -17,7 +17,31 @@ DEFAULT_POLICY = {
     "allow_bounds_warnings": True,
     "allow_state_flow_warnings": False,
     "allow_lint_errors": False,
+    "demote_behavior_verified_structural_findings": False,
 }
+
+
+STRUCTURAL_QUALITY_KINDS = {
+    "loop_depth",
+    "cyclomatic_complexity",
+    "algorithmic_cost",
+}
+
+
+def _append_if_blocking(
+    violations: list[Violation],
+    violation: Violation,
+    *,
+    policy: dict,
+    behavior_verified: bool,
+) -> None:
+    if (
+        behavior_verified
+        and policy["demote_behavior_verified_structural_findings"]
+        and violation.kind in STRUCTURAL_QUALITY_KINDS
+    ):
+        return
+    violations.append(violation)
 
 
 def _evidence(finding: EngineFinding) -> dict:
@@ -30,6 +54,7 @@ def _evidence(finding: EngineFinding) -> dict:
 def validate_findings(
     findings: list[EngineFinding],
     policy: dict | None = None,
+    behavior_verified: bool = False,
 ) -> ValidationResult:
     policy = {**DEFAULT_POLICY, **(policy or {})}
     violations: list[Violation] = []
@@ -39,7 +64,8 @@ def validate_findings(
         if finding.engine == "engine-1-math":
             max_depth = metrics.get("max_loop_depth", 0)
             if max_depth > policy["max_loop_depth"]:
-                violations.append(
+                _append_if_blocking(
+                    violations,
                     Violation(
                         kind="loop_depth",
                         engine=finding.engine,
@@ -51,12 +77,15 @@ def validate_findings(
                         repair_hint="reduce_nesting",
                         location=finding.diagnostic.location,
                         evidence=_evidence(finding),
-                    )
+                    ),
+                    policy=policy,
+                    behavior_verified=behavior_verified,
                 )
         elif finding.engine == "engine-3-branching":
             complexity = metrics.get("cyclomatic_complexity", 0)
             if complexity > policy["max_cyclomatic_complexity"]:
-                violations.append(
+                _append_if_blocking(
+                    violations,
                     Violation(
                         kind="cyclomatic_complexity",
                         engine=finding.engine,
@@ -68,7 +97,9 @@ def validate_findings(
                         repair_hint="split_function",
                         location=finding.diagnostic.location,
                         evidence=_evidence(finding),
-                    )
+                    ),
+                    policy=policy,
+                    behavior_verified=behavior_verified,
                 )
         elif finding.engine == "engine-2-hazards":
             if finding.summary == "Global mutation hazard" and not policy["allow_explicit_globals"]:
@@ -169,7 +200,8 @@ def validate_findings(
             )
         elif finding.engine == "engine-4-cost":
             if finding.summary == "Linear membership test inside loop" and not policy["allow_algorithmic_hotspots"]:
-                violations.append(
+                _append_if_blocking(
+                    violations,
                     Violation(
                         kind="algorithmic_cost",
                         engine=finding.engine,
@@ -181,7 +213,9 @@ def validate_findings(
                         repair_hint="precompute_lookup",
                         location=finding.diagnostic.location,
                         evidence=_evidence(finding),
-                    )
+                    ),
+                    policy=policy,
+                    behavior_verified=behavior_verified,
                 )
         elif finding.engine == "engine-5-lint":
             if finding.summary in {"Pylint error", "Pylint fatal"} and not policy["allow_lint_errors"]:

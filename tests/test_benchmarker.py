@@ -32,6 +32,7 @@ from engines.hazards_engine import HazardsEngine
 from engines.lint_engine import LintEngine
 from engines.math_engine import MathEngine
 from prompt.builder import build_prompt
+from prompt.budget import budget_prompt
 from prompt.constraint_types import BranchConstraint, ConstraintBlock, LoopConstraint, MutationConstraint
 from prompt.retry_builder import build_retry_prompt, build_small_worker_retry_prompt
 from validation.behavior import mixed_hard_case_spec, validate_function_behavior
@@ -91,7 +92,8 @@ class BenchmarkerTests(unittest.TestCase):
             manager = ArtifactManager(Path(tmpdir))
             paths = manager.create_run(prefix="unit")
             manager.save_session(session, paths, metadata={"case_name": "unit"})
-            self.assertTrue((paths.run_dir / "metadata.json").is_file())
+            metadata = json.loads((paths.run_dir / "metadata.json").read_text(encoding="utf-8"))
+            self.assertEqual(metadata["telemetry"]["total_retry_prompt_tokens_estimate"], 4)
             self.assertTrue((paths.run_dir / "session_summary.json").is_file())
             self.assertEqual(
                 (paths.run_dir / "attempt_0.py").read_text(encoding="utf-8"),
@@ -105,6 +107,12 @@ class BenchmarkerTests(unittest.TestCase):
                 (paths.run_dir / "attempt_0_retry_prompt.txt").read_text(encoding="utf-8"),
                 "fix NameError",
             )
+
+    def test_prompt_budget_preserves_latest_context(self) -> None:
+        result = budget_prompt("old context\n" + ("x" * 200), max_chars=80)
+        self.assertTrue(result.truncated)
+        self.assertLessEqual(result.final_chars, 80)
+        self.assertIn("PROMPT BUDGET APPLIED", result.text)
 
     def test_prompt_normalizer_removes_conversational_fluff(self) -> None:
         prompt = "Hey, can you please actually build a small task tracker, just no globals."
@@ -382,6 +390,49 @@ def analyze(value):
         diagnostic = result.violations[0].evidence["diagnostic"]
         self.assertEqual(diagnostic["violation"], "CYCLOMATIC_COMPLEXITY_EXCEEDED")
         self.assertIn("lookup tables", diagnostic["recommended_refactor"])
+
+    def test_behavior_verified_structural_findings_can_be_demoted(self) -> None:
+        source = """
+def analyze(value):
+    if value == 0:
+        return 0
+    if value == 1:
+        return 1
+    if value == 2:
+        return 2
+    if value == 3:
+        return 3
+    if value == 4:
+        return 4
+    if value == 5:
+        return 5
+    if value == 6:
+        return 6
+    return 7
+"""
+        finding = BranchingEngine().scan(source)[0]
+        strict_result = validate_findings([finding], policy={"max_cyclomatic_complexity": 7})
+        demoted_result = validate_findings(
+            [finding],
+            policy={
+                "max_cyclomatic_complexity": 7,
+                "demote_behavior_verified_structural_findings": True,
+            },
+            behavior_verified=True,
+        )
+        self.assertFalse(strict_result.is_compliant)
+        self.assertTrue(demoted_result.is_compliant)
+
+    def test_behavior_verified_does_not_demote_hazards(self) -> None:
+        source = "import numpy\n\ndef analyze(values):\n    return values\n"
+        findings = HazardsEngine().scan(source)
+        result = validate_findings(
+            findings,
+            policy={"demote_behavior_verified_structural_findings": True},
+            behavior_verified=True,
+        )
+        self.assertFalse(result.is_compliant)
+        self.assertEqual(result.violations[0].kind, "external_dependency")
 
     def test_decomposition_engine_extracts_shared_ir(self) -> None:
         source = (ROOT / "data" / "snippets" / "mixed_hard_case.py").read_text(encoding="utf-8")
@@ -1011,6 +1062,37 @@ def analyze(matrix):
         self.assertEqual(result, "def repaired():\n    return 42")
         self.assertIn("small worker failed", stub_client.calls[0]["prompt"].lower())
         self.assertIn("fix undefined name", stub_client.calls[0]["prompt"])
+
+    def test_architect_supplier_requests_continuation_for_truncated_code(self) -> None:
+        class StubArchitectClient:
+            def __init__(self) -> None:
+                self.calls = []
+
+            def generate(self, **kwargs: object) -> str:
+                self.calls.append(kwargs)
+                if len(self.calls) == 1:
+                    return "def repaired():\n    return (1 +"
+                return " 2)\n"
+
+        stub_client = StubArchitectClient()
+        supplier = ArchitectModelSupplier(client=stub_client)
+        result = supplier.repair_draft("", "fix")
+        self.assertEqual(result, "def repaired():\n    return (1 +\n2)")
+        self.assertEqual(len(stub_client.calls), 2)
+
+    def test_ollama_supplier_scales_generation_budget_for_large_prompts(self) -> None:
+        class StubOllamaClient:
+            def __init__(self) -> None:
+                self.calls = []
+
+            def generate(self, **kwargs: object) -> str:
+                self.calls.append(kwargs)
+                return "def ok():\n    return 1\n"
+
+        stub_client = StubOllamaClient()
+        supplier = OllamaModelSupplier(client=stub_client)
+        supplier.generate_draft("x" * 13000)
+        self.assertGreaterEqual(stub_client.calls[0]["config"].num_predict, 1536)
 
     def test_architect_supplier_builds_nagini_formalization_prompt(self) -> None:
         class StubArchitectClient:

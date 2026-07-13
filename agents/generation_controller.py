@@ -11,6 +11,7 @@ from agents.repair_strategy import MANUAL_REVIEW, RepairStrategyAgent
 from engines.base import EngineFinding
 from prompt.architect_builder import build_state_machine_architect_prompt
 from prompt.backend_failure_builder import build_backend_failure_architect_prompt
+from prompt.budget import budget_prompt
 from prompt.retry_builder import build_retry_prompt, build_small_worker_retry_prompt
 from validation.behavior import FunctionBehaviorSpec, serialize_behavior_result, validate_function_behavior
 from validation.branch_loop_detector import build_branch_state_signature, detect_branching_loop
@@ -53,6 +54,7 @@ class GenerationAttempt:
     branch_state_signature: dict = field(default_factory=dict)
     branch_loop: dict = field(default_factory=dict)
     backend_failure: dict = field(default_factory=dict)
+    diagnostic_stagnant: bool = False
 
 
 @dataclass
@@ -183,6 +185,12 @@ class GenerationController(BaseAgent):
 
     def _is_stagnant(self, previous_draft: str, current_draft: str) -> bool:
         return previous_draft == current_draft
+
+    def _is_diagnostic_stagnant(self, diagnostic_deltas: list[dict]) -> bool:
+        meaningful = [delta for delta in diagnostic_deltas if delta.get("repeated")]
+        if not meaningful:
+            return False
+        return all(not delta.get("improved", False) for delta in meaningful)
 
     def _debug_print(self, message: str) -> None:
         if self.debug:
@@ -501,6 +509,7 @@ class GenerationController(BaseAgent):
                 "- Consider the full finding set together.\n"
                 "- Produce a coherent structural repair that satisfies every listed static and behavioral gate."
             )
+        retry_prompt = budget_prompt(retry_prompt).text
         return retry_prompt, scoped_directives, scoped_violations
 
     def _suggest_human_decision(self, reason: str) -> str:
@@ -741,6 +750,15 @@ class GenerationController(BaseAgent):
                         else 1.0,
                     )
                 )
+                if behavior_validation["is_compliant"]:
+                    validation_result = validate_findings(
+                        findings,
+                        policy={
+                            **(self.policy or {}),
+                            "demote_behavior_verified_structural_findings": True,
+                        },
+                        behavior_verified=True,
+                    )
             formal_validation = self._validate_formal_contracts(draft)
             is_complete = (
                 validation_result.is_compliant
@@ -757,6 +775,7 @@ class GenerationController(BaseAgent):
                 failed_attempts[-1] if failed_attempts else None,
                 validation_result.violations,
             )
+            diagnostic_stagnant = self._is_diagnostic_stagnant(diagnostic_deltas)
             active_violations = (
                 validation_result.violations
                 if not validation_result.is_compliant
@@ -878,6 +897,7 @@ class GenerationController(BaseAgent):
                 draft_source_worker=draft_source_worker,
                 changed=changed,
                 diff=diff_text,
+                diagnostic_stagnant=diagnostic_stagnant,
             )
             attempt.branch_state_signature = build_branch_state_signature(target, attempt).to_dict()
             session.attempts.append(attempt)

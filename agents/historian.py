@@ -4,6 +4,7 @@ import json
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
+from statistics import median
 from typing import Any
 
 from agents.base import AgentResult, BaseAgent
@@ -122,8 +123,10 @@ class HistorianAgent(BaseAgent):
         failed_engines: list[str] = []
         failed_kinds: list[str] = []
         behavior_failures = 0
+        behavior_passed_static_blocked = False
         for attempt in attempts:
             validation = attempt.get("validation", {})
+            behavior = attempt.get("behavior_validation", {})
             for violation in validation.get("violations", []):
                 engine = violation.get("engine")
                 kind = violation.get("kind")
@@ -131,7 +134,13 @@ class HistorianAgent(BaseAgent):
                     failed_engines.append(engine)
                 if kind:
                     failed_kinds.append(kind)
-            behavior_failures += len(attempt.get("behavior_validation", {}).get("issues", []))
+            behavior_failures += len(behavior.get("issues", []))
+            if (
+                behavior.get("is_compliant", True)
+                and not validation.get("is_compliant", True)
+                and validation.get("violations", [])
+            ):
+                behavior_passed_static_blocked = True
         return {
             "recorded_at": self._now(),
             "target": session.get("target", ""),
@@ -146,7 +155,46 @@ class HistorianAgent(BaseAgent):
             "failed_engines": sorted(set(failed_engines)),
             "failed_kinds": sorted(set(failed_kinds)),
             "behavior_failures": behavior_failures,
+            "behavior_passed_static_blocked": behavior_passed_static_blocked,
             "human_review_reason": (session.get("human_review") or {}).get("reason", ""),
+        }
+
+    def regression_report(self, run_record: dict, historical_records: list[dict]) -> dict:
+        """Compare a run against same-shape historical records."""
+        peers = [
+            record
+            for record in historical_records
+            if record is not run_record and self._same_shape(record, run_record)
+        ]
+        if len(peers) < 2:
+            return {"regressed": False, "reason": "insufficient_history", "peer_count": len(peers)}
+        peer_repairs = [int(record.get("repair_attempts", 0)) for record in peers]
+        peer_failures = [len(record.get("failed_kinds", [])) for record in peers]
+        median_repairs = float(median(peer_repairs))
+        median_failures = float(median(peer_failures))
+        current_repairs = int(run_record.get("repair_attempts", 0))
+        current_failures = len(run_record.get("failed_kinds", []))
+        status_regressed = (
+            any(record.get("final_status") == "completed" for record in peers)
+            and run_record.get("final_status") != "completed"
+        )
+        repair_regressed = current_repairs > median_repairs + 1
+        failure_regressed = current_failures > median_failures + 1
+        reasons = []
+        if status_regressed:
+            reasons.append("final_status_worse_than_successful_peers")
+        if repair_regressed:
+            reasons.append("repair_attempts_above_historical_median")
+        if failure_regressed:
+            reasons.append("failure_kinds_above_historical_median")
+        return {
+            "regressed": bool(reasons),
+            "reasons": reasons,
+            "peer_count": len(peers),
+            "median_repair_attempts": median_repairs,
+            "current_repair_attempts": current_repairs,
+            "median_failure_kinds": median_failures,
+            "current_failure_kinds": current_failures,
         }
 
     def append_run_sample(self, runs_path: Path, run_record: dict) -> None:
@@ -186,6 +234,9 @@ class HistorianAgent(BaseAgent):
                 for record in group
                 if isinstance(record.get("contribution"), dict)
             ]
+            behavior_static_blocks = sum(
+                1 for record in group if record.get("behavior_passed_static_blocked")
+            )
             stats["groups"][key] = {
                 "total_runs": total,
                 "completed_runs": completed,
@@ -193,6 +244,10 @@ class HistorianAgent(BaseAgent):
                 "avg_repair_attempts": 0.0 if total == 0 else repair_attempts / total,
                 "avg_contribution_score": (
                     0.0 if not contribution_scores else sum(contribution_scores) / len(contribution_scores)
+                ),
+                "behavior_passed_static_blocked_runs": behavior_static_blocks,
+                "behavior_passed_static_blocked_rate": (
+                    0.0 if total == 0 else behavior_static_blocks / total
                 ),
                 "top_contribution": contribution_labels.most_common(1)[0][0] if contribution_labels else "",
                 "top_failed_engine": failed_engines.most_common(1)[0][0] if failed_engines else "",
@@ -203,6 +258,14 @@ class HistorianAgent(BaseAgent):
             stats_path.parent.mkdir(parents=True, exist_ok=True)
             stats_path.write_text(json.dumps(stats, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         return stats
+
+    @staticmethod
+    def _same_shape(left: dict, right: dict) -> bool:
+        return (
+            left.get("task_type") == right.get("task_type")
+            and left.get("language") == right.get("language")
+            and sorted(left.get("libraries", [])) == sorted(right.get("libraries", []))
+        )
 
     def _load_run_samples(self, runs_path: Path) -> list[dict]:
         if not runs_path.exists():

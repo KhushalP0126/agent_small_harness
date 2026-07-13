@@ -99,6 +99,44 @@ def stringify(value):
         result = validate_function_behavior(source, spec)
         self.assertTrue(result.is_compliant, [asdict(issue) for issue in result.issues])
 
+    def test_behavior_validator_can_check_class_methods(self) -> None:
+        source = """
+class Counter:
+    def __init__(self, value):
+        self.value = value
+
+    def add(self, amount):
+        return self.value + amount
+"""
+        spec = FunctionBehaviorSpec(
+            function_name="Counter.add",
+            cases=[
+                BehaviorCase(name="adds from instance state", args=(4,), setup_args=(3,), expected=7),
+            ],
+        )
+        result = validate_function_behavior(source, spec)
+        self.assertTrue(result.is_compliant, [asdict(issue) for issue in result.issues])
+
+    def test_behavior_validator_catches_class_method_runtime_errors(self) -> None:
+        source = """
+class PongState:
+    def __init__(self, left_score, right_score):
+        self.left_score = left_score
+        self.right_score = right_score
+
+    def score_left(self):
+        return self.score1 + 1
+"""
+        spec = FunctionBehaviorSpec(
+            function_name="PongState.score_left",
+            cases=[
+                BehaviorCase(name="left score increments", args=(), setup_args=(2, 0), expected=3),
+            ],
+        )
+        result = validate_function_behavior(source, spec)
+        self.assertFalse(result.is_compliant)
+        self.assertEqual(result.issues[0].actual, "AttributeError")
+
 
 if __name__ == "__main__":
     unittest.main()

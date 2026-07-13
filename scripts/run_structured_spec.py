@@ -26,6 +26,8 @@ from backends.architect_client import (
 )
 from backends.ollama_client import DEFAULT_OLLAMA_MODEL, OllamaModelSupplier
 from kernel.function_contracts import ContractQueue, ContractQueuePlan, DealExample, FunctionContract
+from prompt.budget import budget_prompt
+from validation.import_graph import analyze_import_graph
 
 
 DEFAULT_ARTIFACT_ROOT = Path("artifacts/runs")
@@ -64,6 +66,7 @@ def _contract_queue_from_architect(
         "architect_contract_error_code": "",
         "architect_contract_error": "",
         "architect_contracts_fallback_used": False,
+        "architect_contract_telemetry": [],
     }
     if not config.api_key_configured:
         metadata["architect_contract_error_code"] = "architect_contract_missing_api_key"
@@ -98,6 +101,7 @@ def _contract_queue_from_architect(
     metadata["architect_contract_plan"] = asdict(contract_plan)
     metadata["architect_contract_plan_raw_response"] = planner_supplier.last_response
     metadata["architect_contract_count"] = len(queue.contracts)
+    metadata["architect_contract_telemetry"] = planner_supplier.telemetry
     return queue, metadata
 
 
@@ -767,7 +771,7 @@ def _run_contract_queue_sequentially(
 
 
 def _integration_prompt(plan_packet: str, accepted_sources: list[str], results: list[ContractExecutionResult]) -> str:
-    return "\n".join(
+    return budget_prompt("\n".join(
         [
             "FUNCTIONWISE CONTRACT INTEGRATION",
             "",
@@ -793,7 +797,7 @@ def _integration_prompt(plan_packet: str, accepted_sources: list[str], results: 
             "- Keep the main loop guarded by if __name__ == \"__main__\" when an app entrypoint is required.",
             "- The final code will be scanned by all engines and formal/Deal gates.",
         ]
-    )
+    )).text
 
 
 def _normalize_symbol(text: str) -> str:
@@ -846,7 +850,24 @@ def _validate_structured_spec_output(source: str, plan) -> list[dict]:
                     "details": entrypoint,
                 }
             )
+    file_map = _structured_spec_file_map(source, plan)
+    import_graph = analyze_import_graph(file_map, external_roots=set(getattr(plan, "allowed_libraries", [])))
+    for path, missing in import_graph.missing_imports.items():
+        issues.append(
+            {
+                "kind": "missing_local_import",
+                "summary": f"Generated file `{path}` imports missing local modules",
+                "details": ", ".join(missing),
+            }
+        )
     return issues
+
+
+def _structured_spec_file_map(source: str, plan) -> dict[str, str]:
+    files = [path for path in getattr(plan, "files", []) if str(path).endswith(".py")]
+    if not files:
+        return {"generated_source.py": source}
+    return {files[0]: source, **{path: "" for path in files[1:]}}
 
 
 def run_spec(
@@ -1073,6 +1094,10 @@ def run_spec(
     final_attempt = session.get("attempts", [{}])[-1] if session.get("attempts") else {}
     final_source = final_attempt.get("draft", "")
     spec_issues = _validate_structured_spec_output(final_source, plan)
+    import_graph = analyze_import_graph(
+        _structured_spec_file_map(final_source, plan),
+        external_roots=set(getattr(plan, "allowed_libraries", [])),
+    )
     if session.get("final_status") == "completed" and spec_issues:
         session["final_status"] = "manual_review_required"
         session["human_review"] = {
@@ -1120,7 +1145,12 @@ def run_spec(
                 "structured_spec_validation": {
                     "is_compliant": not spec_issues,
                     "issues": spec_issues,
+                    "import_graph": asdict(import_graph),
                 },
+                "model_telemetry": [
+                    *contract_metadata.get("architect_contract_telemetry", []),
+                    *architect_model_supplier.telemetry,
+                ],
             },
         )
 

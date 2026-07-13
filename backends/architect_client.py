@@ -11,6 +11,7 @@ from urllib.request import Request, urlopen
 
 from backends.ollama_client import FENCED_CODE_RE, LANGUAGE_TAG_LINE_RE
 from kernel.function_contracts import ContractQueue, ContractQueuePlan, parse_contract_queue_json, parse_contract_queue_plan_json
+from prompt.budget import continuation_prompt, estimate_tokens, looks_truncated_text
 from prompt.contract_builder import build_contract_queue_planner_prompt, build_deal_contract_architect_prompt
 
 
@@ -36,6 +37,15 @@ class ArchitectProfile:
     max_tokens: int
     thinking_type: str
     reasoning_effort: str
+
+
+@dataclass(frozen=True)
+class ArchitectUsage:
+    model: str
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+    estimated_cost_usd: float = 0.0
 
 
 CONTRACT_PROFILE = ArchitectProfile(
@@ -196,6 +206,7 @@ class ArchitectApiClient:
 
     def __init__(self, config: ArchitectConfig | None = None) -> None:
         self.config = config or ArchitectConfig()
+        self.last_usage: ArchitectUsage | None = None
 
     def generate(self, prompt: str, system: str, profile: ArchitectProfile | None = None) -> str:
         if not self.config.api_key_configured:
@@ -204,7 +215,7 @@ class ArchitectApiClient:
                 f"Set {self.config.api_key_env} or {self.config.fallback_api_key_env} "
                 "before using big-LLM escalation."
             )
-        profile = profile or self.config.repair_profile_from_env
+        profile = _profile_for_prompt(profile or self.config.repair_profile_from_env, prompt)
         payload: dict[str, Any] = {
             "model": profile.model,
             "messages": [
@@ -243,6 +254,7 @@ class ArchitectApiClient:
             content = body.get("choices", [{}])[0].get("text", "") if isinstance(body.get("choices"), list) else ""
         if not isinstance(content, str) or not content.strip():
             raise RuntimeError("Architect API returned an empty response.")
+        self.last_usage = _usage_from_response(body, profile.model, prompt, content)
         return content
 
 
@@ -268,6 +280,7 @@ class ArchitectModelSupplier:
         self.client = client or ArchitectApiClient(self.config)
         self.profile = self.config.repair_profile_from_env
         self.system_prompt = system_prompt
+        self.telemetry: list[dict[str, Any]] = []
 
     def repair_draft(self, draft: str, retry_prompt: str) -> str:
         prompt = "\n".join(
@@ -284,7 +297,17 @@ class ArchitectModelSupplier:
             ]
         )
         response = self.client.generate(prompt=prompt, system=self.system_prompt, profile=self.profile)
-        return self._extract_code(response)
+        self._record_usage("repair", prompt)
+        code = self._extract_code(response)
+        if looks_truncated_text(code):
+            continuation = self.client.generate(
+                prompt=continuation_prompt(code),
+                system=self.system_prompt,
+                profile=self.profile,
+            )
+            self._record_usage("repair_continuation", continuation_prompt(code))
+            code = f"{code}\n{self._extract_code(continuation)}".strip()
+        return code
 
     def formalize_for_nagini(
         self,
@@ -325,7 +348,30 @@ class ArchitectModelSupplier:
             ),
             profile=self.profile,
         )
+        self._record_usage("formalize", prompt)
         return self._extract_code(response)
+
+    def _record_usage(self, stage: str, prompt: str) -> None:
+        usage = getattr(self.client, "last_usage", None)
+        if isinstance(usage, ArchitectUsage):
+            payload = {
+                "stage": stage,
+                "model": usage.model,
+                "prompt_tokens": usage.prompt_tokens,
+                "completion_tokens": usage.completion_tokens,
+                "total_tokens": usage.total_tokens,
+                "estimated_cost_usd": usage.estimated_cost_usd,
+            }
+        else:
+            payload = {
+                "stage": stage,
+                "model": self.profile.model,
+                "prompt_tokens": estimate_tokens(prompt),
+                "completion_tokens": 0,
+                "total_tokens": estimate_tokens(prompt),
+                "estimated_cost_usd": 0.0,
+            }
+        self.telemetry.append(payload)
 
     def _extract_code(self, response: str) -> str:
         match = FENCED_CODE_RE.search(response)
@@ -351,6 +397,7 @@ class ContractArchitectSupplier:
         self.profile = profile or CONTRACT_PROFILE
         self.client = client or ArchitectApiClient()
         self.last_response = ""
+        self.telemetry: list[dict[str, Any]] = []
 
     def build_contract_queue(self, plan_packet: str, preserved_context: str = "") -> ContractQueue:
         prompt = build_deal_contract_architect_prompt(
@@ -363,6 +410,7 @@ class ContractArchitectSupplier:
                 system="Return strict JSON contract queues only.",
                 profile=self.profile,
             )
+            self._record_usage("contract_queue", prompt)
         except TimeoutError as exc:
             raise ContractArchitectError("architect_contract_timeout", str(exc)) from exc
         except RuntimeError as exc:
@@ -384,6 +432,10 @@ class ContractArchitectSupplier:
             raise ContractArchitectError("architect_contract_zero_contracts", "Architect returned zero function contracts.")
         return queue
 
+    def _record_usage(self, stage: str, prompt: str) -> None:
+        usage = getattr(self.client, "last_usage", None)
+        self.telemetry.append(_usage_payload(stage, usage, self.profile.model, prompt))
+
 
 class ContractPlannerSupplier:
     def __init__(
@@ -393,6 +445,7 @@ class ContractPlannerSupplier:
     ) -> None:
         self.profile = profile or CONTRACT_PROFILE
         self.client = client or ArchitectApiClient()
+        self.telemetry: list[dict[str, Any]] = []
 
     def build_contract_plan(
         self,
@@ -411,6 +464,7 @@ class ContractPlannerSupplier:
                 system="Return compact JSON contract queue plans only.",
                 profile=self.profile,
             )
+            self._record_usage("contract_plan", prompt)
         except TimeoutError as exc:
             raise ContractArchitectError("architect_contract_plan_timeout", str(exc)) from exc
         except RuntimeError as exc:
@@ -436,6 +490,10 @@ class ContractPlannerSupplier:
             raise ContractArchitectError("architect_contract_plan_zero_contracts", "Architect returned an empty contract plan.")
         return plan
 
+    def _record_usage(self, stage: str, prompt: str) -> None:
+        usage = getattr(self.client, "last_usage", None)
+        self.telemetry.append(_usage_payload(stage, usage, self.profile.model, prompt))
+
 
 def _looks_truncated_json(response: str) -> bool:
     stripped = response.strip()
@@ -444,3 +502,66 @@ def _looks_truncated_json(response: str) -> bool:
     if not stripped.startswith("{"):
         return False
     return stripped.count("{") != stripped.count("}") or stripped.count("[") != stripped.count("]")
+
+
+def _profile_for_prompt(profile: ArchitectProfile, prompt: str) -> ArchitectProfile:
+    target = profile.max_tokens
+    prompt_chars = len(prompt)
+    if prompt_chars > 48000:
+        target = max(target, 12000)
+    elif prompt_chars > 24000:
+        target = max(target, 8000)
+    elif prompt_chars > 12000:
+        target = max(target, 6000)
+    target = min(target, 16000)
+    if target == profile.max_tokens:
+        return profile
+    return ArchitectProfile(
+        model=profile.model,
+        timeout_seconds=profile.timeout_seconds,
+        temperature=profile.temperature,
+        max_tokens=target,
+        thinking_type=profile.thinking_type,
+        reasoning_effort=profile.reasoning_effort,
+    )
+
+
+def _usage_from_response(body: dict[str, Any], model: str, prompt: str, completion: str) -> ArchitectUsage:
+    raw_usage = body.get("usage", {}) if isinstance(body, dict) else {}
+    prompt_tokens = _int_usage(raw_usage.get("prompt_tokens"), estimate_tokens(prompt))
+    completion_tokens = _int_usage(raw_usage.get("completion_tokens"), estimate_tokens(completion))
+    total_tokens = _int_usage(raw_usage.get("total_tokens"), prompt_tokens + completion_tokens)
+    return ArchitectUsage(
+        model=model,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=total_tokens,
+    )
+
+
+def _int_usage(value: Any, default: int) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _usage_payload(stage: str, usage: Any, model: str, prompt: str) -> dict[str, Any]:
+    if isinstance(usage, ArchitectUsage):
+        return {
+            "stage": stage,
+            "model": usage.model,
+            "prompt_tokens": usage.prompt_tokens,
+            "completion_tokens": usage.completion_tokens,
+            "total_tokens": usage.total_tokens,
+            "estimated_cost_usd": usage.estimated_cost_usd,
+        }
+    prompt_tokens = estimate_tokens(prompt)
+    return {
+        "stage": stage,
+        "model": model,
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": 0,
+        "total_tokens": prompt_tokens,
+        "estimated_cost_usd": 0.0,
+    }

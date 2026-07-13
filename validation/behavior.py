@@ -10,16 +10,19 @@ from typing import Any
 
 DEFAULT_BEHAVIOR_TIMEOUT_SECONDS = 1.0
 BLOCKED_CALL_NAMES = {"__import__", "compile", "eval", "exec", "input", "open"}
-BLOCKED_NODES = (ast.AsyncFunctionDef, ast.AsyncFor, ast.AsyncWith, ast.ClassDef, ast.Import, ast.ImportFrom)
+BLOCKED_NODES = (ast.AsyncFunctionDef, ast.AsyncFor, ast.AsyncWith, ast.Import, ast.ImportFrom)
 SAFE_BUILTINS = {
+    "__build_class__": __build_class__,
     "abs": abs,
     "all": all,
     "any": any,
     "bool": bool,
+    "classmethod": classmethod,
     "dict": dict,
     "enumerate": enumerate,
     "float": float,
     "int": int,
+    "isinstance": isinstance,
     "len": len,
     "list": list,
     "map": map,
@@ -27,7 +30,10 @@ SAFE_BUILTINS = {
     "min": min,
     "range": range,
     "set": set,
+    "object": object,
+    "property": property,
     "sorted": sorted,
+    "staticmethod": staticmethod,
     "str": str,
     "sum": sum,
     "tuple": tuple,
@@ -41,6 +47,8 @@ class BehaviorCase:
     args: tuple[Any, ...]
     expected: Any
     kwargs: dict[str, Any] = field(default_factory=dict)
+    setup_args: tuple[Any, ...] = field(default_factory=tuple)
+    setup_kwargs: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -72,7 +80,15 @@ def format_behavior_spec(spec: FunctionBehaviorSpec) -> str:
         args = ", ".join(repr(arg) for arg in case.args)
         kwargs = ", ".join(f"{key}={value!r}" for key, value in case.kwargs.items())
         call_args = ", ".join(item for item in [args, kwargs] if item)
-        lines.append(f"- {spec.function_name}({call_args}) == {case.expected!r}  # {case.name}")
+        if "." in spec.function_name:
+            class_name, method_name = spec.function_name.split(".", 1)
+            setup_args = ", ".join(repr(arg) for arg in case.setup_args)
+            setup_kwargs = ", ".join(f"{key}={value!r}" for key, value in case.setup_kwargs.items())
+            setup_call_args = ", ".join(item for item in [setup_args, setup_kwargs] if item)
+            call = f"{class_name}({setup_call_args}).{method_name}({call_args})"
+        else:
+            call = f"{spec.function_name}({call_args})"
+        lines.append(f"- {call} == {case.expected!r}  # {case.name}")
     return "\n".join(lines)
 
 
@@ -174,22 +190,13 @@ def _validate_function_behavior_inline(source: str, spec: FunctionBehaviorSpec) 
             ],
         )
 
-    candidate = namespace.get(spec.function_name)
-    if not callable(candidate):
-        return BehaviorResult(
-            is_compliant=False,
-            issues=[
-                BehaviorIssue(
-                    case="function lookup",
-                    expected=f"callable {spec.function_name}",
-                    actual=type(candidate).__name__,
-                    details=f"Generated code did not define {spec.function_name}.",
-                )
-            ],
-        )
+    candidate_issue = _candidate_lookup_issue(namespace, spec.function_name)
+    if candidate_issue is not None:
+        return BehaviorResult(is_compliant=False, issues=[candidate_issue])
 
     for case in spec.cases:
         try:
+            candidate = _resolve_case_callable(namespace, spec.function_name, case)
             actual = candidate(*deepcopy(case.args), **deepcopy(case.kwargs))
         except Exception as exc:
             issues.append(
@@ -212,6 +219,46 @@ def _validate_function_behavior_inline(source: str, spec: FunctionBehaviorSpec) 
             )
 
     return BehaviorResult(is_compliant=not issues, issues=issues)
+
+
+def _candidate_lookup_issue(namespace: dict[str, Any], target_name: str) -> BehaviorIssue | None:
+    if "." not in target_name:
+        candidate = namespace.get(target_name)
+        if callable(candidate):
+            return None
+        return BehaviorIssue(
+            case="function lookup",
+            expected=f"callable {target_name}",
+            actual=type(candidate).__name__,
+            details=f"Generated code did not define {target_name}.",
+        )
+
+    class_name, method_name = target_name.split(".", 1)
+    class_candidate = namespace.get(class_name)
+    if not isinstance(class_candidate, type):
+        return BehaviorIssue(
+            case="class lookup",
+            expected=f"class {class_name}",
+            actual=type(class_candidate).__name__,
+            details=f"Generated code did not define class {class_name}.",
+        )
+    if not hasattr(class_candidate, method_name):
+        return BehaviorIssue(
+            case="method lookup",
+            expected=f"method {target_name}",
+            actual="missing",
+            details=f"Generated class {class_name} did not define {method_name}.",
+        )
+    return None
+
+
+def _resolve_case_callable(namespace: dict[str, Any], target_name: str, case: BehaviorCase) -> Any:
+    if "." not in target_name:
+        return namespace[target_name]
+    class_name, method_name = target_name.split(".", 1)
+    class_candidate = namespace[class_name]
+    instance = class_candidate(*deepcopy(case.setup_args), **deepcopy(case.setup_kwargs))
+    return getattr(instance, method_name)
 
 
 def _validate_runtime_ast(tree: ast.AST) -> None:

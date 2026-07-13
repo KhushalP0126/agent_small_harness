@@ -24,6 +24,7 @@
         "display.get_surface",
         "display.update",
         "event.get",
+        "key.get_pressed",
         "Rect",
         "draw.rect",
         "draw.circle",
@@ -45,7 +46,8 @@
         "K_s",
         "K_d",
         "K_r",
-        "K_ESCAPE"
+        "K_ESCAPE",
+        "K_SPACE"
       ],
       "context": "Use pygame.display for windows, pygame.event for input, pygame.draw for drawing primitives, and pygame.time.Clock for frame timing.",
       "unknown_api_repair": "Use the documented pygame namespace path, such as pygame.draw.rect(...) instead of pygame.rect(...).",

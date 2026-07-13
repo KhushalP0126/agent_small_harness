@@ -132,6 +132,8 @@ class LibraryRegistryTests(unittest.TestCase):
         pygame = registry.get("pygame")
         self.assertIsNotNone(pygame)
         self.assertIn("draw.rect", pygame.allowed_calls)
+        self.assertIn("key.get_pressed", pygame.allowed_calls)
+        self.assertIn("K_SPACE", pygame.allowed_constants)
         self.assertTrue(registry.is_registered("pygame"))
 
 
@@ -157,6 +159,19 @@ class PythonHazardPolicyTests(unittest.TestCase):
             "import pygame\n\n"
             "def draw_box(screen, color, rect):\n"
             "    pygame.draw.rect(screen, color, rect)\n"
+        )
+        findings = HazardsEngine().scan(source)
+        summaries = {finding.summary for finding in findings}
+        self.assertNotIn("External dependency usage", summaries)
+        self.assertNotIn("Unknown registered-library API usage", summaries)
+        self.assertTrue(validate_findings(findings).is_compliant)
+
+    def test_registered_pygame_keyboard_api_is_not_unknown(self) -> None:
+        source = (
+            "import pygame\n\n"
+            "def pressed():\n"
+            "    keys = pygame.key.get_pressed()\n"
+            "    return keys[pygame.K_SPACE]\n"
         )
         findings = HazardsEngine().scan(source)
         summaries = {finding.summary for finding in findings}
@@ -658,6 +673,7 @@ class HistorianLearningTests(unittest.TestCase):
             pandas_stats = stats["groups"]["library:pandas"]
             self.assertEqual(pandas_stats["total_runs"], 2)
             self.assertEqual(pandas_stats["success_rate"], 0.5)
+            self.assertEqual(pandas_stats["behavior_passed_static_blocked_runs"], 0)
             self.assertEqual(pandas_stats["avg_contribution_score"], 0.25)
             self.assertEqual(pandas_stats["top_contribution"], "small_helped_architect")
             self.assertEqual(pandas_stats["top_failed_engine"], "engine-2-hazards")
@@ -666,6 +682,44 @@ class HistorianLearningTests(unittest.TestCase):
             history_path.unlink()
             runs_path.unlink()
             stats_path.unlink()
+
+    def test_historian_flags_regression_against_same_shape_runs(self) -> None:
+        path = self._temp_history()
+        try:
+            historian = HistorianAgent(path)
+            current = {
+                "task_type": "data",
+                "language": "python",
+                "libraries": ["pandas"],
+                "repair_attempts": 5,
+                "final_status": "manual_review_required",
+                "failed_kinds": ["unknown_api", "algorithmic_cost", "lint_error"],
+            }
+            report = historian.regression_report(
+                current,
+                [
+                    {
+                        "task_type": "data",
+                        "language": "python",
+                        "libraries": ["pandas"],
+                        "repair_attempts": 1,
+                        "final_status": "completed",
+                        "failed_kinds": ["unknown_api"],
+                    },
+                    {
+                        "task_type": "data",
+                        "language": "python",
+                        "libraries": ["pandas"],
+                        "repair_attempts": 2,
+                        "final_status": "completed",
+                        "failed_kinds": ["unknown_api"],
+                    },
+                ],
+            )
+            self.assertTrue(report["regressed"])
+            self.assertIn("final_status_worse_than_successful_peers", report["reasons"])
+        finally:
+            path.unlink()
 
 
 class ControllerIntegrationTests(unittest.TestCase):
@@ -1115,7 +1169,7 @@ def analyze(value):
         self.assertEqual(result.payload["attempts"][-1]["draft_source_worker"], "architect_llm")
         self.assertFalse(result.payload["attempts"][-1]["validation"]["is_compliant"])
 
-    def test_architect_behavior_clean_complexity_only_routes_to_metric_scope_review(self) -> None:
+    def test_architect_behavior_clean_complexity_only_can_complete(self) -> None:
         initial_source = """
 def parse_sectioned_config(text):
     return {}
@@ -1172,14 +1226,10 @@ def parse_sectioned_config(text):
         )
         result = controller.run(target="metric-scope", initial_prompt="generate")
 
-        self.assertEqual(result.payload["final_status"], "manual_review_required")
-        self.assertEqual(result.payload["human_review"]["reason"], "metric_scope_ambiguous")
+        self.assertEqual(result.payload["final_status"], "completed")
         self.assertEqual(len(architect_calls), 1)
         self.assertTrue(result.payload["attempts"][-1]["behavior_validation"]["is_compliant"])
-        self.assertEqual(
-            [violation["kind"] for violation in result.payload["attempts"][-1]["validation"]["violations"]],
-            ["cyclomatic_complexity"],
-        )
+        self.assertTrue(result.payload["attempts"][-1]["validation"]["is_compliant"])
 
     def test_architect_parse_error_still_routes_to_static_gate_failed(self) -> None:
         bad_source = """
