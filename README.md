@@ -38,6 +38,29 @@ The reliable target is Python.
 C and C++ tree-sitter support exists as an optional structural-analysis path, but
 the main development lane is Python code creation, repair, and validation.
 
+The harness is intentionally generalized. Example specs such as Snake and Pong
+are kept as external experiment inputs and smoke-test fixtures, not as the
+definition of the product or controller behavior.
+
+## Interactive Document
+
+`agent-harness.txt` is an interactive architecture sketch for discussing the
+operator flow. It is useful for orientation, but it is not the executable
+source of truth.
+
+When the text diagram and the code disagree, trust the code in:
+
+- `agents/` for orchestration, routing, repair, and artifact handling
+- `kernel/` for the shared execution boundary and structured task handoff
+- `engines/` and `validation/` for deterministic acceptance gates
+- `scripts/` and `Makefile` for the runnable operator surface
+
+In particular, the `Warp Terminal Pause`, numbered agent labels, and staged
+preprocessing/post-processing blocks in `agent-harness.txt` should be read as a
+conceptual walkthrough rather than a literal runtime pipeline. The current
+runtime is the create/repair loop shown below and implemented in
+`GenerationController`, `PlanModeAgent`, and the registered validation stack.
+
 ## Engine Layer
 
 Python drafts pass through a registered engine set:
@@ -139,6 +162,7 @@ flowchart TD
 | `backends/` | Ollama worker and API architect clients |
 | `scripts/` | Ladder runners, raw-vs-harness comparison, history aggregation, review tools |
 | `tests/` | Unit, integration, edge-case, ladder, and pipeline tests |
+| `agent-harness.txt` | Conceptual interactive flow document for operator discussion; not the authoritative runtime spec |
 | `context.md` | Current project context and experiment notes |
 | `design.md` | Architectural constraints and safety principles |
 | `structure.md` | File-by-file repository map |
@@ -236,6 +260,10 @@ larger multi-file application generation. The next major platform layer is a
 stronger Spec/IR builder that can describe target functions, behavior examples,
 state transitions, allowed libraries, validation gates, and file scope before
 the execution kernel begins generation.
+
+The documentation direction follows the same rule: keep the public story about
+generalized code creation and repair, and treat app-like specs as fixtures that
+exercise the harness rather than define it.
 
 ## Safety Boundary
 
