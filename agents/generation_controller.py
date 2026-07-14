@@ -767,6 +767,7 @@ class GenerationController(BaseAgent):
             )
             retry_prompt = ""
             repair_worker = ""
+            next_repair_supplier: RepairSupplier | None = None
             force_manual_review = False
             manual_review_reason = "repair_strategy_manual_review"
             changed = attempt_index == 0 or not self._is_stagnant(previous_draft, draft)
@@ -846,7 +847,17 @@ class GenerationController(BaseAgent):
                         else self._formal_violations(formal_validation)
                     )
                 )
-                repair_worker, _supplier = self._repair_worker_for(len(failed_attempts))
+                repair_worker, next_repair_supplier = self._repair_worker_for(len(failed_attempts))
+                if (
+                    diagnostic_stagnant
+                    and repair_worker == "small_worker"
+                    and self.architect_supplier is not None
+                ):
+                    repair_worker = "architect_llm"
+                    next_repair_supplier = self.architect_supplier
+                    self._debug_print(
+                        "Repeated diagnostics did not improve. Escalating the next repair to architect."
+                    )
                 retry_prompt, prompt_directives, prompt_violations = self._build_scoped_retry_prompt(
                     source=draft,
                     violations=retry_violations,
@@ -882,6 +893,7 @@ class GenerationController(BaseAgent):
                             "TARGETED REPAIR INSTRUCTIONS:\n"
                             + "\n".join(f"- {instruction}" for instruction in decision.repair_instructions)
                         )
+                        retry_prompt = budget_prompt(retry_prompt).text
                 self._debug_print(f"Sending repair prompt to {repair_worker}.")
             attempt = GenerationAttempt(
                 attempt=attempt_index,
@@ -917,7 +929,10 @@ class GenerationController(BaseAgent):
                 break
             if attempt_index < self.max_retries:
                 failed_attempts.append(attempt)
-                worker_name, supplier = self._repair_worker_for(len(failed_attempts) - 1)
+                worker_name = attempt.repair_worker
+                supplier = next_repair_supplier
+                if not worker_name or supplier is None:
+                    worker_name, supplier = self._repair_worker_for(len(failed_attempts) - 1)
                 try:
                     next_draft = supplier(draft, retry_prompt)
                 except Exception as exc:

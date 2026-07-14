@@ -200,6 +200,9 @@ class HistorianAgent(BaseAgent):
     def append_run_sample(self, runs_path: Path, run_record: dict) -> None:
         """Append one raw run sample to a JSONL file."""
         runs_path.parent.mkdir(parents=True, exist_ok=True)
+        if "regression_report" not in run_record:
+            historical_records = self._load_run_samples(runs_path)
+            run_record["regression_report"] = self.regression_report(run_record, historical_records)
         with runs_path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(run_record, sort_keys=True) + "\n")
 
@@ -237,6 +240,12 @@ class HistorianAgent(BaseAgent):
             behavior_static_blocks = sum(
                 1 for record in group if record.get("behavior_passed_static_blocked")
             )
+            regressions = sum(
+                1
+                for record in group
+                if isinstance(record.get("regression_report"), dict)
+                and record["regression_report"].get("regressed")
+            )
             stats["groups"][key] = {
                 "total_runs": total,
                 "completed_runs": completed,
@@ -249,6 +258,8 @@ class HistorianAgent(BaseAgent):
                 "behavior_passed_static_blocked_rate": (
                     0.0 if total == 0 else behavior_static_blocks / total
                 ),
+                "regressed_runs": regressions,
+                "regression_rate": 0.0 if total == 0 else regressions / total,
                 "top_contribution": contribution_labels.most_common(1)[0][0] if contribution_labels else "",
                 "top_failed_engine": failed_engines.most_common(1)[0][0] if failed_engines else "",
                 "top_failure_kind": failed_kinds.most_common(1)[0][0] if failed_kinds else "",

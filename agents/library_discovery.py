@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from agents.base import AgentResult, BaseAgent
+from backends.architect_client import ArchitectConfig
 
 
 @dataclass
@@ -16,6 +17,7 @@ class LibraryDiscovery:
     available: bool
     origin: str = ""
     public_symbols: list[str] = field(default_factory=list)
+    environment: dict[str, Any] = field(default_factory=dict)
     proposal: dict[str, Any] = field(default_factory=dict)
 
 
@@ -24,10 +26,17 @@ class LibraryDiscoveryAgent(BaseAgent):
 
     name = "agent-library-discovery"
 
+    def __init__(self, architect_config: ArchitectConfig | None = None) -> None:
+        self.architect_config = architect_config or ArchitectConfig()
+
     def discover(self, library: str) -> LibraryDiscovery:
         spec = importlib.util.find_spec(library)
         if spec is None or spec.origin is None:
-            return LibraryDiscovery(library=library, available=False)
+            return LibraryDiscovery(
+                library=library,
+                available=False,
+                environment=self._environment_summary(),
+            )
         origin = spec.origin
         symbols = self._public_symbols(Path(origin)) if origin.endswith(".py") else []
         return LibraryDiscovery(
@@ -35,8 +44,19 @@ class LibraryDiscoveryAgent(BaseAgent):
             available=True,
             origin=origin,
             public_symbols=symbols,
+            environment=self._environment_summary(),
             proposal=self.build_proposal(library, symbols),
         )
+
+    def _environment_summary(self) -> dict[str, Any]:
+        config = self.architect_config
+        return {
+            "env_file": str(config.env_file),
+            "architect_api_key_configured": config.api_key_configured,
+            "architect_api_key_env": config.api_key_source_env,
+            "architect_model": config.model,
+            "architect_api_base_url": config.base_url,
+        }
 
     def _public_symbols(self, origin: Path) -> list[str]:
         try:

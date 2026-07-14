@@ -28,6 +28,11 @@ def main() -> None:
     print(f"Wrote proposal: {path}")
     print(f"Available: {payload.get('available')}")
     print(f"Origin: {payload.get('origin', '')}")
+    environment = payload.get("environment", {})
+    print(f"Architect API configured: {environment.get('architect_api_key_configured', False)}")
+    if environment.get("architect_api_key_env"):
+        print(f"Architect API key env: {environment['architect_api_key_env']}")
+    print(f"Architect env file: {environment.get('env_file', '.env')}")
     print(f"Candidate allowed calls: {len(proposal.get('allowed_calls', []))}")
     for symbol in proposal.get("allowed_calls", [])[:25]:
         print(f"- {symbol}")

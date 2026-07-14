@@ -118,6 +118,14 @@ class ArchitectConfig:
         return bool(self.api_key)
 
     @property
+    def api_key_source_env(self) -> str:
+        if self._config_value(self.api_key_env):
+            return self.api_key_env
+        if self._config_value(self.fallback_api_key_env):
+            return self.fallback_api_key_env
+        return ""
+
+    @property
     def api_key(self) -> str:
         return (
             self._config_value(self.api_key_env)

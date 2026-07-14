@@ -1,6 +1,7 @@
 import json
 import tempfile
 import unittest
+from dataclasses import asdict
 from pathlib import Path
 
 from agents.behavior_spec import DEFAULT_BEHAVIOR_CASES, BehaviorSpecAgent
@@ -26,6 +27,7 @@ from agents.repair_strategy import (
 from agents.template_loader import TemplateLibrary
 from agents.template_registry import TemplateRegistry
 from benchmarker import ROOT
+from backends.architect_client import ArchitectConfig
 from engines.bounds_engine import BoundsEngine
 from engines.branching_engine import BranchingEngine
 from engines.cost_engine import CostEngine
@@ -501,6 +503,30 @@ class ScalabilityAgentTests(unittest.TestCase):
             self.assertTrue(payload["available"])
             self.assertEqual(payload["proposal"]["proposal_status"], "candidate")
             self.assertIn("loads", payload["proposal"]["allowed_calls"])
+            self.assertIn("architect_api_key_configured", payload["environment"])
+
+    def test_library_discovery_reports_architect_env_without_secret(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env_file = Path(tmpdir) / ".env"
+            env_file.write_text(
+                "DEEPSEEK_TEST_KEY=secret-value\n"
+                "ARCHITECT_TEST_MODEL=test-model\n",
+                encoding="utf-8",
+            )
+            agent = LibraryDiscoveryAgent(
+                architect_config=ArchitectConfig(
+                    api_key_env="MISSING_ARCHITECT_TEST_KEY",
+                    fallback_api_key_env="DEEPSEEK_TEST_KEY",
+                    model_env="ARCHITECT_TEST_MODEL",
+                    env_file=str(env_file),
+                )
+            )
+            discovered = agent.discover("json")
+
+            self.assertTrue(discovered.environment["architect_api_key_configured"])
+            self.assertEqual(discovered.environment["architect_api_key_env"], "DEEPSEEK_TEST_KEY")
+            self.assertEqual(discovered.environment["architect_model"], "test-model")
+            self.assertNotIn("secret-value", json.dumps(asdict(discovered)))
 
     def test_approve_library_merges_proposal_into_temp_registry(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -721,6 +747,47 @@ class HistorianLearningTests(unittest.TestCase):
         finally:
             path.unlink()
 
+    def test_append_run_sample_attaches_regression_report(self) -> None:
+        history_path = self._temp_history()
+        runs_handle = tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False)
+        runs_path = Path(runs_handle.name)
+        runs_handle.close()
+        try:
+            historian = HistorianAgent(history_path)
+            base_record = {
+                "task_type": "data",
+                "language": "python",
+                "libraries": ["pandas"],
+                "repair_attempts": 1,
+                "final_status": "completed",
+                "failed_kinds": ["unknown_api"],
+            }
+            historian.append_run_sample(runs_path, {**base_record, "case_name": "peer-1"})
+            historian.append_run_sample(runs_path, {**base_record, "case_name": "peer-2"})
+            historian.append_run_sample(
+                runs_path,
+                {
+                    **base_record,
+                    "case_name": "current",
+                    "repair_attempts": 5,
+                    "final_status": "manual_review_required",
+                    "failed_kinds": ["unknown_api", "algorithmic_cost", "lint_error"],
+                },
+            )
+            records = [
+                json.loads(line)
+                for line in runs_path.read_text(encoding="utf-8").splitlines()
+                if line.strip()
+            ]
+            self.assertTrue(records[-1]["regression_report"]["regressed"])
+            self.assertIn(
+                "final_status_worse_than_successful_peers",
+                records[-1]["regression_report"]["reasons"],
+            )
+        finally:
+            history_path.unlink()
+            runs_path.unlink()
+
 
 class ControllerIntegrationTests(unittest.TestCase):
     def test_unsupported_language_routes_to_manual_review(self) -> None:
@@ -901,6 +968,53 @@ def analyze(value):
         self.assertEqual(len(small_calls), 1)
         self.assertEqual(len(architect_calls), 1)
         self.assertEqual(result.payload["attempts"][0]["repair_worker"], "small_worker")
+        self.assertEqual(result.payload["attempts"][1]["repair_worker"], "architect_llm")
+
+    def test_diagnostic_stagnation_escalates_to_architect_before_retry_threshold(self) -> None:
+        bad_v1 = """
+def analyze(value):
+    if value == 0:
+        return 0
+    if value == 1:
+        return 1
+    if value == 2:
+        return 2
+    if value == 3:
+        return 3
+    if value == 4:
+        return 4
+    if value == 5:
+        return 5
+    if value == 6:
+        return 6
+    return 7
+"""
+        bad_v2 = bad_v1.replace("return 7", "return value")
+        repaired = LINEAR.read_text(encoding="utf-8")
+        small_calls = []
+        architect_calls = []
+
+        def small_supplier(_draft: str, retry_prompt: str) -> str:
+            small_calls.append(retry_prompt)
+            return bad_v2
+
+        def architect_supplier(_draft: str, retry_prompt: str) -> str:
+            architect_calls.append(retry_prompt)
+            self.assertIn("DIAGNOSTIC DELTAS:", retry_prompt)
+            return repaired
+
+        controller = GenerationController(
+            max_retries=2,
+            draft_supplier=lambda _prompt: bad_v1,
+            repair_supplier=small_supplier,
+            architect_supplier=architect_supplier,
+            architect_after_repair_attempts=99,
+        )
+        result = controller.run(target="diagnostic-stagnation", initial_prompt="generate")
+        self.assertEqual(result.payload["final_status"], "completed")
+        self.assertEqual(len(small_calls), 1)
+        self.assertEqual(len(architect_calls), 1)
+        self.assertTrue(result.payload["attempts"][1]["diagnostic_stagnant"])
         self.assertEqual(result.payload["attempts"][1]["repair_worker"], "architect_llm")
 
     def test_initial_worker_timeout_routes_to_architect(self) -> None:
