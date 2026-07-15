@@ -57,6 +57,7 @@ agents; they prepare, route, validate, and record work.
 - `agents/historian.py` - Records raw runs and aggregates route statistics.
 - `agents/job_store.py` - Append-only JSONL job store.
 - `agents/library_discovery.py` - Generates reviewable library registry proposals.
+- `agents/library_doc_search.py` - Model-backed documentation search and Markdown syntax-guide generation for library proposals.
 - `agents/dependency.py` - Dependency-context helper.
 - `agents/scope_tracker.py` - Scope-context helper.
 - `agents/postprocessor.py` - Final response/output wrapper.
@@ -132,7 +133,7 @@ Ground truth cases, behavior specs, library schemas, run logs, and code snippets
 - `data/engine_cases.json` - Expected engine findings for Python fixtures.
 - `data/behavior_cases.json` - Behavior specs for generated-function validation.
 - `data/library_registry.json` - Trusted library API schemas and adapter notes.
-- `data/library_proposals/` - Untrusted discovery proposals awaiting approval.
+- `data/library_proposals/` - Untrusted discovery proposals and model-generated library docs awaiting review.
 - `data/runs.jsonl` - Optional append-only historian log.
 - `data/stats.json` - Optional aggregate route statistics.
 - `data/snippets/` - Python, C, and C++ static-analysis fixtures.
@@ -151,7 +152,7 @@ Runnable experiments and operator tooling.
 - `scripts/test_inference.py` - Ollama inference smoke test.
 - `scripts/normalize_prompt.py` - Prompt-normalization CLI.
 - `scripts/aggregate_history.py` - Builds aggregate route stats from raw run logs.
-- `scripts/discover_library.py` - Writes a reviewable library proposal.
+- `scripts/discover_library.py` - Writes a reviewable library proposal and can ask DeepSeek or Qwen for documentation.
 - `scripts/approve_library.py` - Merges an approved proposal into the trusted registry.
 - `scripts/run_adversarial_prompts.py` - Runs trap prompts through the PEV loop.
 - `scripts/run_coding_capability.py` - Runs codegen tasks through engines, behavior checks, and optional architect escalation.

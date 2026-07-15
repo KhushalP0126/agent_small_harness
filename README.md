@@ -215,6 +215,12 @@ ARCHITECT_MODEL=deepseek-v4-pro
 
 `.env` is ignored by git. Use `.env.example` as the committed template.
 
+Check the env-file location and supported key names:
+
+```bash
+make env-path
+```
+
 ## Common Commands
 
 Show command help:
@@ -262,6 +268,24 @@ Review saved artifacts:
 make review-run RUN=<run-id-or-path>
 ```
 
+Discover a library API surface and ask DeepSeek for documentation by default:
+
+```bash
+make discover-library LIB=clang.cindex
+```
+
+That command writes a reviewable proposal to
+`data/library_proposals/<LIB>.json` and a model-generated syntax guide to
+`data/library_proposals/<LIB>.docs.md`. Use `DOC_AGENT=qwen` to ask local Qwen
+instead, or `DOC_AGENT=none` to write an import-only proposal without model
+documentation search.
+
+Approve a reviewed proposal into the trusted library registry:
+
+```bash
+make approve-library LIB=clang.cindex
+```
+
 ## Research Questions This Repo Supports
 
 - Does a deterministic engine layer improve small-model code reliability?
@@ -282,6 +306,10 @@ the execution kernel begins generation.
 The documentation direction follows the same rule: keep the public story about
 generalized code creation and repair, and treat app-like specs as fixtures that
 exercise the harness rather than define it.
+
+Library discovery follows the same trust boundary. A discovered package surface
+and model-found documentation are proposal data until a human reviews and
+approves them into `data/library_registry.json`.
 
 ## Safety Boundary
 

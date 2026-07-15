@@ -29,6 +29,58 @@ Current baseline:
   only after normal validation.
 - Dedicated app-fixture routing was removed from the source surface. Template
   routing remains available only through injected/configured routes.
+- Library discovery is now part of the operator surface. It can inspect an
+  importable Python package, ask DeepSeek or local Qwen for documentation
+  candidates, and write reviewable proposal/docs files before any API surface is
+  approved into the trusted registry.
+
+## Environment And Model Backends
+
+Local secrets belong in `.env`, which is ignored by git. Use `.env.example` as
+the template and keep one of these keys configured:
+
+```env
+DEEPSEEK_API_KEY=your_key_here
+# or
+ARCHITECT_API_KEY=your_key_here
+```
+
+`make env-path` prints the active env-file path and supported key names. The
+DeepSeek-backed architect client reads `.env` directly, so shell commands can use
+the API without exporting the key globally.
+
+Default backend roles:
+
+- local worker: Ollama/Qwen via `MODEL`, defaulting to `qwen2.5-coder:1.5b`
+- architect and documentation search: DeepSeek via `DEEPSEEK_API_KEY`
+- optional documentation override: `DOC_AGENT=qwen` for local Qwen or
+  `DOC_AGENT=none` for import-only discovery
+
+## Library Discovery Workflow
+
+The Makefile now connects discovery to DeepSeek by default:
+
+```bash
+make discover-library LIB=clang.cindex
+```
+
+This writes:
+
+- `data/library_proposals/<LIB>.json` with discovered public symbols,
+  environment metadata, model-search metadata, and documentation candidates
+- `data/library_proposals/<LIB>.docs.md` with model-generated syntax and usage
+  notes
+
+Use these variants when needed:
+
+```bash
+make discover-library LIB=json DOC_AGENT=qwen
+make discover-library LIB=json DOC_AGENT=none
+make approve-library LIB=json
+```
+
+Discovery proposals are candidates, not trusted APIs. Review the proposal before
+approving it into `data/library_registry.json`.
 
 ## Autonomous Repair Prompt
 
@@ -215,12 +267,13 @@ make test-python-ladder-algorithmic MODEL=qwen2.5-coder:3b
 make test-python-ladder-stateful MODEL=qwen2.5-coder:3b
 make test-python-ladder-stateful-architect MODEL=qwen2.5-coder:3b SAVE_ARTIFACTS=1
 make test-raw-vs-harness MODEL=qwen2.5-coder:3b
+make discover-library LIB=clang.cindex
 make review-run RUN=<artifact-run-id-or-path>
 ```
 
 ## Session Cleanup Note
 
-The dedicated app-fixture runner and skeletons were removed from the source
-surface. The harness now keeps only the generic kernel, Plan Mode, injected
-template registry, engine registry, validation gates, artifacts, historian, and
-model backends.
+The source surface is kept to runnable harness code, durable docs, fixtures, and
+reviewable data. One-off model review notes and local runtime clutter should not
+live in the repository. Generated caches, local env files, coverage output,
+build products, logs, and artifacts are ignored.
