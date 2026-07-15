@@ -9,7 +9,11 @@ RUN ?=
 ARCHITECT_AFTER ?= 1
 ARCHITECT_MAX_RETRIES ?= 2
 SPEC_PATH ?=
+DOC_AGENT ?= deepseek
+DOC_MODEL ?=
+DOC_OUTPUT ?= $(if $(filter none,$(DOC_AGENT)),,data/library_proposals/$(LIB).docs.md)
 ARTIFACT_ARGS = $(if $(filter 1 true yes,$(SAVE_ARTIFACTS)),--save-artifacts --artifact-root "$(ARTIFACT_ROOT)",)
+DOC_ARGS = --doc-agent "$(DOC_AGENT)" $(if $(DOC_MODEL),--doc-model "$(DOC_MODEL)",) $(if $(DOC_OUTPUT),--doc-output "$(DOC_OUTPUT)",)
 
 .PHONY: help install install-formal env-path init-env test test-claude-fixes test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-fixture test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-worker-limit-architect test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-python-ladder-stateful test-python-ladder-stateful-architect test-plan-mode-ladder test-raw-vs-harness test-formal-experiment structured-spec structured-spec-plan review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library ollama-smoke inference-smoke live-repair day1 clean-history
 
@@ -55,7 +59,9 @@ help:
 	@printf "  make aggregate-history               Build routing stats from data/runs.jsonl\n"
 	@printf "  make clean-history                   Reset generated history entries\n"
 	@printf "\nLibrary registry:\n"
-	@printf "  make discover-library LIB=name       Write data/library_proposals/name.json\n"
+	@printf "  make discover-library LIB=name       Ask DeepSeek for docs and write proposal plus Markdown guide\n"
+	@printf "  make discover-library LIB=name DOC_AGENT=qwen Ask local Qwen for documentation candidates\n"
+	@printf "  make discover-library LIB=name DOC_AGENT=none Write proposal without model documentation search\n"
 	@printf "  make approve-library LIB=name        Merge approved proposal into library registry\n"
 	@printf "\nConvenience:\n"
 	@printf "  make test-adversarial                Run trap prompts through the PEV loop\n"
@@ -69,6 +75,9 @@ help:
 	@printf "  SAVE_ARTIFACTS=1                     Save attempts, prompts, diffs, and validations under ARTIFACT_ROOT\n"
 	@printf "  ARTIFACT_ROOT=artifacts/runs         Artifact directory; default is $(ARTIFACT_ROOT)\n"
 	@printf "  SPEC_PATH=path/to/spec.md            Structured-spec input path\n"
+	@printf "  DOC_AGENT=deepseek|qwen|none         Model backend for library documentation search; default is $(DOC_AGENT)\n"
+	@printf "  DOC_MODEL=name                       Optional doc-search model override\n"
+	@printf "  DOC_OUTPUT=path                      Markdown docs output path; default is data/library_proposals/<LIB>.docs.md for model search\n"
 	@printf "\nExamples:\n"
 	@printf "  make test-worker-limit MODEL=qwen2.5-coder:3b SAVE_ARTIFACTS=1\n"
 	@printf "  make test-worker-limit-auto SAVE_ARTIFACTS=1\n"
@@ -180,7 +189,7 @@ aggregate-history:
 
 discover-library:
 	@test -n "$(LIB)" || (echo "Set LIB, e.g. make discover-library LIB=json" && exit 1)
-	$(PYTHON) scripts/discover_library.py "$(LIB)"
+	$(PYTHON) scripts/discover_library.py "$(LIB)" $(DOC_ARGS)
 
 approve-library:
 	@test -n "$(LIB)" || (echo "Set LIB, e.g. make approve-library LIB=json" && exit 1)

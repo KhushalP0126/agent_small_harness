@@ -64,6 +64,59 @@
       "register_functions"
     ],
     "context": "Discovered public top-level symbols for `clang.cindex`. Review before approving into the trusted registry.",
+    "documentation": [
+      {
+        "note": "Official LLVM documentation for the clang Python bindings, including clang.cindex.",
+        "title": "libclang Python Bindings Documentation",
+        "url": "https://clang.llvm.org/docs/PythonBindings.html"
+      },
+      {
+        "note": "Doxygen-generated API reference for the libclang C library, which underlies clang.cindex.",
+        "title": "clang.cindex API Reference (LLVM Doxygen)",
+        "url": "https://clang.llvm.org/doxygen/group__CINDEX.html"
+      },
+      {
+        "note": "Primary source repository for the clang.cindex module in the LLVM project.",
+        "title": "clang.cindex Source Code (LLVM Git)",
+        "url": "https://github.com/llvm/llvm-project/blob/main/clang/bindings/python/clang/cindex.py"
+      },
+      {
+        "note": "PyPI package metadata for the clang Python bindings, which includes clang.cindex.",
+        "title": "clang.cindex PyPI Package",
+        "url": "https://pypi.org/project/clang/"
+      }
+    ],
+    "documentation_file": "data/library_proposals/clang.cindex.docs.md",
+    "documentation_search": {
+      "documentation": [
+        {
+          "note": "Official LLVM documentation for the clang Python bindings, including clang.cindex.",
+          "title": "libclang Python Bindings Documentation",
+          "url": "https://clang.llvm.org/docs/PythonBindings.html"
+        },
+        {
+          "note": "Doxygen-generated API reference for the libclang C library, which underlies clang.cindex.",
+          "title": "clang.cindex API Reference (LLVM Doxygen)",
+          "url": "https://clang.llvm.org/doxygen/group__CINDEX.html"
+        },
+        {
+          "note": "Primary source repository for the clang.cindex module in the LLVM project.",
+          "title": "clang.cindex Source Code (LLVM Git)",
+          "url": "https://github.com/llvm/llvm-project/blob/main/clang/bindings/python/clang/cindex.py"
+        },
+        {
+          "note": "PyPI package metadata for the clang Python bindings, which includes clang.cindex.",
+          "title": "clang.cindex PyPI Package",
+          "url": "https://pypi.org/project/clang/"
+        }
+      ],
+      "error": "",
+      "model": "deepseek-chat",
+      "provider": "deepseek",
+      "query": "clang.cindex official documentation",
+      "raw_response": "{\n  \"documentation\": [\n    {\n      \"title\": \"libclang Python Bindings Documentation\",\n      \"url\": \"https://clang.llvm.org/docs/PythonBindings.html\",\n      \"note\": \"Official LLVM documentation for the clang Python bindings, including clang.cindex.\"\n    },\n    {\n      \"title\": \"clang.cindex API Reference (LLVM Doxygen)\",\n      \"url\": \"https://clang.llvm.org/doxygen/group__CINDEX.html\",\n      \"note\": \"Doxygen-generated API reference for the libclang C library, which underlies clang.cindex.\"\n    },\n    {\n      \"title\": \"clang.cindex Source Code (LLVM Git)\",\n      \"url\": \"https://github.com/llvm/llvm-project/blob/main/clang/bindings/python/clang/cindex.py\",\n      \"note\": \"Primary source repository for the clang.cindex module in the LLVM project.\"\n    },\n    {\n      \"title\": \"clang.cindex PyPI Package\",\n      \"url\": \"https://pypi.org/project/clang/\",\n      \"note\": \"PyPI package metadata for the clang Python bindings, which includes clang.cindex.\"\n    }\n  ]\n}",
+      "searched_by_model": true
+    },
     "library": "clang.cindex",
     "proposal_status": "candidate",
     "schema_version": "1.0",

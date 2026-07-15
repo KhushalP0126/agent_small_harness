@@ -9,6 +9,7 @@ from agents.engine_registry import EngineRegistry
 from agents.generation_controller import GenerationController
 from agents.historian import HistorianAgent
 from agents.job_store import JsonlJobStore
+from agents.library_doc_search import LibraryDocumentationSearchAgent
 from agents.library_discovery import LibraryDiscoveryAgent
 from agents.parse_contract import (
     ParseContractAgent,
@@ -527,6 +528,49 @@ class ScalabilityAgentTests(unittest.TestCase):
             self.assertEqual(discovered.environment["architect_api_key_env"], "DEEPSEEK_TEST_KEY")
             self.assertEqual(discovered.environment["architect_model"], "test-model")
             self.assertNotIn("secret-value", json.dumps(asdict(discovered)))
+
+    def test_library_discovery_can_delegate_documentation_search_to_model(self) -> None:
+        doc_agent = LibraryDocumentationSearchAgent(
+            provider="deepseek",
+            model="test-model",
+            generate_text=lambda _prompt: json.dumps(
+                {
+                    "documentation": [
+                        {
+                            "title": "json docs",
+                            "url": "https://docs.python.org/3/library/json.html",
+                            "note": "Official Python json module documentation.",
+                        }
+                    ]
+                }
+            ),
+        )
+        discovered = LibraryDiscoveryAgent(documentation_search=doc_agent).discover("json")
+
+        self.assertEqual(discovered.proposal["documentation_search"]["provider"], "deepseek")
+        self.assertTrue(discovered.proposal["documentation_search"]["searched_by_model"])
+        self.assertEqual(discovered.proposal["documentation"][0]["title"], "json docs")
+
+    def test_library_documentation_agent_generates_markdown_notes(self) -> None:
+        doc_agent = LibraryDocumentationSearchAgent(
+            provider="qwen",
+            model="test-model",
+            generate_text=lambda _prompt: "# json Syntax\n\nUse `json.loads(text)`.\n",
+        )
+        notes = doc_agent.syntax_notes(
+            "json",
+            public_symbols=["loads"],
+            documentation=[
+                {
+                    "title": "json docs",
+                    "url": "https://docs.python.org/3/library/json.html",
+                    "note": "Official docs.",
+                }
+            ],
+        )
+
+        self.assertIn("# json Syntax", notes)
+        self.assertIn("json.loads", notes)
 
     def test_approve_library_merges_proposal_into_temp_registry(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

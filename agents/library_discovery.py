@@ -9,6 +9,7 @@ from typing import Any
 
 from agents.base import AgentResult, BaseAgent
 from backends.architect_client import ArchitectConfig
+from agents.library_doc_search import LibraryDocumentationSearchAgent
 
 
 @dataclass
@@ -26,8 +27,13 @@ class LibraryDiscoveryAgent(BaseAgent):
 
     name = "agent-library-discovery"
 
-    def __init__(self, architect_config: ArchitectConfig | None = None) -> None:
+    def __init__(
+        self,
+        architect_config: ArchitectConfig | None = None,
+        documentation_search: LibraryDocumentationSearchAgent | None = None,
+    ) -> None:
         self.architect_config = architect_config or ArchitectConfig()
+        self.documentation_search = documentation_search
 
     def discover(self, library: str) -> LibraryDiscovery:
         spec = importlib.util.find_spec(library)
@@ -39,13 +45,18 @@ class LibraryDiscoveryAgent(BaseAgent):
             )
         origin = spec.origin
         symbols = self._public_symbols(Path(origin)) if origin.endswith(".py") else []
+        proposal = self.build_proposal(library, symbols)
+        if self.documentation_search is not None:
+            documentation_result = self.documentation_search.search(library, symbols)
+            proposal["documentation_search"] = documentation_result.to_dict()
+            proposal["documentation"] = documentation_result.documentation
         return LibraryDiscovery(
             library=library,
             available=True,
             origin=origin,
             public_symbols=symbols,
             environment=self._environment_summary(),
-            proposal=self.build_proposal(library, symbols),
+            proposal=proposal,
         )
 
     def _environment_summary(self) -> dict[str, Any]:
