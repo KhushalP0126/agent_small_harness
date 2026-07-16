@@ -4,13 +4,14 @@ import stat
 import tempfile
 import unittest
 from contextlib import redirect_stdout
-from io import StringIO
+from io import BytesIO, StringIO
 from pathlib import Path
 from unittest.mock import patch
+from urllib.error import HTTPError, URLError
 
 from agents.config_loader import ConfigError, load_config
 from agents.artifact_manager import ArtifactManager
-from backends.architect_client import ArchitectConfig, ArchitectModelSupplier
+from backends.architect_client import ArchitectApiClient, ArchitectConfig, ArchitectModelSupplier
 from backends.ollama_client import DEFAULT_OLLAMA_MODEL, OllamaGenerationConfig, OllamaModelSupplier
 from benchmarker import (
     HISTORY_PATH,
@@ -1046,6 +1047,95 @@ def analyze(matrix):
             self.assertEqual(config.request_temperature, 0.2)
             self.assertEqual(config.request_thinking_type, "disabled")
             self.assertEqual(config.request_reasoning_effort, "low")
+
+    def test_architect_config_reads_retry_budget_from_dotenv_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env_file = Path(tmpdir) / ".env"
+            env_file.write_text(
+                "ARCHITECT_TEST_RETRY_ATTEMPTS=4\n"
+                "ARCHITECT_TEST_RETRY_BACKOFF_SECONDS=0.25\n",
+                encoding="utf-8",
+            )
+            config = ArchitectConfig(
+                retry_attempts_env="ARCHITECT_TEST_RETRY_ATTEMPTS",
+                retry_backoff_seconds_env="ARCHITECT_TEST_RETRY_BACKOFF_SECONDS",
+                env_file=str(env_file),
+            )
+            self.assertEqual(config.retry_attempts, 4)
+            self.assertEqual(config.retry_backoff_seconds, 0.25)
+
+    def test_architect_client_retries_transient_network_failure(self) -> None:
+        class StubResponse:
+            def __enter__(self) -> "StubResponse":
+                return self
+
+            def __exit__(self, *_args: object) -> None:
+                return None
+
+            def read(self) -> bytes:
+                return json.dumps(
+                    {
+                        "choices": [{"message": {"content": "def ok():\n    return 1\n"}}],
+                        "usage": {"prompt_tokens": 5, "completion_tokens": 7, "total_tokens": 12},
+                    }
+                ).encode("utf-8")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env_file = Path(tmpdir) / ".env"
+            env_file.write_text(
+                "DEEPSEEK_TEST_KEY=test-secret\n"
+                "ARCHITECT_TEST_RETRY_ATTEMPTS=2\n"
+                "ARCHITECT_TEST_RETRY_BACKOFF_SECONDS=0\n",
+                encoding="utf-8",
+            )
+            config = ArchitectConfig(
+                api_key_env="MISSING_ARCHITECT_TEST_KEY",
+                fallback_api_key_env="DEEPSEEK_TEST_KEY",
+                retry_attempts_env="ARCHITECT_TEST_RETRY_ATTEMPTS",
+                retry_backoff_seconds_env="ARCHITECT_TEST_RETRY_BACKOFF_SECONDS",
+                env_file=str(env_file),
+            )
+            delays: list[float] = []
+            client = ArchitectApiClient(config=config, sleep=delays.append)
+            with patch(
+                "backends.architect_client.urlopen",
+                side_effect=[URLError("temporary dns failure"), StubResponse()],
+            ) as urlopen_mock:
+                content = client.generate(prompt="write code", system="return code")
+
+            self.assertEqual(content, "def ok():\n    return 1\n")
+            self.assertEqual(urlopen_mock.call_count, 2)
+            self.assertEqual(delays, [0.0])
+            self.assertIsNotNone(client.last_usage)
+            self.assertEqual(client.last_usage.total_tokens, 12)
+
+    def test_architect_client_does_not_retry_non_retryable_http_error(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env_file = Path(tmpdir) / ".env"
+            env_file.write_text(
+                "DEEPSEEK_TEST_KEY=test-secret\n"
+                "ARCHITECT_TEST_RETRY_ATTEMPTS=3\n",
+                encoding="utf-8",
+            )
+            config = ArchitectConfig(
+                api_key_env="MISSING_ARCHITECT_TEST_KEY",
+                fallback_api_key_env="DEEPSEEK_TEST_KEY",
+                retry_attempts_env="ARCHITECT_TEST_RETRY_ATTEMPTS",
+                env_file=str(env_file),
+            )
+            client = ArchitectApiClient(config=config, sleep=lambda _delay: None)
+            error = HTTPError(
+                url="https://api.deepseek.com/chat/completions",
+                code=401,
+                msg="Unauthorized",
+                hdrs={},
+                fp=BytesIO(b"bad key"),
+            )
+            with patch("backends.architect_client.urlopen", side_effect=error) as urlopen_mock:
+                with self.assertRaisesRegex(RuntimeError, "HTTP 401"):
+                    client.generate(prompt="write code", system="return code")
+
+            self.assertEqual(urlopen_mock.call_count, 1)
 
     def test_architect_supplier_extracts_code_from_api_response(self) -> None:
         class StubArchitectClient:

@@ -56,6 +56,40 @@ Default backend roles:
 - optional documentation override: `DOC_AGENT=qwen` for local Qwen or
   `DOC_AGENT=none` for import-only discovery
 
+Architect API calls retry transient timeouts, DNS/network failures, HTTP 429, and
+HTTP 5xx responses. Configure `ARCHITECT_RETRY_ATTEMPTS` and
+`ARCHITECT_RETRY_BACKOFF_SECONDS` in `.env`; non-retryable HTTP failures such as
+bad credentials still fail fast.
+
+## Minimal API Boundary
+
+The first deployment boundary is synchronous and intentionally narrow:
+
+```bash
+make api-dev
+```
+
+Endpoints:
+
+- `GET /health` returns service health.
+- `POST /runs/sync` accepts `target`, `spec`, optional `max_retries`, and
+  optional `language`, then calls `GenerationController.run()` synchronously.
+
+Do not add job queues, file locking, or concurrency machinery ahead of this
+request boundary. Those belong after real API callers exist.
+
+## Packaging Boundary
+
+The service is packageable through `pyproject.toml` and containerized through
+`Dockerfile`:
+
+```bash
+make docker-build
+```
+
+Package the synchronous API that exists today. Do not pre-package future queue or
+observability layers before those boundaries are implemented.
+
 ## Library Discovery Workflow
 
 The Makefile now connects discovery to DeepSeek by default:
@@ -268,6 +302,7 @@ make test-python-ladder-stateful MODEL=qwen2.5-coder:3b
 make test-python-ladder-stateful-architect MODEL=qwen2.5-coder:3b SAVE_ARTIFACTS=1
 make test-raw-vs-harness MODEL=qwen2.5-coder:3b
 make discover-library LIB=clang.cindex
+make api-dev
 make review-run RUN=<artifact-run-id-or-path>
 ```
 

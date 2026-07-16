@@ -3,9 +3,10 @@ from __future__ import annotations
 import json
 import os
 import socket
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -24,9 +25,13 @@ DEFAULT_ARCHITECT_TEMPERATURE_ENV = "ARCHITECT_TEMPERATURE"
 DEFAULT_ARCHITECT_MAX_TOKENS_ENV = "ARCHITECT_MAX_TOKENS"
 DEFAULT_ARCHITECT_THINKING_TYPE_ENV = "ARCHITECT_THINKING_TYPE"
 DEFAULT_ARCHITECT_REASONING_EFFORT_ENV = "ARCHITECT_REASONING_EFFORT"
+DEFAULT_ARCHITECT_RETRY_ATTEMPTS_ENV = "ARCHITECT_RETRY_ATTEMPTS"
+DEFAULT_ARCHITECT_RETRY_BACKOFF_SECONDS_ENV = "ARCHITECT_RETRY_BACKOFF_SECONDS"
 DEFAULT_ARCHITECT_MODEL = "deepseek-v4-pro"
 DEFAULT_ARCHITECT_API_BASE_URL = "https://api.deepseek.com/chat/completions"
 DEFAULT_ARCHITECT_ENV_FILE = ".env"
+DEFAULT_ARCHITECT_RETRY_ATTEMPTS = 3
+DEFAULT_ARCHITECT_RETRY_BACKOFF_SECONDS = 0.5
 
 
 @dataclass(frozen=True)
@@ -109,6 +114,8 @@ class ArchitectConfig:
     max_tokens_env: str = DEFAULT_ARCHITECT_MAX_TOKENS_ENV
     thinking_type_env: str = DEFAULT_ARCHITECT_THINKING_TYPE_ENV
     reasoning_effort_env: str = DEFAULT_ARCHITECT_REASONING_EFFORT_ENV
+    retry_attempts_env: str = DEFAULT_ARCHITECT_RETRY_ATTEMPTS_ENV
+    retry_backoff_seconds_env: str = DEFAULT_ARCHITECT_RETRY_BACKOFF_SECONDS_ENV
     env_file: str = DEFAULT_ARCHITECT_ENV_FILE
     repair_profile: ArchitectProfile = field(default_factory=lambda: REPAIR_PROFILE)
     contract_profile: ArchitectProfile = field(default_factory=lambda: CONTRACT_PROFILE)
@@ -159,6 +166,22 @@ class ArchitectConfig:
     @property
     def request_reasoning_effort(self) -> str:
         return self.repair_profile_from_env.reasoning_effort
+
+    @property
+    def retry_attempts(self) -> int:
+        return self._int_config_value(
+            self.retry_attempts_env,
+            DEFAULT_ARCHITECT_RETRY_ATTEMPTS,
+            minimum=1,
+        )
+
+    @property
+    def retry_backoff_seconds(self) -> float:
+        return self._float_config_value(
+            self.retry_backoff_seconds_env,
+            DEFAULT_ARCHITECT_RETRY_BACKOFF_SECONDS,
+            minimum=0.0,
+        )
 
     @property
     def repair_profile_from_env(self) -> ArchitectProfile:
@@ -212,9 +235,14 @@ class ArchitectConfig:
 class ArchitectApiClient:
     """Small OpenAI-compatible chat completions client for architect escalation."""
 
-    def __init__(self, config: ArchitectConfig | None = None) -> None:
+    def __init__(
+        self,
+        config: ArchitectConfig | None = None,
+        sleep: Callable[[float], None] | None = None,
+    ) -> None:
         self.config = config or ArchitectConfig()
         self.last_usage: ArchitectUsage | None = None
+        self._sleep = sleep or time.sleep
 
     def generate(self, prompt: str, system: str, profile: ArchitectProfile | None = None) -> str:
         if not self.config.api_key_configured:
@@ -236,25 +264,7 @@ class ArchitectApiClient:
             "reasoning_effort": profile.reasoning_effort,
             "stream": False,
         }
-        request = Request(
-            self.config.base_url,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={
-                "Authorization": f"Bearer {self.config.api_key}",
-                "Content-Type": "application/json",
-            },
-            method="POST",
-        )
-        try:
-            with urlopen(request, timeout=profile.timeout_seconds) as response:
-                body = json.loads(response.read().decode("utf-8"))
-        except socket.timeout as exc:
-            raise TimeoutError(f"Architect API timed out after {profile.timeout_seconds}s") from exc
-        except HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"Architect API failed with HTTP {exc.code}: {detail}") from exc
-        except URLError as exc:
-            raise RuntimeError(f"Architect API is not reachable at {self.config.base_url}: {exc.reason}") from exc
+        body = self._request_with_retries(payload, profile)
 
         try:
             content = body["choices"][0]["message"]["content"]
@@ -264,6 +274,46 @@ class ArchitectApiClient:
             raise RuntimeError("Architect API returned an empty response.")
         self.last_usage = _usage_from_response(body, profile.model, prompt, content)
         return content
+
+    def _request_with_retries(self, payload: dict[str, Any], profile: ArchitectProfile) -> dict[str, Any]:
+        attempts = self.config.retry_attempts
+        last_error: BaseException | None = None
+        for attempt in range(1, attempts + 1):
+            request = Request(
+                self.config.base_url,
+                data=json.dumps(payload).encode("utf-8"),
+                headers={
+                    "Authorization": f"Bearer {self.config.api_key}",
+                    "Content-Type": "application/json",
+                },
+                method="POST",
+            )
+            try:
+                with urlopen(request, timeout=profile.timeout_seconds) as response:
+                    return json.loads(response.read().decode("utf-8"))
+            except socket.timeout as exc:
+                last_error = exc
+                if attempt >= attempts:
+                    raise TimeoutError(
+                        f"Architect API timed out after {profile.timeout_seconds}s "
+                        f"({attempts} attempt{'s' if attempts != 1 else ''})"
+                    ) from exc
+            except HTTPError as exc:
+                detail = exc.read().decode("utf-8", errors="replace")
+                if not _is_retryable_http_status(exc.code) or attempt >= attempts:
+                    raise RuntimeError(f"Architect API failed with HTTP {exc.code}: {detail}") from exc
+                last_error = RuntimeError(f"HTTP {exc.code}: {detail}")
+            except URLError as exc:
+                last_error = exc
+                if attempt >= attempts:
+                    raise RuntimeError(
+                        f"Architect API is not reachable at {self.config.base_url} "
+                        f"after {attempts} attempt{'s' if attempts != 1 else ''}: {exc.reason}"
+                    ) from exc
+
+            self._sleep(_retry_delay(self.config.retry_backoff_seconds, attempt))
+
+        raise RuntimeError(f"Architect API request failed after {attempts} attempts: {last_error}")
 
 
 class ArchitectModelSupplier:
@@ -532,6 +582,16 @@ def _profile_for_prompt(profile: ArchitectProfile, prompt: str) -> ArchitectProf
         thinking_type=profile.thinking_type,
         reasoning_effort=profile.reasoning_effort,
     )
+
+
+def _is_retryable_http_status(status_code: int) -> bool:
+    return status_code == 429 or 500 <= status_code < 600
+
+
+def _retry_delay(base_seconds: float, attempt: int) -> float:
+    if base_seconds <= 0:
+        return 0.0
+    return base_seconds * (2 ** max(0, attempt - 1))
 
 
 def _usage_from_response(body: dict[str, Any], model: str, prompt: str, completion: str) -> ArchitectUsage:

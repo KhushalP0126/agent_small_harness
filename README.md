@@ -178,8 +178,12 @@ Those outcomes are recorded in artifact metadata and the contract queue results.
 | `validation/` | Policy, behavior, Deal/CrossHair formal validation, branch-loop detection, and violation types |
 | `prompt/` | Initial, retry, architect, and contract-architect prompt builders |
 | `backends/` | Ollama worker and API architect clients |
+| `api/` | Minimal synchronous FastAPI request boundary |
 | `scripts/` | Ladder runners, raw-vs-harness comparison, history aggregation, review tools |
 | `tests/` | Unit, integration, edge-case, ladder, and pipeline tests |
+| `pyproject.toml` | Python package metadata and runtime dependencies |
+| `Dockerfile` | Container entrypoint for the synchronous API service |
+| `.github/workflows/ci.yml` | Push/PR workflow for tests and Docker image build |
 | `agent-harness.txt` | Conceptual interactive flow document for operator discussion; not the authoritative runtime spec |
 | `context.md` | Current project context and experiment notes |
 | `design.md` | Architectural constraints and safety principles |
@@ -214,6 +218,9 @@ ARCHITECT_MODEL=deepseek-v4-pro
 - `execution.architect.repair` uses a separate bounded repair profile for code repair after worker failure.
 
 `.env` is ignored by git. Use `.env.example` as the committed template.
+Transient architect API failures are retried by default. Tune
+`ARCHITECT_RETRY_ATTEMPTS` and `ARCHITECT_RETRY_BACKOFF_SECONDS` in `.env` when
+needed.
 
 Check the env-file location and supported key names:
 
@@ -228,6 +235,32 @@ Show command help:
 ```bash
 make help
 ```
+
+Run the minimal synchronous API:
+
+```bash
+make api-dev
+```
+
+The first service boundary is intentionally small:
+
+```text
+GET  /health
+POST /runs/sync
+```
+
+`POST /runs/sync` accepts `target`, `spec`, optional `max_retries`, and optional
+`language`, then calls `GenerationController.run()` synchronously and returns the
+controller result.
+
+Build the local API image:
+
+```bash
+make docker-build
+```
+
+The image runs `uvicorn api.app:app` on port `8000`. Pass secrets such as
+`DEEPSEEK_API_KEY` at runtime; `.env` is excluded from the image context.
 
 Run deterministic validation:
 

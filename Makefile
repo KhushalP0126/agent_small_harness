@@ -12,10 +12,11 @@ SPEC_PATH ?=
 DOC_AGENT ?= deepseek
 DOC_MODEL ?=
 DOC_OUTPUT ?= $(if $(filter none,$(DOC_AGENT)),,data/library_proposals/$(LIB).docs.md)
+IMAGE ?= agent-small-harness:local
 ARTIFACT_ARGS = $(if $(filter 1 true yes,$(SAVE_ARTIFACTS)),--save-artifacts --artifact-root "$(ARTIFACT_ROOT)",)
 DOC_ARGS = --doc-agent "$(DOC_AGENT)" $(if $(DOC_MODEL),--doc-model "$(DOC_MODEL)",) $(if $(DOC_OUTPUT),--doc-output "$(DOC_OUTPUT)",)
 
-.PHONY: help install install-formal env-path init-env test test-claude-fixes test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-fixture test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-worker-limit-architect test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-python-ladder-stateful test-python-ladder-stateful-architect test-plan-mode-ladder test-raw-vs-harness test-formal-experiment structured-spec structured-spec-plan review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library ollama-smoke inference-smoke live-repair day1 clean-history
+.PHONY: help install install-formal env-path init-env api-dev docker-build test test-claude-fixes test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-fixture test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-worker-limit-architect test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-python-ladder-stateful test-python-ladder-stateful-architect test-plan-mode-ladder test-raw-vs-harness test-formal-experiment structured-spec structured-spec-plan review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library ollama-smoke inference-smoke live-repair day1 clean-history
 
 help:
 	@printf "Agent Small Harness commands\n"
@@ -24,6 +25,8 @@ help:
 	@printf "  make install-formal                  Install optional Deal/CrossHair formal-verification deps\n"
 	@printf "  make env-path                        Print the local .env path and supported API key names\n"
 	@printf "  make init-env                        Create .env from .env.example if it does not already exist\n"
+	@printf "  make api-dev                         Run the synchronous FastAPI service locally\n"
+	@printf "  make docker-build                    Build the local API container image\n"
 	@printf "\nDeterministic validation, no model calls:\n"
 	@printf "  make test                            Run the full unit test suite\n"
 	@printf "  make test-claude-fixes               Run focused controller, historian, behavior, and telemetry tests\n"
@@ -78,6 +81,7 @@ help:
 	@printf "  DOC_AGENT=deepseek|qwen|none         Model backend for library documentation search; default is $(DOC_AGENT)\n"
 	@printf "  DOC_MODEL=name                       Optional doc-search model override\n"
 	@printf "  DOC_OUTPUT=path                      Markdown docs output path; default is data/library_proposals/<LIB>.docs.md for model search\n"
+	@printf "  IMAGE=agent-small-harness:local      Docker image tag for docker-build\n"
 	@printf "\nExamples:\n"
 	@printf "  make test-worker-limit MODEL=qwen2.5-coder:3b SAVE_ARTIFACTS=1\n"
 	@printf "  make test-worker-limit-auto SAVE_ARTIFACTS=1\n"
@@ -99,6 +103,12 @@ env-path:
 init-env:
 	@test -f .env || cp .env.example .env
 	@printf "Env file ready: %s/.env\n" "$$(pwd)"
+
+api-dev:
+	$(PYTHON) -m uvicorn api.app:app --reload --host 127.0.0.1 --port 8000
+
+docker-build:
+	docker build -t "$(IMAGE)" .
 
 test:
 	$(PYTHON) -m unittest discover -s tests

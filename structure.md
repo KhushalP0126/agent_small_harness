@@ -25,6 +25,10 @@ engine logic.
 - `README.md` - Professional project overview, architecture, setup, and command surface.
 - `Makefile` - Common setup, test, ladder, model, history, review, and smoke commands.
 - `config.yaml` - Declarative policy, retry, model, behavior, and routing settings.
+- `pyproject.toml` - Python package metadata and runtime dependencies.
+- `Dockerfile` - Container entrypoint for the synchronous API service.
+- `.dockerignore` - Excludes local secrets, caches, artifacts, and build output from image context.
+- `.github/workflows/ci.yml` - GitHub Actions workflow for package install, tests, and Docker image build.
 - `.env.example` - Safe template for local secrets such as architect API keys.
 - `benchmarker.py` - Benchmark entrypoint and helper factory for Ollama-backed controllers.
 - `requirements.txt` - Optional tree-sitter dependency manifest.
@@ -63,6 +67,13 @@ agents; they prepare, route, validate, and record work.
 - `agents/postprocessor.py` - Final response/output wrapper.
 - `agents/template_loader.py` - Loads configured skeleton templates from `templates/`.
 - `agents/__init__.py` - Package marker.
+
+## `api/`
+
+Minimal HTTP request boundary around the existing synchronous controller.
+
+- `api/app.py` - FastAPI app with `/health` and `/runs/sync`.
+- `api/__init__.py` - Package marker.
 
 ## `kernel/`
 

@@ -7,3 +7,7 @@ tree-sitter-cpp==0.23.4
 
 # Optional app-spec validation dependency used by external pygame specs.
 pygame==2.6.1
+
+# Minimal synchronous HTTP service boundary.
+fastapi==0.116.1
+uvicorn==0.35.0

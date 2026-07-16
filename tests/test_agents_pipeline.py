@@ -1244,6 +1244,48 @@ def analyze(value):
         self.assertEqual(len(architect_calls), 1)
         self.assertEqual(result.payload["attempts"][0]["repair_worker"], "small_worker->architect_llm")
 
+    def test_architect_stagnation_after_small_worker_escalation_is_distinct(self) -> None:
+        bad_source = """
+def analyze(value):
+    if value == 0:
+        return 0
+    if value == 1:
+        return 1
+    if value == 2:
+        return 2
+    if value == 3:
+        return 3
+    if value == 4:
+        return 4
+    if value == 5:
+        return 5
+    if value == 6:
+        return 6
+    return 7
+"""
+        architect_calls = []
+
+        def small_supplier(draft: str, _retry_prompt: str) -> str:
+            return draft
+
+        def architect_supplier(draft: str, retry_prompt: str) -> str:
+            architect_calls.append(retry_prompt)
+            return draft
+
+        controller = GenerationController(
+            max_retries=1,
+            draft_supplier=lambda _prompt: bad_source,
+            repair_supplier=small_supplier,
+            architect_supplier=architect_supplier,
+            architect_after_repair_attempts=1,
+        )
+        result = controller.run(target="architect-stagnant-after-escalation", initial_prompt="generate")
+
+        self.assertEqual(result.payload["final_status"], "manual_review_required")
+        self.assertEqual(result.payload["human_review"]["reason"], "architect_stagnant_after_escalation")
+        self.assertEqual(len(architect_calls), 1)
+        self.assertEqual(result.payload["attempts"][0]["repair_worker"], "small_worker->architect_llm")
+
     def test_architect_supplier_error_routes_to_manual_review(self) -> None:
         bad_source = """
 def analyze(value):

@@ -517,6 +517,9 @@ class GenerationController(BaseAgent):
             "stagnant_repair": (
                 "Escalate the payload to an architect model or edit the draft manually; the worker returned an unchanged repair."
             ),
+            "architect_stagnant_after_escalation": (
+                "Review manually or change the architect prompt/model settings; the escalated architect repair also returned unchanged code."
+            ),
             "repair_strategy_manual_review": (
                 "Review the strategy rationale and choose whether to relax policy, provide a stronger spec, or make a manual edit."
             ),
@@ -985,9 +988,14 @@ class GenerationController(BaseAgent):
                                 draft = next_draft
                                 draft_source_worker = "architect_llm"
                                 continue
+                    stagnation_reason = (
+                        "architect_stagnant_after_escalation"
+                        if worker_name == "architect_llm" or attempt.repair_worker == "small_worker->architect_llm"
+                        else "stagnant_repair"
+                    )
                     self._debug_print("Warning: No changes detected in code. Terminating to avoid infinite loop.")
                     session.final_status = "manual_review_required"
-                    session.human_review = self._human_review_payload("stagnant_repair", attempt)
+                    session.human_review = self._human_review_payload(stagnation_reason, attempt)
                     break
                 self._debug_print("Attempt received. Re-analyzing updated draft.")
                 previous_draft = draft
