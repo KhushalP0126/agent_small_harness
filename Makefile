@@ -16,13 +16,14 @@ IMAGE ?= agent-small-harness:local
 ARTIFACT_ARGS = $(if $(filter 1 true yes,$(SAVE_ARTIFACTS)),--save-artifacts --artifact-root "$(ARTIFACT_ROOT)",)
 DOC_ARGS = --doc-agent "$(DOC_AGENT)" $(if $(DOC_MODEL),--doc-model "$(DOC_MODEL)",) $(if $(DOC_OUTPUT),--doc-output "$(DOC_OUTPUT)",)
 
-.PHONY: help install install-formal env-path init-env api-dev docker-build test test-claude-fixes test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-fixture test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-worker-limit-architect test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-python-ladder-stateful test-python-ladder-stateful-architect test-plan-mode-ladder test-raw-vs-harness test-formal-experiment structured-spec structured-spec-plan review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library ollama-smoke inference-smoke live-repair day1 clean-history
+.PHONY: help install install-formal install-kernel env-path init-env api-dev docker-build test test-claude-fixes test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-fixture test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-worker-limit-architect test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-python-ladder-stateful test-python-ladder-stateful-architect test-plan-mode-ladder test-raw-vs-harness test-formal-experiment structured-spec structured-spec-plan review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library ollama-smoke inference-smoke live-repair day1 clean-history
 
 help:
 	@printf "Agent Small Harness commands\n"
 	@printf "\nSetup:\n"
 	@printf "  make install                         Install optional tree-sitter deps for C/C++ support\n"
 	@printf "  make install-formal                  Install optional Deal/CrossHair formal-verification deps\n"
+	@printf "  make install-kernel                  Install optional Kernel browser documentation deps\n"
 	@printf "  make env-path                        Print the local .env path and supported API key names\n"
 	@printf "  make init-env                        Create .env from .env.example if it does not already exist\n"
 	@printf "  make api-dev                         Run the synchronous FastAPI service locally\n"
@@ -95,11 +96,15 @@ install:
 install-formal:
 	$(PYTHON) -m pip install -r requirements-formal.txt
 
+install-kernel:
+	$(PYTHON) -m pip install -r requirements-kernel.txt
+
 env-path:
 	@printf "Env file: %s/.env\n" "$$(pwd)"
 	@printf "Add one of these keys there:\n"
 	@printf "  ARCHITECT_API_KEY=your_key_here\n"
 	@printf "  DEEPSEEK_API_KEY=your_key_here\n"
+	@printf "  KERNEL_API_KEY=your_key_here\n"
 
 init-env:
 	@test -f .env || cp .env.example .env

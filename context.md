@@ -231,8 +231,8 @@ Missing optional verifier dependencies must not break normal tests.
 
 The shared execution core is represented by:
 
-- `kernel/task_ir.py`
-- `kernel/execution_kernel.py`
+- `harness_kernel/task_ir.py`
+- `harness_kernel/execution_kernel.py`
 - `agents/generation_controller.py`
 
 Design rule:

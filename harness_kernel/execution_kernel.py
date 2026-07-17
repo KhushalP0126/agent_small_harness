@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from agents.generation_controller import GenerationController
 from agents.base import AgentResult
-from kernel.task_ir import TaskIR
+from harness_kernel.task_ir import TaskIR
 
 
 class ExecutionKernel:

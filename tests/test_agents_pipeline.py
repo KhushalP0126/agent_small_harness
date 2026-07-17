@@ -11,7 +11,11 @@ from agents.historian import HistorianAgent
 from agents.job_store import JsonlJobStore
 from agents.library_doc_search import LibraryDocumentationSearchAgent
 from agents.library_discovery import LibraryDiscoveryAgent
-from agents.kernel_doc_search import KernelLibraryDocumentationSearchAgent
+from agents.kernel_doc_search import (
+    KernelLibraryDocumentationSearchAgent,
+    _allowed_documentation_url,
+    _browser_search_code,
+)
 from agents.parse_contract import (
     ParseContractAgent,
     ParseFailure,
@@ -38,8 +42,8 @@ from engines.lint_engine import LintEngine
 from engines.library_registry import LibraryRegistry
 from engines.math_engine import MathEngine
 from engines.state_flow_engine import StateFlowEngine
-from kernel.execution_kernel import ExecutionKernel
-from kernel.task_ir import TaskIR
+from harness_kernel.execution_kernel import ExecutionKernel
+from harness_kernel.task_ir import TaskIR
 from validation.behavior import BehaviorCase, FunctionBehaviorSpec, mixed_hard_case_spec
 from validation.policy import validate_findings
 from validation.types import Violation
@@ -611,7 +615,12 @@ class ScalabilityAgentTests(unittest.TestCase):
         class KernelClient:
             browsers = Browsers()
 
-        agent = KernelLibraryDocumentationSearchAgent(kernel_client=KernelClient())
+        agent = KernelLibraryDocumentationSearchAgent(
+            kernel_client=KernelClient(),
+            metadata_candidates=lambda _library: [
+                {"title": "PyPI json", "url": "https://pypi.org/project/json/"}
+            ],
+        )
         result = agent.search("json", public_symbols=["loads"])
 
         self.assertEqual(result.provider, "kernel")
@@ -619,6 +628,19 @@ class ScalabilityAgentTests(unittest.TestCase):
         self.assertEqual([item["title"] for item in result.documentation], ["json documentation"])
         self.assertEqual(agent.kernel.browsers.deleted, "kernel-session")
         self.assertIn("verified with a Kernel browser", agent.syntax_notes("json", documentation=result.documentation))
+
+    def test_kernel_documentation_uses_allowed_sources_and_no_google_search(self) -> None:
+        code = _browser_search_code(
+            "clang.cindex",
+            ["Index"],
+            [{"title": "PyPI clang", "url": "https://pypi.org/project/clang/"}],
+        )
+
+        self.assertNotIn("google.com/search", code)
+        self.assertIn("pypi.org/project/clang", code)
+        self.assertTrue(_allowed_documentation_url("https://docs.python.org/3/library/json.html"))
+        self.assertTrue(_allowed_documentation_url("https://github.com/llvm/llvm-project"))
+        self.assertFalse(_allowed_documentation_url("https://example.com/json"))
 
     def test_approve_library_merges_proposal_into_temp_registry(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

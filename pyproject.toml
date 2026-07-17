@@ -33,7 +33,7 @@ packages = [
   "api",
   "backends",
   "engines",
-  "kernel",
+  "harness_kernel",
   "prompt",
   "validation",
 ]

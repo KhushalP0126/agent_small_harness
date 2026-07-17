@@ -11,7 +11,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from backends.ollama_client import FENCED_CODE_RE, LANGUAGE_TAG_LINE_RE
-from kernel.function_contracts import ContractQueue, ContractQueuePlan, parse_contract_queue_json, parse_contract_queue_plan_json
+from harness_kernel.function_contracts import ContractQueue, ContractQueuePlan, parse_contract_queue_json, parse_contract_queue_plan_json
 from prompt.budget import continuation_prompt, estimate_tokens, looks_truncated_text
 from prompt.contract_builder import build_contract_queue_planner_prompt, build_deal_contract_architect_prompt
 

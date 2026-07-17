@@ -8,7 +8,7 @@ from agents.base import AgentResult, BaseAgent
 from agents.prompt_normalizer import PromptNormalizerAgent
 from agents.task_classifier import TaskClassifierAgent, TaskClassification
 from agents.template_registry import TemplateRegistry
-from kernel.task_ir import TaskIR, TemplateRoute, ValidationPlan
+from harness_kernel.task_ir import TaskIR, TemplateRoute, ValidationPlan
 
 
 CALL_EXPECTATION_RE = re.compile(

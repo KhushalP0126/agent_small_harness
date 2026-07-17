@@ -25,7 +25,7 @@ from backends.architect_client import (
     ContractPlannerSupplier,
 )
 from backends.ollama_client import DEFAULT_OLLAMA_MODEL, OllamaModelSupplier
-from kernel.function_contracts import ContractQueue, ContractQueuePlan, DealExample, FunctionContract
+from harness_kernel.function_contracts import ContractQueue, ContractQueuePlan, DealExample, FunctionContract
 from prompt.budget import budget_prompt
 from validation.import_graph import analyze_import_graph
 

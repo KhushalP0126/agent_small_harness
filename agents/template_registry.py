@@ -5,7 +5,7 @@ from typing import Mapping
 
 from agents.task_classifier import TaskClassification
 from agents.template_loader import TemplateLibrary
-from kernel.task_ir import TemplateRoute
+from harness_kernel.task_ir import TemplateRoute
 
 
 @dataclass(frozen=True)

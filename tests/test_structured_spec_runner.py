@@ -14,7 +14,7 @@ from backends.architect_client import (
 from scripts.run_structured_spec import _apply_contract_plan, _contract_queue_from_architect, _fallback_contract_queue
 from scripts.run_structured_spec import _validate_structured_spec_output
 from scripts.run_structured_spec import _run_contract_queue_sequentially, _single_contract_prompt
-from kernel.function_contracts import ContractQueue, ContractQueuePlan, DealExample, FunctionContract
+from harness_kernel.function_contracts import ContractQueue, ContractQueuePlan, DealExample, FunctionContract
 
 
 class StructuredSpecRunnerTests(unittest.TestCase):

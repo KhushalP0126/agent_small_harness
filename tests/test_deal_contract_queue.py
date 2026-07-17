@@ -2,7 +2,7 @@ import unittest
 
 from agents.generation_controller import GenerationController
 from engines.hazards_engine import HazardsEngine
-from kernel.function_contracts import (
+from harness_kernel.function_contracts import (
     ContractQueue,
     DealExample,
     FunctionContract,

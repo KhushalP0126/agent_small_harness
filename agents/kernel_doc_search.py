@@ -3,11 +3,13 @@ from __future__ import annotations
 import json
 import os
 import sys
+from collections.abc import Iterable
 from importlib import metadata
 from importlib.util import module_from_spec, spec_from_file_location
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote_plus
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 from agents.library_doc_search import DocumentationSearchResult
 
@@ -17,7 +19,11 @@ class KernelLibraryDocumentationSearchAgent:
 
     name = "agent-kernel-library-documentation-search"
 
-    def __init__(self, kernel_client: Any | None = None) -> None:
+    def __init__(
+        self,
+        kernel_client: Any | None = None,
+        metadata_candidates: Any | None = None,
+    ) -> None:
         if kernel_client is None:
             try:
                 Kernel = _load_kernel_sdk().Kernel
@@ -31,6 +37,7 @@ class KernelLibraryDocumentationSearchAgent:
                 raise RuntimeError("Set KERNEL_API_KEY in .env before using Kernel documentation search.")
             kernel_client = Kernel(api_key=api_key)
         self.kernel = kernel_client
+        self.metadata_candidates = metadata_candidates or _metadata_candidates
         self.provider = "kernel"
         self.model = "kernel-browser"
 
@@ -43,10 +50,13 @@ class KernelLibraryDocumentationSearchAgent:
         query = f"{library} official documentation"
         browser = None
         try:
+            candidates = self.metadata_candidates(library)
+            if not candidates:
+                raise ValueError(f"No PyPI documentation candidates found for {library}")
             browser = self.kernel.browsers.create()
             response = self.kernel.browsers.playwright.execute(
                 id=browser.session_id,
-                code=_browser_search_code(library, symbols),
+                code=_browser_search_code(library, symbols, candidates),
             )
             payload = _response_result(response)
             documentation = _verified_documentation(payload, library, symbols)
@@ -102,35 +112,35 @@ class KernelLibraryDocumentationSearchAgent:
         return "\n".join(lines).rstrip() + "\n"
 
 
-def _browser_search_code(library: str, public_symbols: list[str]) -> str:
-    query = quote_plus(f"{library} official documentation")
+def _browser_search_code(
+    library: str,
+    public_symbols: list[str],
+    candidates: list[dict[str, str]],
+) -> str:
     symbols_json = json.dumps(public_symbols)
     library_json = json.dumps(library.lower())
+    candidates_json = json.dumps(candidates)
     return f"""
 const library = {library_json};
 const symbols = {symbols_json};
-await page.goto('https://www.google.com/search?q={query}', {{ waitUntil: 'domcontentloaded' }});
-const links = await page.locator('a').evaluateAll((anchors) => anchors
-  .map((anchor) => ({{ title: (anchor.innerText || '').trim(), url: anchor.href }}))
-  .filter((item) => item.url.startsWith('http') && !item.url.includes('google.com'))
-  .slice(0, 8));
+const candidates = {candidates_json};
 const documentation = [];
-for (const link of links) {{
+for (const candidate of candidates) {{
   try {{
-    await page.goto(link.url, {{ waitUntil: 'domcontentloaded', timeout: 15000 }});
+    await page.goto(candidate.url, {{ waitUntil: 'domcontentloaded', timeout: 15000 }});
     const text = (await page.locator('body').innerText()).slice(0, 6000);
     const lower = text.toLowerCase();
     const verified = lower.includes(library) || symbols.some((symbol) => lower.includes(symbol.toLowerCase()));
     if (verified) {{
       documentation.push({{
-        title: link.title || await page.title(),
+        title: candidate.title || await page.title(),
         url: page.url(),
-        note: `Verified page text mentions ${{library}}.`,
+        note: `Verified allowed-source page text for ${{library}}.`,
         text_excerpt: text.slice(0, 500),
       }});
     }}
   }} catch (error) {{
-    // Search results can contain unavailable or script-heavy pages.
+    // Candidate pages can be unavailable or script-heavy.
   }}
   if (documentation.length >= 5) break;
 }}
@@ -208,6 +218,63 @@ def _verified_documentation(
         note = str(entry.get("note", "")).strip()
         text = str(entry.get("text_excerpt", "")).lower()
         verified = library_lower in text or any(symbol.lower() in text for symbol in public_symbols)
-        if title and url.startswith(("http://", "https://")) and verified:
+        if title and _allowed_documentation_url(url) and verified:
             normalized.append({"title": title, "url": url, "note": note})
     return normalized
+
+
+ALLOWED_DOCUMENTATION_DOMAINS = (
+    "docs.python.org",
+    "pypi.org",
+    "readthedocs.io",
+    "github.com",
+)
+
+
+def _allowed_documentation_url(url: str) -> bool:
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").lower().rstrip(".")
+    return parsed.scheme in {"http", "https"} and any(
+        host == domain or host.endswith(f".{domain}")
+        for domain in ALLOWED_DOCUMENTATION_DOMAINS
+    )
+
+
+def _metadata_candidates(library: str) -> list[dict[str, str]]:
+    names = list(dict.fromkeys((library, library.split(".", 1)[0], library.rsplit(".", 1)[-1])))
+    candidates: list[dict[str, str]] = []
+    for package_name in names:
+        payload = _pypi_metadata(package_name)
+        if not payload:
+            continue
+        info = payload.get("info", {})
+        if not isinstance(info, dict):
+            continue
+        project_urls = info.get("project_urls", {})
+        urls: Iterable[tuple[str, str]] = project_urls.items() if isinstance(project_urls, dict) else []
+        for label, url in urls:
+            value = str(url).strip()
+            label_text = str(label).lower()
+            if value and any(term in label_text for term in ("doc", "home", "source", "repository", "github")):
+                if _allowed_documentation_url(value):
+                    candidates.append({"title": f"{info.get('name', package_name)} {label}", "url": value})
+        pypi_url = f"https://pypi.org/project/{package_name}/"
+        candidates.append({"title": f"PyPI {info.get('name', package_name)}", "url": pypi_url})
+        if candidates:
+            break
+    return list({item["url"]: item for item in candidates}.values())[:8]
+
+
+def _pypi_metadata(package_name: str) -> dict[str, Any] | None:
+    request = Request(
+        f"https://pypi.org/pypi/{package_name}/json",
+        headers={"User-Agent": "agent-small-harness-library-discovery/1.0"},
+    )
+    try:
+        with urlopen(request, timeout=10) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (HTTPError, URLError, TimeoutError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, dict) else None

@@ -51,7 +51,7 @@ source of truth.
 When the text diagram and the code disagree, trust the code in:
 
 - `agents/` for orchestration, routing, repair, and artifact handling
-- `kernel/` for the shared execution boundary and structured task handoff
+- `harness_kernel/` for the shared execution boundary and structured task handoff; the name avoids collision with the Kernel browser SDK
 - `engines/` and `validation/` for deterministic acceptance gates
 - `scripts/` and `Makefile` for the runnable operator surface
 
@@ -171,9 +171,9 @@ Those outcomes are recorded in artifact metadata and the contract queue results.
 | `agents/parse_contract.py` | Language detection and parser gate |
 | `agents/repair_strategy.py` | Converts violations into scoped repair instructions |
 | `agents/template_registry.py` | Optional injected template-route selector, with no built-in app-specific route |
-| `kernel/task_ir.py` | Structured task/spec handoff types |
-| `kernel/function_contracts.py` | Function-level contract queue and Deal scaffold rendering |
-| `kernel/execution_kernel.py` | Thin execution wrapper around the controller |
+| `harness_kernel/task_ir.py` | Structured task/spec handoff types |
+| `harness_kernel/function_contracts.py` | Function-level contract queue and Deal scaffold rendering |
+| `harness_kernel/execution_kernel.py` | Thin execution wrapper around the controller |
 | `engines/` | Static analysis engines |
 | `validation/` | Policy, behavior, Deal/CrossHair formal validation, branch-loop detection, and violation types |
 | `prompt/` | Initial, retry, architect, and contract-architect prompt builders |

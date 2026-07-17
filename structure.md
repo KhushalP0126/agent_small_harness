@@ -77,15 +77,15 @@ Minimal HTTP request boundary around the existing synchronous controller.
 - `api/app.py` - FastAPI app with `/health` and `/runs/sync`.
 - `api/__init__.py` - Package marker.
 
-## `kernel/`
+## `harness_kernel/`
 
 The kernel names the shared execution boundary. It wraps the stable controller
 instead of replacing it.
 
-- `kernel/task_ir.py` - `TaskIR`, `TemplateRoute`, and `ValidationPlan` dataclasses.
-- `kernel/function_contracts.py` - Function contract queue, Deal examples, scaffold rendering, and worker packets.
-- `kernel/execution_kernel.py` - Thin wrapper that delegates `TaskIR` execution to `GenerationController`.
-- `kernel/__init__.py` - Public kernel exports.
+- `harness_kernel/task_ir.py` - `TaskIR`, `TemplateRoute`, and `ValidationPlan` dataclasses.
+- `harness_kernel/function_contracts.py` - Function contract queue, Deal examples, scaffold rendering, and worker packets.
+- `harness_kernel/execution_kernel.py` - Thin wrapper that delegates `TaskIR` execution to `GenerationController`.
+- `harness_kernel/__init__.py` - Public harness-kernel exports; the name avoids collision with the Kernel browser SDK.
 
 ## `engines/`
 
