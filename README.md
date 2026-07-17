@@ -131,6 +131,106 @@ flowchart TD
     Z --> R
 ```
 
+### Codebase Map: Controller, Gates, and Repair
+
+The diagram below is the runtime shape implemented by `GenerationController`.
+The vertical path is one attempt. The right-hand path is the bounded repair
+loop; the architect is a fallback worker, not a separate acceptance path.
+
+```mermaid
+flowchart TD
+    task[User task] --> plan[PlanModeAgent]
+    plan --> packet[Compact worker packet]
+    packet --> worker[Small local worker]
+    worker --> draft[Generated Python draft]
+
+    draft --> parse[ParseContractAgent]
+    parse -->|invalid source| review[manual_review_required]
+    parse -->|valid source| registry[EngineRegistry]
+
+    subgraph static[Static analysis fan-out]
+        registry --> math[Math engine<br/>loop depth]
+        registry --> hazards[Hazards engine<br/>state, imports, APIs]
+        registry --> branching[Branching engine<br/>path complexity]
+        registry --> cost[Cost engine<br/>membership hotspots]
+        registry --> bounds[Bounds engine<br/>index patterns]
+        registry --> stateflow[State-flow engine<br/>returned state]
+        registry --> lint[Optional Pylint<br/>errors and fatals]
+    end
+
+    math --> policy[Policy validator]
+    hazards --> policy
+    branching --> policy
+    cost --> policy
+    bounds --> policy
+    stateflow --> policy
+    lint --> policy
+
+    draft --> behavior[Behavior validator]
+    draft --> formal[Optional CrossHair/formal validator]
+    policy --> gates{All enabled gates pass?}
+    behavior --> gates
+    formal --> gates
+
+    gates -->|yes| completed[completed]
+    completed --> artifacts[Artifacts and historian]
+
+    gates -->|no| strategy[RepairStrategyAgent]
+    strategy --> retry[Scoped retry prompt]
+    retry --> repair[Small worker repair]
+    repair --> draft
+
+    repair -->|stagnant or hard failure| architect[Architect API worker]
+    architect --> draft
+    architect -->|still failing| review
+    gates -->|max retries or high risk| review
+    review --> artifacts
+```
+
+### What Each Engine Traverses
+
+Every Python engine exposes `scan(source)` and returns `EngineFinding` records.
+The registry runs them in one pass over the draft, then `validation/policy.py`
+turns the findings into blocking or advisory violations. The traversal details
+below describe what each loop is doing and what it can detect.
+
+| Engine | Traversal and loop behavior | What it checks | Result |
+| --- | --- | --- | --- |
+| `engine-0-decomposition` | `_IRBuilder` walks the complete AST. Function visits push and pop `scope_stack`; `for` and `while` visits increment/decrement loop depth and record a nested path; assignment, augmented-assignment, call, `if`, and `global` visitors record structural facts. | Builds the shared structural view: functions, loop types/depth, branches, mutations, explicit globals, module containers, and loop-mutated names. | `StructuralIR`, consumed by Math, Hazards, and Branching. It is a supporting analysis rather than a registered policy gate. |
+| `engine-1-math` | Reuses `StructuralIR.loops` and scans the recorded loop list for the maximum depth and deepest path. | Whether nesting exceeds the policy threshold of two; reports the loop path and its `for`/`while` shape. | One low/medium/high finding with `max_loop_depth`; policy blocks values above the configured limit. |
+| `engine-2-hazards` | Reuses IR mutation/global records. Separate AST walks iterate import nodes to classify dependencies, import bindings to resolve registered libraries, and call nodes to validate API paths. | Explicit `global`, mutation of module-level containers, indexed module-state writes, non-standard-library imports, and calls missing from a registered library schema. | One finding per hazard category, with names, calls, imports, locations, and repair hints. |
+| `engine-3-branching` | Starts with IR loops and branches, then walks the AST for exception handlers, assertions, conditional expressions, boolean operands, and comprehension filters. A nested function visitor repeats the decision count per function while skipping nested functions. | Cyclomatic-style path density at module and function scope, including decisions that are not plain `if` statements. | Complexity metrics and the worst function; policy blocks complexity above seven. |
+| `engine-4-cost` | `_CostVisitor` independently walks assignments, annotations, arguments, constructors, `for`/`while`, comprehensions, and comparisons. It maintains a scope stack for inferred container kinds and only records `in`/`not in` comparisons while loop depth is nonzero. | Repeated membership against an inferred `list` inside a loop, which can become an avoidable linear lookup hotspot. | Container names, lines, and hotspot count; policy can require a precomputed set. This visitor has not yet migrated to `StructuralIR`. |
+| `engine-5-lint` | Writes the draft to a temporary file and delegates traversal to Pylint. It parses the returned JSON and filters registered dynamic-library `no-member` messages into non-blocking warnings. | Pylint fatal/error categories, while allowing known dynamic members from the library registry. | Blocking lint findings or an explicit skipped/unavailable/timeout result. It is optional and external to the AST IR. |
+| `engine-6-bounds` | AST visitor checks every subscript and every `for` loop whose iterator is a `range(...)` call. It compares index expressions with `len(name)` and detects `range(len(name) + 1)`. | High-confidence one-past-end reads/writes and range upper-bound overflow patterns. | Warning-first bounds finding with expressions and lines; full dataflow proof is intentionally out of scope. |
+| `engine-7-state-flow` | For each function, walks all descendant nodes to collect assignments to state-like parameters and return statements. It compares assigned parameter names with names returned directly or inside a tuple/list. | Helpers that mutate parameters named like state/context/section/current/total but fail to return the updated value. | Potential lost-state finding with function, parameter, and line; policy blocks it by default. |
+
+#### Current IR Boundary
+
+`DecompositionEngine` is the shared structural source for Math, Hazards, and
+Branching. Bounds and State-flow intentionally keep specialized visitors because
+their checks depend on expression details and return-value patterns. Cost still
+rebuilds container/type facts in `_CostVisitor`; that is the next unification
+target if the shared IR is extended with scope-qualified symbols and membership
+checks. Lint remains separate because Pylint owns its traversal.
+
+#### Reading a Finding
+
+The engine finding is not the final decision. The path is:
+
+```text
+AST/source
+  -> engine traversal
+  -> EngineFinding(metrics, diagnostic, severity)
+  -> policy threshold and allow-list evaluation
+  -> structural violation set
+  -> repair prompt, completion, or manual review
+```
+
+This is why a low-severity finding can still be useful telemetry, while a
+high-severity finding only blocks the run when its corresponding policy says it
+is disallowed.
+
 Structured app specs can also use the function-contract queue path:
 
 ```text
