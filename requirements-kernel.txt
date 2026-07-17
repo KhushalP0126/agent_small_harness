@@ -1,0 +1,2 @@
+# Optional verified browser-backed documentation search.
+kernel

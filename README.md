@@ -309,9 +309,11 @@ make discover-library LIB=clang.cindex
 
 That command writes a reviewable proposal to
 `data/library_proposals/<LIB>.json` and a model-generated syntax guide to
-`data/library_proposals/<LIB>.docs.md`. Use `DOC_AGENT=qwen` to ask local Qwen
-instead, or `DOC_AGENT=none` to write an import-only proposal without model
-documentation search.
+`data/library_proposals/<LIB>.docs.md`. Use `DOC_AGENT=qwen` to ask local Qwen,
+`DOC_AGENT=kernel` to search and verify documentation pages in a Kernel cloud
+browser, or `DOC_AGENT=none` to write an import-only proposal without
+documentation search. Kernel search requires `requirements-kernel.txt` and
+`KERNEL_API_KEY` in `.env`.
 
 Approve a reviewed proposal into the trusted library registry:
 

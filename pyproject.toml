@@ -23,6 +23,9 @@ formal = [
   "crosshair-tool",
   "pylint",
 ]
+browser = [
+  "kernel",
+]
 
 [tool.setuptools]
 packages = [

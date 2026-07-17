@@ -12,6 +12,7 @@ if str(ROOT) not in sys.path:
 from agents.config_loader import DEFAULT_CONFIG_PATH, load_config
 from agents.library_doc_search import LibraryDocumentationSearchAgent
 from agents.library_discovery import LibraryDiscoveryAgent
+from agents.kernel_doc_search import KernelLibraryDocumentationSearchAgent
 from backends.architect_client import ArchitectApiClient, ArchitectConfig
 from backends.ollama_client import DEFAULT_OLLAMA_MODEL, OllamaClient, OllamaGenerationConfig
 
@@ -59,6 +60,10 @@ def _documentation_search_agent(provider: str, model: str, config_path: Path) ->
             )
 
         return LibraryDocumentationSearchAgent(provider="deepseek", model=selected_model, generate_text=generate)
+    if provider == "kernel":
+        if model:
+            raise ValueError("DOC_MODEL is not used with the kernel browser provider")
+        return KernelLibraryDocumentationSearchAgent()
     raise ValueError(f"Unsupported documentation agent: {provider}")
 
 
@@ -68,9 +73,9 @@ def main() -> None:
     parser.add_argument("--proposal-dir", default=str(DEFAULT_PROPOSAL_DIR))
     parser.add_argument(
         "--doc-agent",
-        choices=("none", "qwen", "deepseek"),
+        choices=("none", "qwen", "deepseek", "kernel"),
         default="none",
-        help="Ask a model backend to find documentation candidates for the proposal.",
+        help="Use DeepSeek, Qwen, or a Kernel browser to find documentation candidates for the proposal.",
     )
     parser.add_argument("--doc-model", default="", help="Override the documentation-search model name.")
     parser.add_argument(
@@ -88,7 +93,7 @@ def main() -> None:
     proposal = payload.get("proposal", {})
     if args.doc_output:
         if documentation_search is None:
-            raise SystemExit("--doc-output requires --doc-agent qwen or --doc-agent deepseek")
+            raise SystemExit("--doc-output requires --doc-agent qwen, deepseek, or kernel")
         doc_path = Path(args.doc_output)
         doc_path.parent.mkdir(parents=True, exist_ok=True)
         doc_path.write_text(

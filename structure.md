@@ -32,6 +32,7 @@ engine logic.
 - `.env.example` - Safe template for local secrets such as architect API keys.
 - `benchmarker.py` - Benchmark entrypoint and helper factory for Ollama-backed controllers.
 - `requirements.txt` - Optional tree-sitter dependency manifest.
+- `requirements-kernel.txt` - Optional Kernel browser documentation dependency manifest.
 - `requirements-formal.txt` - Optional Deal, CrossHair, and Pylint dependency manifest.
 - `history.json` - Historian persistence file for run summaries and successful repair lessons.
 - `conventions.md` - Stable model-facing coding and harness rules.
@@ -62,6 +63,7 @@ agents; they prepare, route, validate, and record work.
 - `agents/job_store.py` - Append-only JSONL job store.
 - `agents/library_discovery.py` - Generates reviewable library registry proposals.
 - `agents/library_doc_search.py` - Model-backed documentation search and Markdown syntax-guide generation for library proposals.
+- `agents/kernel_doc_search.py` - Kernel browser-backed documentation search that verifies fetched page text.
 - `agents/dependency.py` - Dependency-context helper.
 - `agents/scope_tracker.py` - Scope-context helper.
 - `agents/postprocessor.py` - Final response/output wrapper.
@@ -163,7 +165,7 @@ Runnable experiments and operator tooling.
 - `scripts/test_inference.py` - Ollama inference smoke test.
 - `scripts/normalize_prompt.py` - Prompt-normalization CLI.
 - `scripts/aggregate_history.py` - Builds aggregate route stats from raw run logs.
-- `scripts/discover_library.py` - Writes a reviewable library proposal and can ask DeepSeek or Qwen for documentation.
+- `scripts/discover_library.py` - Writes a reviewable library proposal and can ask DeepSeek, Qwen, or Kernel for documentation.
 - `scripts/approve_library.py` - Merges an approved proposal into the trusted registry.
 - `scripts/run_adversarial_prompts.py` - Runs trap prompts through the PEV loop.
 - `scripts/run_coding_capability.py` - Runs codegen tasks through engines, behavior checks, and optional architect escalation.

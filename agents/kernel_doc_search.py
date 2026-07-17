@@ -1,0 +1,213 @@
+from __future__ import annotations
+
+import json
+import os
+import sys
+from importlib import metadata
+from importlib.util import module_from_spec, spec_from_file_location
+from pathlib import Path
+from typing import Any
+from urllib.parse import quote_plus
+
+from agents.library_doc_search import DocumentationSearchResult
+
+
+class KernelLibraryDocumentationSearchAgent:
+    """Search and verify library documentation in a Kernel cloud browser."""
+
+    name = "agent-kernel-library-documentation-search"
+
+    def __init__(self, kernel_client: Any | None = None) -> None:
+        if kernel_client is None:
+            try:
+                Kernel = _load_kernel_sdk().Kernel
+            except ImportError as exc:
+                raise RuntimeError(
+                    "Kernel documentation search requires the optional `kernel` package. "
+                    "Install requirements-kernel.txt and set KERNEL_API_KEY."
+                ) from exc
+            api_key = _configured_kernel_api_key()
+            if not api_key:
+                raise RuntimeError("Set KERNEL_API_KEY in .env before using Kernel documentation search.")
+            kernel_client = Kernel(api_key=api_key)
+        self.kernel = kernel_client
+        self.provider = "kernel"
+        self.model = "kernel-browser"
+
+    def search(
+        self,
+        library: str,
+        public_symbols: list[str] | None = None,
+    ) -> DocumentationSearchResult:
+        symbols = [symbol for symbol in (public_symbols or [])[:20] if symbol]
+        query = f"{library} official documentation"
+        browser = None
+        try:
+            browser = self.kernel.browsers.create()
+            response = self.kernel.browsers.playwright.execute(
+                id=browser.session_id,
+                code=_browser_search_code(library, symbols),
+            )
+            payload = _response_result(response)
+            documentation = _verified_documentation(payload, library, symbols)
+            if not documentation:
+                raise ValueError("Kernel browser found no verified documentation pages")
+            return DocumentationSearchResult(
+                provider=self.provider,
+                model=self.model,
+                searched_by_model=False,
+                query=query,
+                documentation=documentation,
+                raw_response=json.dumps(payload, sort_keys=True),
+            )
+        except Exception as exc:  # noqa: BLE001 - persisted as reviewable discovery metadata
+            return DocumentationSearchResult(
+                provider=self.provider,
+                model=self.model,
+                searched_by_model=False,
+                query=query,
+                documentation=[],
+                error=f"{exc.__class__.__name__}: {exc}",
+            )
+        finally:
+            if browser is not None:
+                self.kernel.browsers.delete_by_id(browser.session_id)
+
+    def syntax_notes(
+        self,
+        library: str,
+        public_symbols: list[str] | None = None,
+        documentation: list[dict] | None = None,
+    ) -> str:
+        symbols = ", ".join((public_symbols or [])[:40]) or "none"
+        lines = [
+            f"# {library} Syntax and Documentation Notes",
+            "",
+            "Documentation was discovered and verified with a Kernel browser.",
+            "",
+            "## Public Symbols",
+            "",
+            symbols,
+            "",
+            "## Verified Documentation",
+            "",
+        ]
+        for item in documentation or []:
+            title = item.get("title", "Untitled documentation")
+            url = item.get("url", "")
+            note = item.get("note", "Verified page text mentions the requested library.")
+            lines.append(f"- [{title}]({url}) - {note}")
+        if not documentation:
+            lines.append("- No verified documentation pages were returned.")
+        return "\n".join(lines).rstrip() + "\n"
+
+
+def _browser_search_code(library: str, public_symbols: list[str]) -> str:
+    query = quote_plus(f"{library} official documentation")
+    symbols_json = json.dumps(public_symbols)
+    library_json = json.dumps(library.lower())
+    return f"""
+const library = {library_json};
+const symbols = {symbols_json};
+await page.goto('https://www.google.com/search?q={query}', {{ waitUntil: 'domcontentloaded' }});
+const links = await page.locator('a').evaluateAll((anchors) => anchors
+  .map((anchor) => ({{ title: (anchor.innerText || '').trim(), url: anchor.href }}))
+  .filter((item) => item.url.startsWith('http') && !item.url.includes('google.com'))
+  .slice(0, 8));
+const documentation = [];
+for (const link of links) {{
+  try {{
+    await page.goto(link.url, {{ waitUntil: 'domcontentloaded', timeout: 15000 }});
+    const text = (await page.locator('body').innerText()).slice(0, 6000);
+    const lower = text.toLowerCase();
+    const verified = lower.includes(library) || symbols.some((symbol) => lower.includes(symbol.toLowerCase()));
+    if (verified) {{
+      documentation.push({{
+        title: link.title || await page.title(),
+        url: page.url(),
+        note: `Verified page text mentions ${{library}}.`,
+        text_excerpt: text.slice(0, 500),
+      }});
+    }}
+  }} catch (error) {{
+    // Search results can contain unavailable or script-heavy pages.
+  }}
+  if (documentation.length >= 5) break;
+}}
+return {{ documentation }};
+"""
+
+
+def _load_kernel_sdk() -> Any:
+    """Load the external SDK without colliding with this repo's kernel package."""
+    module_name = "_kernel_sdk"
+    if module_name in sys.modules:
+        return sys.modules[module_name]
+    try:
+        package_root = Path(metadata.distribution("kernel").locate_file("kernel"))
+    except metadata.PackageNotFoundError as exc:
+        raise ImportError("The external Kernel SDK distribution is not installed") from exc
+    init_path = package_root / "__init__.py"
+    spec = spec_from_file_location(
+        module_name,
+        init_path,
+        submodule_search_locations=[str(package_root)],
+    )
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Could not load the external Kernel SDK from {init_path}")
+    module = module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _configured_kernel_api_key() -> str:
+    value = os.environ.get("KERNEL_API_KEY", "").strip()
+    if value:
+        return value
+    env_path = Path(".env")
+    if not env_path.exists():
+        return ""
+    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if line.startswith("export "):
+            line = line[len("export ") :].strip()
+        if not line.startswith("KERNEL_API_KEY="):
+            continue
+        value = line.split("=", 1)[1].strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+            value = value[1:-1]
+        return value.strip()
+    return ""
+
+
+def _response_result(response: Any) -> dict[str, Any]:
+    result = getattr(response, "result", response)
+    if isinstance(result, str):
+        result = json.loads(result)
+    if not isinstance(result, dict):
+        raise ValueError("Kernel browser response did not contain an object result")
+    return result
+
+
+def _verified_documentation(
+    payload: dict[str, Any],
+    library: str,
+    public_symbols: list[str],
+) -> list[dict]:
+    entries = payload.get("documentation", [])
+    if not isinstance(entries, list):
+        raise ValueError("Kernel browser response did not contain a documentation list")
+    normalized: list[dict] = []
+    library_lower = library.lower()
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        title = str(entry.get("title", "")).strip()
+        url = str(entry.get("url", "")).strip()
+        note = str(entry.get("note", "")).strip()
+        text = str(entry.get("text_excerpt", "")).lower()
+        verified = library_lower in text or any(symbol.lower() in text for symbol in public_symbols)
+        if title and url.startswith(("http://", "https://")) and verified:
+            normalized.append({"title": title, "url": url, "note": note})
+    return normalized

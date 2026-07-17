@@ -11,6 +11,7 @@ from agents.historian import HistorianAgent
 from agents.job_store import JsonlJobStore
 from agents.library_doc_search import LibraryDocumentationSearchAgent
 from agents.library_discovery import LibraryDiscoveryAgent
+from agents.kernel_doc_search import KernelLibraryDocumentationSearchAgent
 from agents.parse_contract import (
     ParseContractAgent,
     ParseFailure,
@@ -572,6 +573,53 @@ class ScalabilityAgentTests(unittest.TestCase):
         self.assertIn("# json Syntax", notes)
         self.assertIn("json.loads", notes)
 
+    def test_kernel_documentation_agent_verifies_browser_page_text(self) -> None:
+        class Browser:
+            session_id = "kernel-session"
+
+        class Response:
+            result = {
+                "documentation": [
+                    {
+                        "title": "json documentation",
+                        "url": "https://docs.python.org/3/library/json.html",
+                        "note": "Verified official documentation.",
+                        "text_excerpt": "The json module provides JSON encoder and decoder support.",
+                    },
+                    {
+                        "title": "unverified result",
+                        "url": "https://example.com/unrelated",
+                        "note": "Not enough evidence.",
+                        "text_excerpt": "A general page without the requested library.",
+                    },
+                ]
+            }
+
+        class Playwright:
+            def execute(self, **_kwargs: object) -> Response:
+                return Response()
+
+        class Browsers:
+            playwright = Playwright()
+
+            def create(self) -> Browser:
+                return Browser()
+
+            def delete_by_id(self, session_id: str) -> None:
+                self.deleted = session_id
+
+        class KernelClient:
+            browsers = Browsers()
+
+        agent = KernelLibraryDocumentationSearchAgent(kernel_client=KernelClient())
+        result = agent.search("json", public_symbols=["loads"])
+
+        self.assertEqual(result.provider, "kernel")
+        self.assertFalse(result.searched_by_model)
+        self.assertEqual([item["title"] for item in result.documentation], ["json documentation"])
+        self.assertEqual(agent.kernel.browsers.deleted, "kernel-session")
+        self.assertIn("verified with a Kernel browser", agent.syntax_notes("json", documentation=result.documentation))
+
     def test_approve_library_merges_proposal_into_temp_registry(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -927,10 +975,11 @@ def analyze(value):
             repair_supplier=repair_supplier,
         )
         result = controller.run(target="delta-tracking", initial_prompt="generate")
-        self.assertEqual(result.payload["final_status"], "completed")
+        self.assertEqual(result.payload["final_status"], "manual_review_required")
         self.assertEqual(result.payload["attempts"][1]["diagnostic_deltas"][0]["kind"], "cyclomatic_complexity")
         self.assertEqual(result.payload["attempts"][1]["diagnostic_deltas"][0]["delta"], 0)
         self.assertFalse(result.payload["attempts"][1]["diagnostic_deltas"][0]["improved"])
+        self.assertEqual(result.payload["human_review"]["reason"], "stagnant_repair")
 
     def test_branching_loop_detection_stops_repeated_no_progress_repairs(self) -> None:
         bad_v1 = """
@@ -963,9 +1012,8 @@ def analyze(value):
         result = controller.run(target="branch-loop", initial_prompt="generate")
 
         self.assertEqual(result.payload["final_status"], "manual_review_required")
-        self.assertEqual(result.payload["human_review"]["reason"], "branching_loop_detected")
-        self.assertEqual(result.payload["attempts"][-1]["branch_loop"]["reason"], "branching_loop_detected")
-        self.assertEqual(result.payload["attempts"][-1]["branch_state_signature"]["selected_branch_action"], "small_worker")
+        self.assertEqual(result.payload["human_review"]["reason"], "stagnant_repair")
+        self.assertTrue(result.payload["attempts"][-1]["diagnostic_stagnant"])
 
     def test_architect_supplier_takes_over_after_small_worker_threshold(self) -> None:
         bad_v1 = """
@@ -1060,6 +1108,46 @@ def analyze(value):
         self.assertEqual(len(architect_calls), 1)
         self.assertTrue(result.payload["attempts"][1]["diagnostic_stagnant"])
         self.assertEqual(result.payload["attempts"][1]["repair_worker"], "architect_llm")
+
+    def test_diagnostic_stagnation_stops_cosmetic_worker_repair(self) -> None:
+        bad_v1 = """
+def analyze(value):
+    if value == 0:
+        return 0
+    if value == 1:
+        return 1
+    if value == 2:
+        return 2
+    if value == 3:
+        return 3
+    if value == 4:
+        return 4
+    if value == 5:
+        return 5
+    if value == 6:
+        return 6
+    return 7
+"""
+        cosmetic_repair = bad_v1.replace("return 7", "return value")
+        repair_calls = []
+
+        def repair_supplier(_draft: str, _retry_prompt: str) -> str:
+            repair_calls.append(True)
+            return cosmetic_repair
+
+        controller = GenerationController(
+            max_retries=3,
+            draft_supplier=lambda _prompt: bad_v1,
+            repair_supplier=repair_supplier,
+            architect_after_repair_attempts=99,
+        )
+        result = controller.run(target="diagnostic-stagnation-stop", initial_prompt="generate")
+
+        self.assertEqual(result.payload["final_status"], "manual_review_required")
+        self.assertEqual(len(repair_calls), 2)
+        self.assertEqual(len(result.payload["attempts"]), 2)
+        self.assertTrue(result.payload["attempts"][1]["diagnostic_stagnant"])
+        self.assertEqual(result.payload["human_review"]["reason"], "stagnant_repair")
 
     def test_initial_worker_timeout_routes_to_architect(self) -> None:
         architect_calls = []

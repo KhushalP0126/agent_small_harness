@@ -43,6 +43,8 @@ the template and keep one of these keys configured:
 DEEPSEEK_API_KEY=your_key_here
 # or
 ARCHITECT_API_KEY=your_key_here
+# or, for browser-verified documentation search
+KERNEL_API_KEY=your_key_here
 ```
 
 `make env-path` prints the active env-file path and supported key names. The
@@ -53,8 +55,9 @@ Default backend roles:
 
 - local worker: Ollama/Qwen via `MODEL`, defaulting to `qwen2.5-coder:1.5b`
 - architect and documentation search: DeepSeek via `DEEPSEEK_API_KEY`
-- optional documentation override: `DOC_AGENT=qwen` for local Qwen or
-  `DOC_AGENT=none` for import-only discovery
+- optional documentation override: `DOC_AGENT=qwen` for local Qwen,
+  `DOC_AGENT=kernel` for verified Kernel browser search, or `DOC_AGENT=none`
+  for import-only discovery
 
 Architect API calls retry transient timeouts, DNS/network failures, HTTP 429, and
 HTTP 5xx responses. Configure `ARCHITECT_RETRY_ATTEMPTS` and
@@ -109,6 +112,7 @@ Use these variants when needed:
 
 ```bash
 make discover-library LIB=json DOC_AGENT=qwen
+make discover-library LIB=json DOC_AGENT=kernel
 make discover-library LIB=json DOC_AGENT=none
 make approve-library LIB=json
 ```

@@ -945,7 +945,12 @@ class GenerationController(BaseAgent):
                     session.final_status = "manual_review_required"
                     session.human_review = self._human_review_payload("repair_supplier_error", attempt)
                     break
-                if self._is_stagnant(draft, next_draft):
+                stagnant_repair = self._is_stagnant(draft, next_draft)
+                diagnostic_stagnant_repair = (
+                    self._is_diagnostic_stagnant(diagnostic_deltas)
+                    and worker_name != "architect_llm"
+                )
+                if stagnant_repair or diagnostic_stagnant_repair:
                     if worker_name != "architect_llm":
                         fallback_worker, fallback_supplier = self._repair_worker_for(len(failed_attempts))
                         if fallback_worker == "architect_llm":
