@@ -122,6 +122,7 @@ def _browser_search_code(
     candidates_json = json.dumps(candidates)
     return f"""
 const library = {library_json};
+const libraryRoot = library.split('.')[0];
 const symbols = {symbols_json};
 const candidates = {candidates_json};
 const documentation = [];
@@ -130,7 +131,7 @@ for (const candidate of candidates) {{
     await page.goto(candidate.url, {{ waitUntil: 'domcontentloaded', timeout: 15000 }});
     const text = (await page.locator('body').innerText()).slice(0, 6000);
     const lower = text.toLowerCase();
-    const verified = lower.includes(library) || symbols.some((symbol) => lower.includes(symbol.toLowerCase()));
+    const verified = lower.includes(library) || lower.includes(libraryRoot) || symbols.some((symbol) => lower.includes(symbol.toLowerCase()));
     if (verified) {{
       documentation.push({{
         title: candidate.title || await page.title(),
@@ -210,6 +211,7 @@ def _verified_documentation(
         raise ValueError("Kernel browser response did not contain a documentation list")
     normalized: list[dict] = []
     library_lower = library.lower()
+    library_root = library_lower.split(".", 1)[0]
     for entry in entries:
         if not isinstance(entry, dict):
             continue
@@ -217,14 +219,20 @@ def _verified_documentation(
         url = str(entry.get("url", "")).strip()
         note = str(entry.get("note", "")).strip()
         text = str(entry.get("text_excerpt", "")).lower()
-        verified = library_lower in text or any(symbol.lower() in text for symbol in public_symbols)
+        verified = (
+            library_lower in text
+            or library_root in text
+            or any(symbol.lower() in text for symbol in public_symbols)
+        )
         if title and _allowed_documentation_url(url) and verified:
             normalized.append({"title": title, "url": url, "note": note})
     return normalized
 
 
 ALLOWED_DOCUMENTATION_DOMAINS = (
+    "clang.llvm.org",
     "docs.python.org",
+    "llvm.org",
     "pypi.org",
     "readthedocs.io",
     "github.com",
@@ -254,7 +262,12 @@ def _metadata_candidates(library: str) -> list[dict[str, str]]:
             continue
         project_urls = info.get("project_urls", {})
         urls: Iterable[tuple[str, str]] = project_urls.items() if isinstance(project_urls, dict) else []
-        for label, url in urls:
+        metadata_urls: list[tuple[str, str]] = list(urls)
+        for field_name in ("home_page", "docs_url", "download_url"):
+            field_url = str(info.get(field_name, "")).strip()
+            if field_url:
+                metadata_urls.append((field_name, field_url))
+        for label, url in metadata_urls:
             value = str(url).strip()
             label_text = str(label).lower()
             if value and any(term in label_text for term in ("doc", "home", "source", "repository", "github")):

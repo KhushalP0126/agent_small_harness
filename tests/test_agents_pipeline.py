@@ -640,6 +640,7 @@ class ScalabilityAgentTests(unittest.TestCase):
         self.assertIn("pypi.org/project/clang", code)
         self.assertTrue(_allowed_documentation_url("https://docs.python.org/3/library/json.html"))
         self.assertTrue(_allowed_documentation_url("https://github.com/llvm/llvm-project"))
+        self.assertTrue(_allowed_documentation_url("https://clang.llvm.org/docs/PythonBindings.html"))
         self.assertFalse(_allowed_documentation_url("https://example.com/json"))
 
     def test_approve_library_merges_proposal_into_temp_registry(self) -> None:
