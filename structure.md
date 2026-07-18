@@ -60,7 +60,7 @@ agents; they prepare, route, validate, and record work.
 - `agents/repair_strategy.py` - Turns validation failures into targeted repair directives.
 - `agents/behavior_spec.py` - Loads behavior specs from `data/behavior_cases.json`.
 - `agents/historian.py` - Records raw runs and aggregates route statistics.
-- `agents/job_store.py` - Append-only JSONL job store.
+- `agents/job_store.py` - File-locked append-only JSONL store for async job/status orchestration.
 - `agents/library_discovery.py` - Generates reviewable library registry proposals.
 - `agents/library_doc_search.py` - Model-backed documentation search and Markdown syntax-guide generation for library proposals.
 - `agents/kernel_doc_search.py` - Kernel browser-backed documentation search that verifies fetched page text.
@@ -74,7 +74,7 @@ agents; they prepare, route, validate, and record work.
 
 Minimal HTTP request boundary around the existing synchronous controller.
 
-- `api/app.py` - FastAPI app with `/health` and `/runs/sync`.
+- `api/app.py` - FastAPI app with sync generation, async job submission/status, and backend configuration wiring.
 - `api/__init__.py` - Package marker.
 
 ## `harness_kernel/`

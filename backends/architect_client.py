@@ -119,6 +119,8 @@ class ArchitectConfig:
     env_file: str = DEFAULT_ARCHITECT_ENV_FILE
     repair_profile: ArchitectProfile = field(default_factory=lambda: REPAIR_PROFILE)
     contract_profile: ArchitectProfile = field(default_factory=lambda: CONTRACT_PROFILE)
+    model_override: str | None = None
+    base_url_override: str | None = None
 
     @property
     def api_key_configured(self) -> bool:
@@ -145,7 +147,7 @@ class ArchitectConfig:
 
     @property
     def base_url(self) -> str:
-        return self._config_value(self.base_url_env) or DEFAULT_ARCHITECT_API_BASE_URL
+        return self.base_url_override or self._config_value(self.base_url_env) or DEFAULT_ARCHITECT_API_BASE_URL
 
     @property
     def request_timeout_seconds(self) -> int:
@@ -186,7 +188,7 @@ class ArchitectConfig:
     @property
     def repair_profile_from_env(self) -> ArchitectProfile:
         return ArchitectProfile(
-            model=self._config_value(self.model_env) or self.repair_profile.model,
+            model=self.model_override or self._config_value(self.model_env) or self.repair_profile.model,
             timeout_seconds=self._int_config_value(
                 self.timeout_seconds_env,
                 self.repair_profile.timeout_seconds,

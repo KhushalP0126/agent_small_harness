@@ -79,6 +79,11 @@ Endpoints:
   `model`, `ollama_url`, and `use_architect`. The default app wires the request
   to the Ollama draft/repair suppliers and can enable the architect repair
   supplier; backend failures are returned as structured JSON errors.
+- `POST /runs/async` queues the same request and returns a job ID.
+- `GET /runs/{job_id}` returns the persisted job status, events, and result.
+
+Async jobs use the file-locked `JsonlJobStore` at `data/jobs.jsonl` by default;
+set `JOB_STORE_PATH` to override it.
 
 Do not add job queues, file locking, or concurrency machinery ahead of this
 request boundary. Those belong after real API callers exist.

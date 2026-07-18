@@ -276,7 +276,7 @@ Those outcomes are recorded in artifact metadata and the contract queue results.
 | `agents/generation_controller.py` | Main create/repair loop, stagnation guard, branch-loop detection, architect escalation, final status |
 | `agents/plan_mode.py` | Converts raw user intent into compact task specs, behavior examples, constraints, graph context, and `TaskIR` |
 | `agents/engine_registry.py` | Routes parsed source to the registered engine set |
-| `agents/job_store.py` | Append-only JSONL job store for future queue/status endpoints; currently unused by the synchronous API |
+| `agents/job_store.py` | File-locked append-only JSONL job store used by asynchronous run/status endpoints |
 | `agents/parse_contract.py` | Language detection and parser gate |
 | `agents/repair_strategy.py` | Converts violations into scoped repair instructions |
 | `agents/template_registry.py` | Optional injected template-route selector, with no built-in app-specific route |
@@ -356,6 +356,8 @@ The first service boundary is intentionally small:
 ```text
 GET  /health
 POST /runs/sync
+POST /runs/async
+GET  /runs/{job_id}
 ```
 
 `POST /runs/sync` accepts `target`, `spec`, optional `max_retries`, `language`,
@@ -368,9 +370,10 @@ controller result.
 Backend failures return structured JSON with an error code and recovery action
 instead of an unstructured server error.
 
-`agents/job_store.py` is currently dormant from the API's perspective. There is
-no `/runs/async` or job-status endpoint yet; `JsonlJobStore` is reserved for the
-future asynchronous orchestration boundary.
+`POST /runs/async` returns a job ID immediately and runs the same controller in
+the background. `GET /runs/{job_id}` reads its persisted status, lifecycle
+events, and result from `JsonlJobStore`. Set `JOB_STORE_PATH` to change the
+default `data/jobs.jsonl` location.
 
 Build the local API image:
 

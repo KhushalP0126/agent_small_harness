@@ -1,11 +1,18 @@
 from __future__ import annotations
 
 import json
+import os
 import uuid
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - Windows fallback
+    fcntl = None
 
 
 @dataclass
@@ -67,12 +74,32 @@ class JsonlJobStore:
 
     def _append(self, entry: dict[str, Any]) -> None:
         with self.path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(entry, sort_keys=True) + "\n")
+            with self._locked(handle, exclusive=True):
+                handle.write(json.dumps(entry, sort_keys=True) + "\n")
+                handle.flush()
+                os.fsync(handle.fileno())
 
     def _read_entries(self) -> list[dict[str, Any]]:
         if not self.path.exists():
             return []
-        return [json.loads(line) for line in self.path.read_text(encoding="utf-8").splitlines() if line.strip()]
+        with self.path.open("r", encoding="utf-8") as handle:
+            with self._locked(handle, exclusive=False):
+                return [
+                    json.loads(line)
+                    for line in handle.read().splitlines()
+                    if line.strip()
+                ]
+
+    @contextmanager
+    def _locked(self, handle, *, exclusive: bool):
+        if fcntl is not None:
+            operation = fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH
+            fcntl.flock(handle.fileno(), operation)
+        try:
+            yield
+        finally:
+            if fcntl is not None:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
     def _now(self) -> str:
         return datetime.now(timezone.utc).isoformat()
