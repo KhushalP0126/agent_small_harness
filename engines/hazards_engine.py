@@ -4,7 +4,7 @@ import ast
 import sys
 
 from engines.base import BaseEngine, EngineDiagnostic, EngineFinding
-from engines.decomposition_engine import DecompositionEngine
+from engines.decomposition_engine import DecompositionEngine, StructuralIR
 from engines.library_registry import LibraryRegistry
 
 
@@ -116,8 +116,8 @@ class HazardsEngine(BaseEngine):
     def __init__(self, library_registry: LibraryRegistry | None = None) -> None:
         self.library_registry = library_registry or LibraryRegistry()
 
-    def scan(self, source: str) -> list[EngineFinding]:
-        ir = DecompositionEngine().decompose(source)
+    def scan(self, source: str, ir: StructuralIR | None = None) -> list[EngineFinding]:
+        ir = ir or DecompositionEngine().decompose(source)
         findings: list[EngineFinding] = []
         container_mutations = {
             mutation.target

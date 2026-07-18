@@ -200,19 +200,19 @@ below describe what each loop is doing and what it can detect.
 | `engine-1-math` | Reuses `StructuralIR.loops` and scans the recorded loop list for the maximum depth and deepest path. | Whether nesting exceeds the policy threshold of two; reports the loop path and its `for`/`while` shape. | One low/medium/high finding with `max_loop_depth`; policy blocks values above the configured limit. |
 | `engine-2-hazards` | Reuses IR mutation/global records. Separate AST walks iterate import nodes to classify dependencies, import bindings to resolve registered libraries, and call nodes to validate API paths. | Explicit `global`, mutation of module-level containers, indexed module-state writes, non-standard-library imports, and calls missing from a registered library schema. | One finding per hazard category, with names, calls, imports, locations, and repair hints. |
 | `engine-3-branching` | Starts with IR loops and branches, then walks the AST for exception handlers, assertions, conditional expressions, boolean operands, and comprehension filters. A nested function visitor repeats the decision count per function while skipping nested functions. | Cyclomatic-style path density at module and function scope, including decisions that are not plain `if` statements. | Complexity metrics and the worst function; policy blocks complexity above seven. |
-| `engine-4-cost` | `_CostVisitor` independently walks assignments, annotations, arguments, constructors, `for`/`while`, comprehensions, and comparisons. It maintains a scope stack for inferred container kinds and only records `in`/`not in` comparisons while loop depth is nonzero. | Repeated membership against an inferred `list` inside a loop, which can become an avoidable linear lookup hotspot. | Container names, lines, and hotspot count; policy can require a precomputed set. This visitor has not yet migrated to `StructuralIR`. |
+| `engine-4-cost` | Consumes `StructuralIR.symbols` and `StructuralIR.membership_checks`. The IR builder records assignments, annotations, arguments, constructors, `for`/`while`, comprehensions, and `in`/`not in` comparisons with scope and line information. | Repeated membership against an inferred `list` or `tuple` inside a loop, which can become an avoidable linear lookup hotspot. | Container names, lines, and hotspot count; policy can require a precomputed set. |
 | `engine-5-lint` | Writes the draft to a temporary file and delegates traversal to Pylint. It parses the returned JSON and filters registered dynamic-library `no-member` messages into non-blocking warnings. | Pylint fatal/error categories, while allowing known dynamic members from the library registry. | Blocking lint findings or an explicit skipped/unavailable/timeout result. It is optional and external to the AST IR. |
-| `engine-6-bounds` | AST visitor checks every subscript and every `for` loop whose iterator is a `range(...)` call. It compares index expressions with `len(name)` and detects `range(len(name) + 1)`. | High-confidence one-past-end reads/writes and range upper-bound overflow patterns. | Warning-first bounds finding with expressions and lines; full dataflow proof is intentionally out of scope. |
-| `engine-7-state-flow` | For each function, walks all descendant nodes to collect assignments to state-like parameters and return statements. It compares assigned parameter names with names returned directly or inside a tuple/list. | Helpers that mutate parameters named like state/context/section/current/total but fail to return the updated value. | Potential lost-state finding with function, parameter, and line; policy blocks it by default. |
+| `engine-6-bounds` | Consumes `StructuralIR.bounds_risks`, populated while the IR builder visits every subscript and `for` loop whose iterator is a `range(...)` call. | High-confidence one-past-end reads/writes and range upper-bound overflow patterns. | Warning-first bounds finding with expressions and lines; full dataflow proof is intentionally out of scope. |
+| `engine-7-state-flow` | Consumes `StructuralIR.state_flow_risks`, populated while the IR builder walks each function’s descendant nodes for state-parameter assignments and return values. | Helpers that mutate parameters named like state/context/section/current/total but fail to return the updated value. | Potential lost-state finding with function, parameter, and line; policy blocks it by default. |
 
 #### Current IR Boundary
 
-`DecompositionEngine` is the shared structural source for Math, Hazards, and
-Branching. Bounds and State-flow intentionally keep specialized visitors because
-their checks depend on expression details and return-value patterns. Cost still
-rebuilds container/type facts in `_CostVisitor`; that is the next unification
-target if the shared IR is extended with scope-qualified symbols and membership
-checks. Lint remains separate because Pylint owns its traversal.
+`DecompositionEngine` is the shared structural source for Math, Hazards,
+Branching, Cost, Bounds, and State-flow. The IR now carries scope-qualified
+symbols, membership checks, bounds risks, and state-flow risks so those engines
+do not need their own top-level `ast.NodeVisitor` for the same facts. Lint
+remains separate because Pylint owns its traversal and is intentionally external
+to the Python IR.
 
 #### Reading a Finding
 

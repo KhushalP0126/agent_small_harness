@@ -10,6 +10,7 @@ from engines.hazards_engine import HazardsEngine
 from engines.lint_engine import LintEngine
 from engines.math_engine import MathEngine
 from engines.state_flow_engine import StateFlowEngine
+from engines.decomposition_engine import DecompositionEngine, StructuralIR
 
 
 EngineFactory = Callable[[], BaseEngine]
@@ -63,9 +64,33 @@ class EngineRegistry:
 
     def findings_for(self, source: str, language: str) -> list[EngineFinding]:
         findings: list[EngineFinding] = []
+        ir: StructuralIR | None = None
+        try:
+            if language.strip().lower() == "python":
+                ir = DecompositionEngine().decompose(source)
+        except SyntaxError as exc:
+            return [
+                EngineFinding(
+                    engine=PARSE_CONTRACT_ENGINE,
+                    severity="High",
+                    summary="Draft parse failure",
+                    details=f"Generated draft is not valid Python: {exc.msg}",
+                    metrics={
+                        "line": exc.lineno or 0,
+                        "offset": exc.offset or 0,
+                        "error": exc.msg,
+                    },
+                )
+            ]
         for engine in self.engines_for(language):
             try:
-                findings.extend(engine.scan(source))
+                if ir is not None and isinstance(
+                    engine,
+                    (MathEngine, HazardsEngine, BranchingEngine, CostEngine, BoundsEngine, StateFlowEngine),
+                ):
+                    findings.extend(engine.scan(source, ir=ir))
+                else:
+                    findings.extend(engine.scan(source))
             except SyntaxError as exc:
                 # Defensive: the parse-contract gate should catch this first, but if an
                 # engine still trips on syntax we surface the standard parse finding

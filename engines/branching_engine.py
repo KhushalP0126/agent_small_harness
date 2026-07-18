@@ -3,7 +3,7 @@ from __future__ import annotations
 import ast
 
 from engines.base import BaseEngine, EngineDiagnostic, EngineFinding
-from engines.decomposition_engine import DecompositionEngine
+from engines.decomposition_engine import DecompositionEngine, StructuralIR
 
 
 DECISION_NODES = (ast.If, ast.For, ast.While, ast.ExceptHandler, ast.Assert, ast.IfExp)
@@ -44,9 +44,9 @@ class _FunctionComplexityVisitor(ast.NodeVisitor):
 class BranchingEngine(BaseEngine):
     name = "engine-3-branching"
 
-    def scan(self, source: str) -> list[EngineFinding]:
+    def scan(self, source: str, ir: StructuralIR | None = None) -> list[EngineFinding]:
         tree = ast.parse(source)
-        ir = DecompositionEngine().decompose(source)
+        ir = ir or DecompositionEngine().decompose(source)
         decision_points = len(ir.loops) + len(ir.branches)
         for node in ast.walk(tree):
             if isinstance(node, (ast.ExceptHandler, ast.Assert, ast.IfExp)):

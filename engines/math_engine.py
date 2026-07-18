@@ -3,14 +3,14 @@ from __future__ import annotations
 import ast
 
 from engines.base import BaseEngine, EngineDiagnostic, EngineFinding
-from engines.decomposition_engine import DecompositionEngine
+from engines.decomposition_engine import DecompositionEngine, StructuralIR
 
 
 class MathEngine(BaseEngine):
     name = "engine-1-math"
 
-    def scan(self, source: str) -> list[EngineFinding]:
-        ir = DecompositionEngine().decompose(source)
+    def scan(self, source: str, ir: StructuralIR | None = None) -> list[EngineFinding]:
+        ir = ir or DecompositionEngine().decompose(source)
         max_depth = max((loop.depth for loop in ir.loops), default=0)
         deepest_loop = next((loop for loop in ir.loops if loop.depth == max_depth), None)
         deepest_loop_types = [segment.split(":", 1)[0] for segment in (deepest_loop.path if deepest_loop else [])]
