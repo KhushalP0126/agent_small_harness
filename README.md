@@ -358,9 +358,15 @@ GET  /health
 POST /runs/sync
 ```
 
-`POST /runs/sync` accepts `target`, `spec`, optional `max_retries`, and optional
-`language`, then calls `GenerationController.run()` synchronously and returns the
+`POST /runs/sync` accepts `target`, `spec`, optional `max_retries`, `language`,
+`model`, `ollama_url`, and `use_architect`. The default app wires `spec` through
+`OllamaModelSupplier.generate_draft`, uses the same supplier for repairs, and
+optionally enables `ArchitectModelSupplier.repair_draft` for escalation. It then
+calls `GenerationController.run()` synchronously and returns the validated
 controller result.
+
+Backend failures return structured JSON with an error code and recovery action
+instead of an unstructured server error.
 
 `agents/job_store.py` is currently dormant from the API's perspective. There is
 no `/runs/async` or job-status endpoint yet; `JsonlJobStore` is reserved for the

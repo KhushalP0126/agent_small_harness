@@ -75,8 +75,10 @@ make api-dev
 Endpoints:
 
 - `GET /health` returns service health.
-- `POST /runs/sync` accepts `target`, `spec`, optional `max_retries`, and
-  optional `language`, then calls `GenerationController.run()` synchronously.
+- `POST /runs/sync` accepts `target`, `spec`, optional `max_retries`, `language`,
+  `model`, `ollama_url`, and `use_architect`. The default app wires the request
+  to the Ollama draft/repair suppliers and can enable the architect repair
+  supplier; backend failures are returned as structured JSON errors.
 
 Do not add job queues, file locking, or concurrency machinery ahead of this
 request boundary. Those belong after real API callers exist.
