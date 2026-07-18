@@ -116,16 +116,20 @@ flowchart TD
     K --> L
 
     L -->|yes| M[completed]
-    L -->|no| N[RepairStrategyAgent]
+    L -->|no| BL{Branch loop detected?}
+    BL -->|yes| Z
+    BL -->|no| N[RepairStrategyAgent]
     N --> O[Scoped retry prompt]
-    O --> P[Small worker repair]
+    O --> R{Retry threshold reached or diagnostics stagnant?}
+    R -->|ordinary retry| P[Small worker repair]
     P --> E
-
-    P -->|stagnant or hard failure| Q[Architect API worker]
+    P -->|unchanged| Q
+    P -->|backend error| Z
+    R -->|escalate| Q[Architect API worker]
     Q --> E
+    Q -->|static gate still fails| Z
 
     L -->|max retries or high risk| Z
-    Q -->|still failing| Z
 
     M --> R[Artifacts and historian]
     Z --> R
@@ -175,14 +179,18 @@ flowchart TD
     gates -->|yes| completed[completed]
     completed --> artifacts[Artifacts and historian]
 
-    gates -->|no| strategy[RepairStrategyAgent]
+    gates -->|no| branch{Branch loop detected?}
+    branch -->|yes| review
+    branch -->|no| strategy[RepairStrategyAgent]
     strategy --> retry[Scoped retry prompt]
-    retry --> repair[Small worker repair]
-    repair --> draft
-
-    repair -->|stagnant or hard failure| architect[Architect API worker]
-    architect --> draft
-    architect -->|still failing| review
+    retry --> mode{Retry threshold reached or diagnostics stagnant?}
+    mode -->|ordinary retry| repair[Small worker repair]
+    repair -->|changed| draft
+    repair -->|unchanged| architect[Architect API worker]
+    repair -->|backend error| review
+    mode -->|escalate| architect
+    architect -->|passes to next attempt| draft
+    architect -->|static gate still fails| review
     gates -->|max retries or high risk| review
     review --> artifacts
 ```
@@ -196,7 +204,7 @@ below describe what each loop is doing and what it can detect.
 
 | Engine | Traversal and loop behavior | What it checks | Result |
 | --- | --- | --- | --- |
-| `engine-0-decomposition` | `_IRBuilder` walks the complete AST. Function visits push and pop `scope_stack`; `for` and `while` visits increment/decrement loop depth and record a nested path; assignment, augmented-assignment, call, `if`, and `global` visitors record structural facts. | Builds the shared structural view: functions, loop types/depth, branches, mutations, explicit globals, module containers, and loop-mutated names. | `StructuralIR`, consumed by Math, Hazards, and Branching. It is a supporting analysis rather than a registered policy gate. |
+| `engine-0-decomposition` | `_IRBuilder` walks the complete AST. Function visits push and pop `scope_stack`; `for` and `while` visits increment/decrement loop depth and record a nested path; assignment, augmented-assignment, call, `if`, and `global` visitors record structural facts. | Builds the shared structural view: functions, loop types/depth, branches, mutations, explicit globals, module containers, symbols, membership checks, bounds risks, and state-flow risks. | `StructuralIR`, consumed by Math, Hazards, Branching, Cost, Bounds, and State-flow. It is a supporting analysis rather than a registered policy gate. |
 | `engine-1-math` | Reuses `StructuralIR.loops` and scans the recorded loop list for the maximum depth and deepest path. | Whether nesting exceeds the policy threshold of two; reports the loop path and its `for`/`while` shape. | One low/medium/high finding with `max_loop_depth`; policy blocks values above the configured limit. |
 | `engine-2-hazards` | Reuses IR mutation/global records. Separate AST walks iterate import nodes to classify dependencies, import bindings to resolve registered libraries, and call nodes to validate API paths. | Explicit `global`, mutation of module-level containers, indexed module-state writes, non-standard-library imports, and calls missing from a registered library schema. | One finding per hazard category, with names, calls, imports, locations, and repair hints. |
 | `engine-3-branching` | Starts with IR loops and branches, then walks the AST for exception handlers, assertions, conditional expressions, boolean operands, and comprehension filters. A nested function visitor repeats the decision count per function while skipping nested functions. | Cyclomatic-style path density at module and function scope, including decisions that are not plain `if` statements. | Complexity metrics and the worst function; policy blocks complexity above seven. |
@@ -268,6 +276,7 @@ Those outcomes are recorded in artifact metadata and the contract queue results.
 | `agents/generation_controller.py` | Main create/repair loop, stagnation guard, branch-loop detection, architect escalation, final status |
 | `agents/plan_mode.py` | Converts raw user intent into compact task specs, behavior examples, constraints, graph context, and `TaskIR` |
 | `agents/engine_registry.py` | Routes parsed source to the registered engine set |
+| `agents/job_store.py` | Append-only JSONL job store for future queue/status endpoints; currently unused by the synchronous API |
 | `agents/parse_contract.py` | Language detection and parser gate |
 | `agents/repair_strategy.py` | Converts violations into scoped repair instructions |
 | `agents/template_registry.py` | Optional injected template-route selector, with no built-in app-specific route |
@@ -352,6 +361,10 @@ POST /runs/sync
 `POST /runs/sync` accepts `target`, `spec`, optional `max_retries`, and optional
 `language`, then calls `GenerationController.run()` synchronously and returns the
 controller result.
+
+`agents/job_store.py` is currently dormant from the API's perspective. There is
+no `/runs/async` or job-status endpoint yet; `JsonlJobStore` is reserved for the
+future asynchronous orchestration boundary.
 
 Build the local API image:
 
