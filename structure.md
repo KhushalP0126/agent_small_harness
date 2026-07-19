@@ -148,6 +148,7 @@ Ground truth cases, behavior specs, library schemas, run logs, and code snippets
 - `data/library_registry.json` - Trusted library API schemas and adapter notes.
 - `data/library_proposals/` - Untrusted discovery proposals and model-generated library docs awaiting review.
 - `data/runs.jsonl` - Optional append-only historian log.
+- `data/jobs.jsonl` - Local async job/status log; ignored by git.
 - `data/stats.json` - Optional aggregate route statistics.
 - `data/snippets/` - Python, C, and C++ static-analysis fixtures.
 

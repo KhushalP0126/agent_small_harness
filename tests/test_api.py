@@ -146,6 +146,30 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.json()["detail"]["error"], "job_not_found")
 
+    def test_async_run_records_failed_job_and_error_event(self) -> None:
+        def controller_factory(_request):
+            raise RuntimeError("Ollama is not reachable")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            client = TestClient(
+                create_app(
+                    controller_factory,
+                    job_store=JsonlJobStore(Path(temp_dir) / "jobs.jsonl"),
+                )
+            )
+            queued = client.post(
+                "/runs/async",
+                json={"target": "failed-function", "spec": "write code"},
+            )
+            job_id = queued.json()["job_id"]
+            result = client.get(f"/runs/{job_id}")
+
+        self.assertEqual(result.status_code, 200)
+        payload = result.json()
+        self.assertEqual(payload["status"], "failed")
+        error_events = [event for event in payload["events"] if event["event_type"] == "error"]
+        self.assertEqual(error_events[0]["payload"]["error"], "backend_error")
+
 
 if __name__ == "__main__":
     unittest.main()

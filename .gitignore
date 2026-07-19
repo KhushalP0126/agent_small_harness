@@ -17,6 +17,7 @@ dist/
 !.env.example
 artifacts/
 data/stats.json
+data/jobs.jsonl
 *.log
 *.tmp
 *.bak

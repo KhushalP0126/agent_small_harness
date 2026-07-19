@@ -89,6 +89,8 @@ def _run_background_job(
             },
         )
         job_store.update_status(job_id, "failed")
+
+
 def create_app(
     controller_factory: ControllerFactory = build_controller,
     job_store: JsonlJobStore | None = None,
@@ -98,11 +100,9 @@ def create_app(
         os.environ.get("JOB_STORE_PATH", str(DEFAULT_JOB_STORE_PATH))
     )
 
-
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
-
 
     @app.post("/runs/sync", response_model=SyncRunResponse)
     def run_sync(request: SyncRunRequest) -> SyncRunResponse:
