@@ -242,6 +242,39 @@ class GenerationController(BaseAgent):
             )
         return violations
 
+    def _retry_violations(
+        self,
+        validation_result: ValidationResult,
+        behavior_validation: dict,
+        formal_validation: dict,
+    ) -> list[Violation]:
+        """Return every distinct failing gate in stable validation order."""
+
+        candidates: list[Violation] = []
+        if not validation_result.is_compliant:
+            candidates.extend(validation_result.violations)
+        if not behavior_validation.get("is_compliant", False):
+            candidates.extend(self._behavior_violations(behavior_validation))
+        if not formal_validation.get("is_compliant", False):
+            candidates.extend(self._formal_violations(formal_validation))
+
+        violations: list[Violation] = []
+        seen: set[tuple[str, str, str, str, str, str]] = set()
+        for violation in candidates:
+            identity = (
+                violation.engine,
+                violation.kind,
+                violation.location,
+                violation.summary,
+                violation.current_value,
+                violation.allowed_value,
+            )
+            if identity in seen:
+                continue
+            seen.add(identity)
+            violations.append(violation)
+        return violations
+
     def _validate_formal_contracts(self, source: str) -> dict:
         deal_result = validate_deal_examples(source, timeout_seconds=self.crosshair_timeout_seconds)
         if not deal_result.is_compliant:
@@ -362,11 +395,10 @@ class GenerationController(BaseAgent):
         diagnostic_deltas: list[dict],
         worker_name: str,
     ) -> tuple[list[Violation], list]:
-        if worker_name == "architect_llm":
-            scoped_violations = violations
-        else:
-            top_violation = self._top_violation(violations)
-            scoped_violations = [top_violation] if top_violation is not None else []
+        # Retry violations are already deduplicated and ordered by validation
+        # stage. Keep the complete set for both workers so a static failure
+        # cannot hide a simultaneous behavioral or formal failure.
+        scoped_violations = violations
         return (
             scoped_violations,
             aggregate_violations(
@@ -841,14 +873,10 @@ class GenerationController(BaseAgent):
                         "Architect output failed static engine gates. Stopping instead of retrying architect."
                     )
             if not force_manual_review and not is_complete and attempt_index < self.max_retries:
-                retry_violations = (
-                    validation_result.violations
-                    if not validation_result.is_compliant
-                    else (
-                        self._behavior_violations(behavior_validation)
-                        if not behavior_validation["is_compliant"]
-                        else self._formal_violations(formal_validation)
-                    )
+                retry_violations = self._retry_violations(
+                    validation_result,
+                    behavior_validation,
+                    formal_validation,
                 )
                 repair_worker, next_repair_supplier = self._repair_worker_for(len(failed_attempts))
                 if (

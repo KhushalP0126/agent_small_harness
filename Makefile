@@ -2,7 +2,7 @@ PYTHON ?= python3
 RUNS_PATH ?= data/runs.jsonl
 CONFIG_PATH ?= config.yaml
 ARTIFACT_ROOT ?= artifacts/runs
-SAVE_ARTIFACTS ?= 0
+SAVE_ARTIFACTS ?= 1
 MODEL ?= qwen2.5-coder:1.5b
 MAX_RETRIES ?= 3
 RUN ?=
@@ -77,7 +77,7 @@ help:
 	@printf "  MAX_RETRIES=3                        Small-worker retry budget for ladder targets; default is $(MAX_RETRIES)\n"
 	@printf "  ARCHITECT_AFTER=1                    Escalate to architect after this many failed repairs; default is $(ARCHITECT_AFTER)\n"
 	@printf "  ARCHITECT_MAX_RETRIES=2              Total repair budget for architect targets; default is $(ARCHITECT_MAX_RETRIES)\n"
-	@printf "  SAVE_ARTIFACTS=1                     Save attempts, prompts, diffs, and validations under ARTIFACT_ROOT\n"
+	@printf "  SAVE_ARTIFACTS=1                     Save attempts, prompts, diffs, and validations; default is $(SAVE_ARTIFACTS)\n"
 	@printf "  ARTIFACT_ROOT=artifacts/runs         Artifact directory; default is $(ARTIFACT_ROOT)\n"
 	@printf "  SPEC_PATH=path/to/spec.md            Structured-spec input path\n"
 	@printf "  DOC_AGENT=deepseek|qwen|kernel|none  Backend for library documentation search; default is $(DOC_AGENT)\n"

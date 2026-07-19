@@ -112,3 +112,20 @@ Architect escalation materially improved completion from 3/7 to 6/7, rescuing
 three failures. The most persistent weakness was grouped ranking with tie-order
 requirements, and the ladders show additional brittleness in parsing,
 interval-merging, stateful parsing, and transaction aggregation.
+
+## Post-fix focused verification
+
+After merging simultaneous static and behavioral failures into retry prompts
+and enabling artifacts by default, `group_top_scores` was rerun alone against
+Ollama `qwen2.5-coder:1.5b` with architect escalation available.
+
+| Result | Attempts | Qwen repairs | Architect calls | Final failures |
+| --- | ---: | ---: | ---: | ---: |
+| completed | 1 | 0 | 0 | 0 |
+
+Qwen solved the focused rerun in its initial draft, so no retry was required.
+The run was recorded in `data/runs.jsonl` with artifact path
+`artifacts/runs/group_top_scores-20260719T015612Z-2830cb30`. Deterministic
+regression coverage separately verifies that when static and behavioral gates
+fail together, both categories and their exact expected/actual values reach the
+small-worker retry prompt in stable, deduplicated order.

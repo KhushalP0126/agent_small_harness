@@ -36,11 +36,11 @@ from prompt.builder import build_prompt
 from prompt.budget import budget_prompt
 from prompt.constraint_types import BranchConstraint, ConstraintBlock, LoopConstraint, MutationConstraint
 from prompt.retry_builder import build_retry_prompt, build_small_worker_retry_prompt
-from validation.behavior import mixed_hard_case_spec, validate_function_behavior
+from validation.behavior import BehaviorCase, FunctionBehaviorSpec, mixed_hard_case_spec, validate_function_behavior
 from validation.finding_aggregator import aggregate_violations
 from validation.formal import FormalIssue, FormalResult, validate_with_crosshair
 from validation.policy import validate_findings
-from validation.types import Violation
+from validation.types import ValidationResult, Violation
 from scripts.run_coding_capability import _behavior_spec, _build_prompt, _worker_contribution
 from scripts.review_run import render_review
 from scripts.run_formal_experiment import GOOD_SOURCE
@@ -594,6 +594,99 @@ def analyze(value):
         self.assertNotIn("Kind:", prompt)
         self.assertNotIn("Anchor:", prompt)
 
+    def test_retry_violation_merge_is_stable_and_deduplicated(self) -> None:
+        static_violation = Violation(
+            kind="cyclomatic_complexity",
+            engine="engine-3-branching",
+            severity="High",
+            summary="Cyclomatic complexity too high",
+            rationale="Too many decision paths.",
+            current_value="10",
+            allowed_value="<= 7",
+            repair_hint="split_function",
+        )
+        behavior_issue = {
+            "case": "ties by name",
+            "actual": "{'x': ['cara']}",
+            "expected": "{'x': ['anna', 'beth']}",
+            "details": "Return value did not match the behavior spec.",
+        }
+        controller = GenerationController(max_retries=1)
+
+        merged = controller._retry_violations(
+            ValidationResult(
+                is_compliant=False,
+                violations=[static_violation, static_violation],
+            ),
+            {"is_compliant": False, "issues": [behavior_issue, behavior_issue]},
+            {"is_compliant": True, "issues": []},
+        )
+
+        self.assertEqual(
+            [violation.kind for violation in merged],
+            ["cyclomatic_complexity", "behavior_mismatch"],
+        )
+
+    def test_small_worker_retry_includes_static_and_behavior_failures(self) -> None:
+        broken_source = """
+def group_top_scores(records):
+    team_scores = {}
+    for record in records:
+        if 'team' not in record or 'player' not in record or 'score' not in record:
+            continue
+        team = record['team']
+        player = record['player']
+        score = record['score']
+        if team not in team_scores:
+            team_scores[team] = []
+        if len(team_scores[team]) < 2 or (len(team_scores[team]) == 2 and score > team_scores[team][1]['score']):
+            team_scores[team].append({'player': player, 'score': score})
+    top_scores = {}
+    for team, scores in team_scores.items():
+        scores.sort(key=lambda item: (-item['score'], item['player']))
+        top_scores[team] = [item['player'] for item in scores[:2]]
+    return top_scores
+"""
+        captured_prompts: list[str] = []
+
+        def capture_retry(_draft: str, retry_prompt: str) -> str:
+            captured_prompts.append(retry_prompt)
+            return _draft
+
+        spec = FunctionBehaviorSpec(
+            function_name="group_top_scores",
+            cases=[
+                BehaviorCase(
+                    name="ties by name",
+                    args=([
+                        {"team": "x", "player": "cara", "score": 2},
+                        {"team": "x", "player": "anna", "score": 2},
+                        {"team": "x", "player": "beth", "score": 2},
+                    ],),
+                    expected={"x": ["anna", "beth"]},
+                )
+            ],
+        )
+        controller = GenerationController(
+            max_retries=1,
+            draft_supplier=lambda _prompt: broken_source,
+            repair_supplier=capture_retry,
+            behavior_spec=spec,
+        )
+
+        controller.run(target="grouped ranking", initial_prompt="preserve score and name ordering")
+
+        self.assertEqual(len(captured_prompts), 1)
+        self.assertIn("cyclomatic complexity", captured_prompts[0].lower())
+        self.assertIn("ties by name returned", captured_prompts[0])
+        self.assertIn("{'x': ['anna', 'beth']}", captured_prompts[0])
+
+    def test_capability_evaluations_save_artifacts_by_default(self) -> None:
+        makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+        self.assertIn("SAVE_ARTIFACTS ?= 1", makefile)
+        self.assertIn("test-coding-capability:\n\t$(PYTHON)", makefile)
+        self.assertIn("--record-runs $(ARTIFACT_ARGS)", makefile)
+
     def test_worker_limit_decomposition_prompt_includes_skeleton(self) -> None:
         prompt = _apply_decomposition_prompt(
             "Write code.",
@@ -811,7 +904,7 @@ def parse_key_value_lines(text):
         self.assertTrue(result.payload["attempts"][1]["changed"])
         self.assertTrue(result.payload["attempts"][1]["diff"])
 
-    def test_generation_controller_scopes_small_worker_to_one_finding(self) -> None:
+    def test_generation_controller_gives_small_worker_all_distinct_findings(self) -> None:
         source = """
 def filter_items(items, selected: list):
     result = []
@@ -838,11 +931,12 @@ def filter_items(items, selected: list):
         controller.run(target="scope small worker", initial_prompt="generate")
         self.assertEqual(len(captured_prompts), 1)
         self.assertIn("CRITICAL BUG FIX REQUIRED", captured_prompts[0])
-        self.assertIn("FIX DIRECTIVE:", captured_prompts[0])
+        self.assertIn("FAILED CHECKS:", captured_prompts[0])
+        self.assertIn("FIX DIRECTIVES:", captured_prompts[0])
         self.assertIn("precomputing a set or dictionary", captured_prompts[0])
+        self.assertIn("cyclomatic complexity", captured_prompts[0].lower())
         self.assertNotIn("COORDINATED REPAIR PLAN", captured_prompts[0])
         self.assertNotIn("Kind:", captured_prompts[0])
-        self.assertNotIn("cyclomatic_complexity", captured_prompts[0])
 
     def test_generation_controller_gives_architect_full_finding_set(self) -> None:
         source = """

@@ -140,7 +140,12 @@ def build_small_worker_retry_prompt(
 ) -> str:
     violation = _primary_violation(violations)
     code = _scoped_code(original_code, violation)
-    unit_test = _unit_test_hint(violation)
+    directives = list(
+        dict.fromkeys(
+            _low_noise_directive_for_source(item, original_code)
+            for item in violations
+        )
+    ) or ["Fix the current draft while preserving its required behavior."]
     sections = [
         "CRITICAL BUG FIX REQUIRED",
         "",
@@ -148,16 +153,21 @@ def build_small_worker_retry_prompt(
         code,
         "",
     ]
-    if violation is not None:
-        failed_check = [
-            "FAILED CHECK:",
-            f"- Problem: {violation.summary}",
-            f"- Your result: {violation.current_value}",
-            f"- Required result: {violation.allowed_value}",
-        ]
-        if unit_test:
-            failed_check.append(f"- Unit test: {unit_test}")
-        sections.extend([*failed_check, ""])
+    if violations:
+        sections.append("FAILED CHECK:" if len(violations) == 1 else "FAILED CHECKS:")
+        for index, failed_violation in enumerate(violations, start=1):
+            prefix = "-" if len(violations) == 1 else f"{index}."
+            sections.extend(
+                [
+                    f"{prefix} Problem: {failed_violation.summary}",
+                    f"  Your result: {failed_violation.current_value}",
+                    f"  Required result: {failed_violation.allowed_value}",
+                ]
+            )
+            unit_test = _unit_test_hint(failed_violation)
+            if unit_test:
+                sections.append(f"  Unit test: {unit_test}")
+        sections.append("")
     if preserve_context.strip():
         sections.extend(
             [
@@ -168,8 +178,8 @@ def build_small_worker_retry_prompt(
         )
     sections.extend(
         [
-            "FIX DIRECTIVE:",
-            _low_noise_directive_for_source(violation, original_code),
+            "FIX DIRECTIVE:" if len(violations) <= 1 else "FIX DIRECTIVES:",
+            *directives,
             "",
             "FINAL RULES:",
             "- Return only complete Python code.",
