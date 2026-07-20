@@ -157,3 +157,20 @@ fixture.
   method-signature mismatch and was correctly rejected.
 - The pygame registry now recognizes the real `KEYUP` event constant without
   weakening rejection of unknown dynamic members.
+
+### Pong method-arity follow-up
+
+Artifact:
+`artifacts/runs/structured_spec_pong_game_spec-20260720T152429Z-0675ada6`
+
+After accepted-contract context was extended from field types to binding method
+signatures and positional arity, another full Pong run accepted all 20 contracts
+and survived the five-second integration smoke window. The earlier
+`Ball.next_position()` argument-count crash did not recur.
+
+The run still ended as `manual_review_required` because the integrated
+`handle_input` function had cyclomatic complexity 10 against the configured
+limit of 7. This cleanly separates the outcomes: the method-arity failure was
+closed in this live sample, runtime execution passed, and the remaining blocker
+is an ordinary static-complexity violation rather than cross-contract interface
+drift.

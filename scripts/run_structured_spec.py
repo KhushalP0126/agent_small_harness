@@ -402,10 +402,45 @@ def _expression_type(expression: ast.expr) -> str:
     return "unknown"
 
 
-def _accepted_type_context(accepted_sources: list[str]) -> list[str]:
-    """Extract field-type commitments made by already accepted class contracts."""
+def _method_contract(class_name: str, method: ast.FunctionDef | ast.AsyncFunctionDef) -> str:
+    positional_args = [*method.args.posonlyargs, *method.args.args]
+    decorators = {
+        decorator.id
+        for decorator in method.decorator_list
+        if isinstance(decorator, ast.Name)
+    }
+    if "staticmethod" not in decorators and positional_args and positional_args[0].arg in {"self", "cls"}:
+        positional_args = positional_args[1:]
 
-    fields: dict[str, str] = {}
+    positional_names = [argument.arg for argument in positional_args]
+    rendered_parameters = list(positional_names)
+    if method.args.vararg is not None:
+        rendered_parameters.append(f"*{method.args.vararg.arg}")
+    elif method.args.kwonlyargs:
+        rendered_parameters.append("*")
+    rendered_parameters.extend(argument.arg for argument in method.args.kwonlyargs)
+    if method.args.kwarg is not None:
+        rendered_parameters.append(f"**{method.args.kwarg.arg}")
+
+    default_count = min(len(method.args.defaults), len(positional_args))
+    required_count = len(positional_args) - default_count
+    if method.args.vararg is not None:
+        arity = f"at least {required_count} positional"
+    elif required_count == len(positional_args):
+        arity = f"exactly {required_count} positional"
+    else:
+        arity = f"{required_count} to {len(positional_args)} positional"
+    return_type = ast.unparse(method.returns) if method.returns is not None else "unknown"
+    return (
+        f"{class_name}.{method.name}({', '.join(rendered_parameters)}) -> {return_type}; "
+        f"call arity: {arity} (excluding self/cls)"
+    )
+
+
+def _accepted_type_context(accepted_sources: list[str]) -> list[str]:
+    """Extract field and callable commitments from accepted class contracts."""
+
+    commitments: dict[str, str] = {}
     for source in accepted_sources:
         try:
             tree = ast.parse(source)
@@ -415,13 +450,15 @@ def _accepted_type_context(accepted_sources: list[str]) -> list[str]:
             for node in ast.walk(class_node):
                 if isinstance(node, ast.AnnAssign):
                     if isinstance(node.target, ast.Name):
-                        fields[f"{class_node.name}.{node.target.id}"] = ast.unparse(node.annotation)
+                        name = f"{class_node.name}.{node.target.id}"
+                        commitments[name] = f"{name}: {ast.unparse(node.annotation)}"
                     elif (
                         isinstance(node.target, ast.Attribute)
                         and isinstance(node.target.value, ast.Name)
                         and node.target.value.id == "self"
                     ):
-                        fields[f"{class_node.name}.{node.target.attr}"] = ast.unparse(node.annotation)
+                        name = f"{class_node.name}.{node.target.attr}"
+                        commitments[name] = f"{name}: {ast.unparse(node.annotation)}"
                 elif isinstance(node, ast.Assign):
                     inferred = _expression_type(node.value)
                     for target in node.targets:
@@ -430,8 +467,16 @@ def _accepted_type_context(accepted_sources: list[str]) -> list[str]:
                             and isinstance(target.value, ast.Name)
                             and target.value.id == "self"
                         ):
-                            fields.setdefault(f"{class_node.name}.{target.attr}", inferred)
-    return [f"{name}: {type_name}" for name, type_name in sorted(fields.items())]
+                            name = f"{class_node.name}.{target.attr}"
+                            commitments.setdefault(name, f"{name}: {inferred}")
+            for method in (
+                node
+                for node in class_node.body
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
+            ):
+                name = f"{class_node.name}.{method.name}"
+                commitments[name] = _method_contract(class_node.name, method)
+    return [commitments[name] for name in sorted(commitments)]
 
 
 def _single_contract_prompt(
@@ -468,6 +513,7 @@ def _single_contract_prompt(
                 "ACCEPTED TYPE CONTRACTS:",
                 *[f"- {item}" for item in accepted_type_context],
                 "- Preserve these representations. Values marked immutable must be replaced, not item-mutated.",
+                "- Accepted method signatures and call arities are binding; do not add or omit call arguments.",
             ]
         )
     sections.extend(
@@ -527,6 +573,7 @@ def _contract_repair_prompt(
                 "ACCEPTED TYPE CONTRACTS:",
                 *[f"- {item}" for item in accepted_type_context],
                 "- Preserve these representations. Values marked immutable must be replaced, not item-mutated.",
+                "- Accepted method signatures and call arities are binding; do not add or omit call arguments.",
             ]
         )
     sections.extend(

@@ -161,6 +161,9 @@ class StructuredSpecRunnerTests(unittest.TestCase):
 class Ball:
     def __init__(self):
         self.velocity = (3, -2)
+
+    def next_position(self, x: int, y: int) -> tuple[int, int]:
+        return (x + self.velocity[0], y + self.velocity[1])
 """
         type_context = _accepted_type_context([accepted])
         plan = PlanModeAgent().plan("")
@@ -176,7 +179,35 @@ class Ball:
 
         self.assertIn("ACCEPTED TYPE CONTRACTS:", prompt)
         self.assertIn("Ball.velocity: tuple[int, int] (immutable)", prompt)
+        self.assertIn(
+            "Ball.next_position(x, y) -> tuple[int, int]; call arity: exactly 2 positional (excluding self/cls)",
+            prompt,
+        )
         self.assertIn("must be replaced, not item-mutated", prompt)
+        self.assertIn("method signatures and call arities are binding", prompt)
+
+    def test_accepted_method_context_tracks_optional_and_variadic_arity(self) -> None:
+        accepted = """
+class Adapter:
+    @classmethod
+    def build(cls, source, mode="safe") -> "Adapter":
+        return cls()
+
+    @staticmethod
+    def combine(first, *rest):
+        return (first, *rest)
+"""
+
+        context = _accepted_type_context([accepted])
+
+        self.assertIn(
+            "Adapter.build(source, mode) -> 'Adapter'; call arity: 1 to 2 positional (excluding self/cls)",
+            context,
+        )
+        self.assertIn(
+            "Adapter.combine(first, *rest) -> unknown; call arity: at least 1 positional (excluding self/cls)",
+            context,
+        )
 
     def test_integration_smoke_gate_rejects_immediate_runtime_crash(self) -> None:
         plan = PlanModeAgent().plan(
