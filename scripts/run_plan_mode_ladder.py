@@ -16,6 +16,15 @@ from agents.plan_mode import PlanModeAgent
 DEFAULT_TASKS = Path("tests/plan_mode/tasks.json")
 
 
+def _keep_first_break(
+    current: dict[str, Any] | None,
+    candidate: dict[str, Any],
+) -> dict[str, Any]:
+    """Keep the earliest failed ladder row when evaluation continues."""
+
+    return current if current is not None else candidate
+
+
 def _load_tasks(path: Path) -> list[dict[str, Any]]:
     return sorted(json.loads(path.read_text(encoding="utf-8")), key=lambda task: task.get("difficulty", 0))
 
@@ -165,7 +174,7 @@ def run_plan_ladder(tasks_path: Path, continue_after_failure: bool = False) -> i
         print(_table(rows), flush=True)
         print("", flush=True)
         if not passed:
-            first_break = row
+            first_break = _keep_first_break(first_break, row)
             if not continue_after_failure:
                 break
 

@@ -44,8 +44,10 @@ from validation.types import ValidationResult, Violation
 from scripts.run_coding_capability import _behavior_spec, _build_prompt, _worker_contribution
 from scripts.review_run import render_review
 from scripts.run_formal_experiment import GOOD_SOURCE
+from scripts.run_plan_mode_ladder import _keep_first_break as keep_first_plan_break
 from scripts.run_plan_mode_ladder import run_plan_ladder
 from scripts.run_worker_limit import _apply_decomposition_prompt
+from scripts.run_worker_limit import _keep_first_break as keep_first_worker_break
 
 
 class BenchmarkerTests(unittest.TestCase):
@@ -700,6 +702,15 @@ def group_top_scores(records):
         self.assertIn("signed-integer-parser", prompt)
         self.assertIn("Replace every pass statement", prompt)
         self.assertIn("def _is_signed_integer", prompt)
+
+    def test_continuing_ladders_keep_the_earliest_break(self) -> None:
+        first = {"difficulty": 2, "task": "first"}
+        later = {"difficulty": 5, "task": "later"}
+
+        self.assertIs(keep_first_worker_break(None, first), first)
+        self.assertIs(keep_first_worker_break(first, later), first)
+        self.assertIs(keep_first_plan_break(None, first), first)
+        self.assertIs(keep_first_plan_break(first, later), first)
 
     def test_finding_aggregator_groups_engine_failures_by_function(self) -> None:
         source = """

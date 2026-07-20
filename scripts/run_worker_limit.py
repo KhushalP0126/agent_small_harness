@@ -32,6 +32,15 @@ DEFAULT_DECOMPOSITIONS = Path("tests/worker_limit/decompositions.json")
 DEFAULT_ARTIFACT_ROOT = Path("artifacts/runs")
 
 
+def _keep_first_break(
+    current: dict[str, Any] | None,
+    candidate: dict[str, Any],
+) -> dict[str, Any]:
+    """Keep the earliest failed ladder row when evaluation continues."""
+
+    return current if current is not None else candidate
+
+
 def _load_tasks(path: Path) -> list[dict[str, Any]]:
     return sorted(json.loads(path.read_text(encoding="utf-8")), key=lambda task: task.get("difficulty", 0))
 
@@ -223,7 +232,7 @@ def run_ladder(
         print("", flush=True)
 
         if session.get("final_status") != "completed":
-            first_break = row
+            first_break = _keep_first_break(first_break, row)
             if not continue_after_failure:
                 break
 

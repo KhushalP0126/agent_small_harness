@@ -153,3 +153,41 @@ failure (`{}` versus `{'a': 0}`), while excluding state-machine mode,
 `active_section`, section-header, and nested-dictionary instructions. The trace
 is stored at
 `artifacts/runs/summarize_transactions-20260720T003952Z-9f113d9f`.
+
+## Post-fix broader stress evaluation
+
+The maintained worker-limit suite and all four Python ladders were rerun with
+`qwen2.5-coder:1.5b`, artifact capture, and continuation after failure. This
+evaluated all 19 cases rather than stopping at each suite's first failure.
+
+| Suite | Completed | Total | Earliest failure |
+| --- | ---: | ---: | --- |
+| General worker limit | 4 | 7 | difficulty 4, `compact_ranges` |
+| Parsing | 1 | 3 | difficulty 1, `parse_int_list` |
+| Data transform | 2 | 3 | difficulty 3, `summarize_transactions` |
+| Algorithmic | 0 | 3 | difficulty 1, `compact_ranges` |
+| Stateful | 2 | 3 | difficulty 2, `parse_sectioned_config_stateful` |
+| **Total** | **9** | **19** | — |
+
+The previous earliest breaks were difficulty 4, 2, 3, 2, and 2 respectively.
+Parsing and algorithmic results moved earlier in this sample, while the other
+three were unchanged. Individual tasks also moved in both directions—for
+example, parsing difficulty 2 passed after failing previously. This confirms
+that a single 1.5B-model sample is too variable to treat a ladder breakpoint as
+a fixed capability boundary.
+
+The seven general worker-limit tasks were then rerun with architect escalation:
+
+| Completed | Qwen initial solves | Architect recoveries | Remaining failures |
+| ---: | ---: | ---: | ---: |
+| 7/7 | 3 | 4 | 0 |
+
+Artifact inspection confirmed clean routing across the broader suite. Generic
+tasks (`parse_int_list`, `compact_ranges`, and `resolve_dependency_order`) used
+generic architect prompts. Only the actual sectioned-config parser used
+`STATE MACHINE ARCHITECT MODE`.
+
+Continuation mode also exposed a reporting defect: both ladder runners replaced
+the stored first failure on every later failure and therefore printed the last
+break. They now retain the earliest failed row, with regression coverage for
+both worker-limit and plan-mode ladders.
