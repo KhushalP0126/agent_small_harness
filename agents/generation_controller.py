@@ -6,6 +6,7 @@ from typing import Callable
 
 from agents.base import AgentResult, BaseAgent
 from agents.engine_registry import EngineRegistry
+from agents.execution_agent import ExecutionAgent
 from agents.parse_contract import ParseContractAgent, ParseFailure
 from agents.repair_strategy import MANUAL_REVIEW, RepairStrategyAgent
 from engines.base import EngineFinding
@@ -13,7 +14,14 @@ from prompt.architect_builder import build_state_machine_architect_prompt
 from prompt.backend_failure_builder import build_backend_failure_architect_prompt
 from prompt.budget import budget_prompt
 from prompt.retry_builder import build_retry_prompt, build_small_worker_retry_prompt
-from validation.behavior import FunctionBehaviorSpec, serialize_behavior_result, validate_function_behavior
+from validation.behavior import (
+    FunctionBehaviorSpec,
+    behavior_result_from_trace,
+    serialize_behavior_result,
+    serialize_execution_trace,
+    validate_function_behavior,
+)
+from validation.debugger import build_debugger_hints
 from validation.branch_loop_detector import build_branch_state_signature, detect_branching_loop
 from validation.deal_contracts import serialize_deal_contract_result, validate_deal_examples
 from validation.finding_aggregator import aggregate_violations, serialize_repair_directives
@@ -55,6 +63,7 @@ class GenerationAttempt:
     branch_loop: dict = field(default_factory=dict)
     backend_failure: dict = field(default_factory=dict)
     diagnostic_stagnant: bool = False
+    execution_trace: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -114,6 +123,9 @@ class GenerationController(BaseAgent):
         parse_contract: ParseContractAgent | None = None,
         repair_strategy: RepairStrategyAgent | None = None,
         language: str | None = None,
+        execution_agent: ExecutionAgent | None = None,
+        enable_execution_trace: bool = False,
+        enable_debugger_hints: bool = False,
     ) -> None:
         self.max_retries = max_retries
         self.draft_supplier = draft_supplier or (lambda prompt: prompt)
@@ -130,6 +142,11 @@ class GenerationController(BaseAgent):
         self.parse_contract = parse_contract or ParseContractAgent()
         self.repair_strategy = repair_strategy
         self.language = language
+        self.enable_execution_trace = enable_execution_trace
+        self.enable_debugger_hints = enable_debugger_hints
+        self.execution_agent = execution_agent or (
+            ExecutionAgent() if (enable_execution_trace or enable_debugger_hints) else None
+        )
 
     def _scan(self, source: str) -> list[EngineFinding]:
         parse_result = self.parse_contract.parse(source, language=self.language)
@@ -803,18 +820,33 @@ class GenerationController(BaseAgent):
         for attempt_index in range(len(failed_attempts), self.max_retries + 1):
             findings = self._scan(draft)
             validation_result: ValidationResult = validate_findings(findings, policy=self.policy)
+            execution_trace_payload: dict = {}
+            execution_trace_obj = None
             if self.behavior_spec is None:
                 behavior_validation = {"is_compliant": True, "issues": []}
             else:
-                behavior_validation = serialize_behavior_result(
-                    validate_function_behavior(
-                        draft,
-                        self.behavior_spec,
-                        timeout_seconds=self.behavior_timeout_seconds
-                        if self.behavior_timeout_seconds is not None
-                        else 1.0,
-                    )
+                behavior_timeout = (
+                    self.behavior_timeout_seconds if self.behavior_timeout_seconds is not None else 1.0
                 )
+                if self.execution_agent is not None and (
+                    self.enable_execution_trace or self.enable_debugger_hints
+                ):
+                    # After the contract parses, actually run the draft. The trace
+                    # feeds the behavior gate below; it does not gate on its own.
+                    trace = self.execution_agent.execute(
+                        draft, self.behavior_spec, timeout_seconds=behavior_timeout
+                    )
+                    execution_trace_payload = serialize_execution_trace(trace)
+                    execution_trace_obj = trace
+                    behavior_validation = serialize_behavior_result(behavior_result_from_trace(trace))
+                else:
+                    behavior_validation = serialize_behavior_result(
+                        validate_function_behavior(
+                            draft,
+                            self.behavior_spec,
+                            timeout_seconds=behavior_timeout,
+                        )
+                    )
                 if behavior_validation["is_compliant"]:
                     validation_result = validate_findings(
                         findings,
@@ -958,6 +990,15 @@ class GenerationController(BaseAgent):
                             + "\n".join(f"- {instruction}" for instruction in decision.repair_instructions)
                         )
                         retry_prompt = budget_prompt(retry_prompt).text
+                if self.enable_debugger_hints and execution_trace_obj is not None:
+                    debugger_hints = build_debugger_hints(execution_trace_obj)
+                    if debugger_hints:
+                        retry_prompt = (
+                            f"{retry_prompt}\n\n"
+                            "DEBUGGER OBSERVATIONS (from an actual run):\n"
+                            + "\n".join(f"- {hint}" for hint in debugger_hints)
+                        )
+                        retry_prompt = budget_prompt(retry_prompt).text
                 self._debug_print(f"Sending repair prompt to {repair_worker}.")
             attempt = GenerationAttempt(
                 attempt=attempt_index,
@@ -974,6 +1015,7 @@ class GenerationController(BaseAgent):
                 changed=changed,
                 diff=diff_text,
                 diagnostic_stagnant=diagnostic_stagnant,
+                execution_trace=execution_trace_payload,
             )
             attempt.branch_state_signature = build_branch_state_signature(target, attempt).to_dict()
             session.attempts.append(attempt)

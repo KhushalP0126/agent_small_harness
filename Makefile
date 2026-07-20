@@ -9,6 +9,8 @@ RUN ?=
 ARCHITECT_AFTER ?= 1
 ARCHITECT_MAX_RETRIES ?= 2
 SPEC_PATH ?=
+REPO_ROOT ?= .
+REPO_MAP_FORMAT ?= context
 DOC_AGENT ?= deepseek
 DOC_MODEL ?=
 DOC_OUTPUT ?= $(if $(filter none,$(DOC_AGENT)),,data/library_proposals/$(LIB).docs.md)
@@ -16,7 +18,7 @@ IMAGE ?= agent-small-harness:local
 ARTIFACT_ARGS = $(if $(filter 1 true yes,$(SAVE_ARTIFACTS)),--save-artifacts --artifact-root "$(ARTIFACT_ROOT)",)
 DOC_ARGS = --doc-agent "$(DOC_AGENT)" $(if $(DOC_MODEL),--doc-model "$(DOC_MODEL)",) $(if $(DOC_OUTPUT),--doc-output "$(DOC_OUTPUT)",)
 
-.PHONY: help install install-formal install-kernel env-path init-env api-dev docker-build test test-claude-fixes test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-fixture test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-worker-limit-architect test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-python-ladder-stateful test-python-ladder-stateful-architect test-plan-mode-ladder test-raw-vs-harness test-formal-experiment structured-spec structured-spec-plan review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library ollama-smoke inference-smoke live-repair day1 clean-history
+.PHONY: help install install-formal install-kernel env-path init-env api-dev docker-build test test-claude-fixes test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-fixture test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-worker-limit-architect test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-python-ladder-stateful test-python-ladder-stateful-architect test-plan-mode-ladder test-raw-vs-harness test-formal-experiment structured-spec structured-spec-plan repo-map review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library ollama-smoke inference-smoke live-repair day1 clean-history
 
 help:
 	@printf "Agent Small Harness commands\n"
@@ -36,6 +38,7 @@ help:
 	@printf "  make test-lint-engine                Run focused Pylint-engine tests\n"
 	@printf "  make test-treesitter                 Run optional C/C++ tree-sitter pipeline tests\n"
 	@printf "  make evaluate-engines                Score static engines against data/engine_cases.json\n"
+	@printf "  make repo-map                        Map a repo's functions/vars/loops/imports (context|json|mermaid)\n"
 	@printf "  make benchmark                       Run the Day 1 benchmark pipeline\n"
 	@printf "  make test-coding-capability-fixture  Verify coding-capability plumbing without Ollama\n"
 	@printf "\nLive model runs:\n"
@@ -80,6 +83,8 @@ help:
 	@printf "  SAVE_ARTIFACTS=1                     Save attempts, prompts, diffs, and validations; default is $(SAVE_ARTIFACTS)\n"
 	@printf "  ARTIFACT_ROOT=artifacts/runs         Artifact directory; default is $(ARTIFACT_ROOT)\n"
 	@printf "  SPEC_PATH=path/to/spec.md            Structured-spec input path\n"
+	@printf "  REPO_ROOT=.                          Repo root for make repo-map; default is $(REPO_ROOT)\n"
+	@printf "  REPO_MAP_FORMAT=context|json|mermaid Output for make repo-map; default is $(REPO_MAP_FORMAT)\n"
 	@printf "  DOC_AGENT=deepseek|qwen|kernel|none  Backend for library documentation search; default is $(DOC_AGENT)\n"
 	@printf "  DOC_MODEL=name                       Optional doc-search model override\n"
 	@printf "  DOC_OUTPUT=path                      Markdown docs output path; default is data/library_proposals/<LIB>.docs.md for model search\n"
@@ -190,6 +195,9 @@ structured-spec-plan:
 review-run:
 	@test -n "$(RUN)" || (echo "Set RUN, e.g. make review-run RUN=worker_limit_6" && exit 1)
 	$(PYTHON) scripts/review_run.py "$(RUN)" --artifact-root "$(ARTIFACT_ROOT)"
+
+repo-map:
+	$(PYTHON) scripts/run_repo_map.py "$(REPO_ROOT)" --format "$(REPO_MAP_FORMAT)"
 
 test-treesitter:
 	$(PYTHON) -m unittest tests.test_treesitter_pipeline

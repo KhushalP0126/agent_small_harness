@@ -5,7 +5,14 @@ from benchmarker import ROOT
 from engines.branching_engine import BranchingEngine
 from engines.hazards_engine import HazardsEngine
 from engines.math_engine import MathEngine
-from validation.behavior import BehaviorCase, FunctionBehaviorSpec, mixed_hard_case_spec, validate_function_behavior
+from validation.behavior import (
+    BehaviorCase,
+    FunctionBehaviorSpec,
+    behavior_result_from_trace,
+    execute_behavior_trace,
+    mixed_hard_case_spec,
+    validate_function_behavior,
+)
 from validation.policy import validate_findings
 
 
@@ -136,6 +143,36 @@ class PongState:
         result = validate_function_behavior(source, spec)
         self.assertFalse(result.is_compliant)
         self.assertEqual(result.issues[0].actual, "AttributeError")
+
+
+class ExecutionTraceTests(unittest.TestCase):
+    def _spec(self) -> FunctionBehaviorSpec:
+        return FunctionBehaviorSpec(
+            function_name="add",
+            cases=[BehaviorCase(name="basic", args=(2, 3), expected=5)],
+        )
+
+    def test_trace_records_expected_match(self) -> None:
+        trace = execute_behavior_trace("def add(a, b):\n    return a + b\n", self._spec())
+        self.assertTrue(trace.loaded)
+        self.assertTrue(trace.cases[0].matched)
+        self.assertEqual(trace.cases[0].returned, "5")
+
+    def test_trace_records_exception_details(self) -> None:
+        trace = execute_behavior_trace("def add(a, b):\n    return a // 0\n", self._spec())
+        self.assertEqual(trace.cases[0].exception_type, "ZeroDivisionError")
+        self.assertTrue(trace.cases[0].traceback)
+
+    def test_result_derived_from_trace_matches_validator(self) -> None:
+        source = "def add(a, b):\n    return a - b\n"
+        spec = self._spec()
+        derived = behavior_result_from_trace(execute_behavior_trace(source, spec))
+        direct = validate_function_behavior(source, spec)
+        self.assertEqual(derived.is_compliant, direct.is_compliant)
+        self.assertEqual(
+            [asdict(issue) for issue in derived.issues],
+            [asdict(issue) for issue in direct.issues],
+        )
 
 
 if __name__ == "__main__":

@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import re
 from dataclasses import asdict, dataclass, field
+from pathlib import Path
 from typing import Any
 
 from agents.base import AgentResult, BaseAgent
 from agents.prompt_normalizer import PromptNormalizerAgent
+from agents.repo_map_agent import RepoGraph, RepoMapAgent
 from agents.task_classifier import TaskClassifierAgent, TaskClassification
 from agents.template_registry import TemplateRegistry
 from harness_kernel.task_ir import TaskIR, TemplateRoute, ValidationPlan
@@ -77,12 +79,19 @@ class PlanModeAgent(BaseAgent):
         normalizer: PromptNormalizerAgent | None = None,
         classifier: TaskClassifierAgent | None = None,
         template_registry: TemplateRegistry | None = None,
+        repo_map_agent: RepoMapAgent | None = None,
     ) -> None:
         self.normalizer = normalizer or PromptNormalizerAgent()
         self.classifier = classifier or TaskClassifierAgent()
         self.template_registry = template_registry or TemplateRegistry()
+        self.repo_map_agent = repo_map_agent or RepoMapAgent()
 
-    def plan(self, prompt: str) -> PlanSpec:
+    def plan(
+        self,
+        prompt: str,
+        repo_root: Path | str | None = None,
+        repo_graph: RepoGraph | None = None,
+    ) -> PlanSpec:
         normalized = self.normalizer.normalize(prompt)
         classification = self.classifier.classify(normalized.normalized_prompt)
         template_match = self.template_registry.select(normalized.normalized_prompt, classification)
@@ -123,6 +132,9 @@ class PlanModeAgent(BaseAgent):
                 state_machine_constraints.append(item)
         dependency_graph_context = self._dependency_graph_context(normalized.normalized_prompt)
         for item in self._structured_constraints(structured_sections, ("DEPENDENCY GRAPH",)):
+            if item not in dependency_graph_context:
+                dependency_graph_context.append(item)
+        for item in self._repo_map_context(repo_root, repo_graph):
             if item not in dependency_graph_context:
                 dependency_graph_context.append(item)
         questions = self._questions(
@@ -212,6 +224,23 @@ class PlanModeAgent(BaseAgent):
                 contracts=spec.deal_contracts,
             ),
         )
+
+    def _repo_map_context(
+        self,
+        repo_root: Path | str | None,
+        repo_graph: RepoGraph | None,
+    ) -> list[str]:
+        """Return compact repo-map lines when a repo is provided, else nothing.
+
+        When neither a ``repo_root`` nor a prebuilt ``repo_graph`` is supplied the
+        result is empty, so prompt-only planning is byte-for-byte unchanged.
+        """
+        graph = repo_graph
+        if graph is None and repo_root is not None:
+            graph = self.repo_map_agent.map_repo(repo_root)
+        if graph is None:
+            return []
+        return self.repo_map_agent.to_plan_context(graph)
 
     def _target_function(self, prompt: str) -> str:
         for pattern in (DEF_NAME_RE, FUNCTION_NAME_RE, CALL_NAME_RE):

@@ -42,9 +42,11 @@ Function-contract generation and final integration use complementary gates:
 - Absolute `from module import symbol` statements are checked against real
   standard-library modules and explicitly allowed installed packages. Missing
   symbols or submodules fail the contract before generated code is executed.
-- Each accepted class contract contributes a compact field-type registry to
-  downstream worker and architect prompts. Inferred tuple fields are marked
-  immutable so later contracts replace tuples instead of item-mutating them.
+- Each accepted class contract contributes a compact interface registry to
+  downstream worker and architect prompts. It includes field types plus binding
+  method signatures and positional arity. Inferred tuple fields are marked
+  immutable so later contracts replace tuples instead of item-mutating them,
+  while later callers are told not to add or omit method arguments.
 - After static, behavioral, formal, and required-component checks, an assembled
   Python program with an entrypoint is started in a subprocess with dummy SDL
   video/audio drivers. Immediate nonzero exits become
@@ -56,9 +58,92 @@ Function-contract generation and final integration use complementary gates:
 
 These gates are task-agnostic. Snake and Pong remain external stress fixtures;
 their failures motivated the checks but do not create game-specific controller
-or validator logic. The implementation baseline is covered by 268 passing unit
+or validator logic. The implementation baseline is covered by 269 passing unit
 tests, including regression cases for hallucinated imports, immutable
-cross-contract state, skipped lint, and integrated runtime crashes.
+cross-contract state, method-call arity, skipped lint, and integrated runtime
+crashes.
+
+## Current Verification State
+
+The July 20 validation pass closed the original Snake failure and both known
+Pong interface failures without adding game-specific repair rules:
+
+- Snake completed all 16 contracts and remained alive through the five-second
+  headless smoke window. The original invented
+  `dataclasses.FrozenDataclass` import did not recur.
+- A Pong sample completed all 20 contracts and passed smoke execution after the
+  accepted-contract registry began carrying immutable tuple field information.
+- A separate Pong sample exposed a missing real `pygame.KEYUP` member in the
+  trusted library registry. The registry now includes that constant while
+  unknown pygame members remain blocking.
+- Another Pong sample exposed a cross-contract method-call mismatch:
+  `Ball.next_position()` was called with more positional arguments than its
+  accepted definition allowed. Accepted-contract context now carries binding
+  method signatures and positional arity as well as field types.
+- The post-arity-fix Pong rerun accepted all 20 contracts and remained alive
+  through the smoke window. Its final status was still
+  `manual_review_required` because `handle_input` had cyclomatic complexity 10
+  against the configured limit of 7. This is a normal static-policy rejection,
+  not an integration crash.
+
+These are stochastic single-model samples, so a successful run does not prove a
+stable per-task pass rate. The durable result is that the harness now detects or
+prevents the observed import, field-mutability, library-registry, method-arity,
+lint-availability, and integration-crash failure classes. Detailed commands,
+artifact IDs, and outcomes are recorded in
+`docs/snake-pong-execution-report-2026-07-19.md`.
+
+## Context And Output Boundaries
+
+The current pipeline manages context within one generated program:
+
+- `prompt/budget.py` estimates tokens and applies a 24,000-character retry
+  prompt budget. When older context must be removed, the prompt explicitly says
+  that it was truncated and preserves the current draft, newest failures, and
+  final rules.
+- Both small-worker and architect retry prompts pass through that budget gate.
+- The architect client detects likely truncated responses and requests a
+  continuation from the response tail instead of restarting blindly.
+- Artifact attempts record an estimated retry-prompt token count so prompt
+  growth can be reviewed after a run.
+- Structured-spec generation carries accepted field types and method signatures
+  forward from earlier contracts to later contracts in the same queue.
+
+This is bounded prompt and interface-context management, not persistent semantic
+memory. The harness does not retain a conversation across separate invocations,
+retrieve prior sessions on demand, or yet coordinate type contracts across
+multiple generated source files. Structured-spec integration currently emits
+one assembled Python source file per run; run metadata, prompts, findings, and
+attempts are saved as separate artifact files when artifact capture is enabled.
+
+## Repo Mapping And Post-Contract Execution
+
+Two task-agnostic capabilities sit alongside the existing loop:
+
+- `agents/repo_map_agent.py` is a permanent, `ast`-based repo mapper. It walks a
+  target repository and records, per file, functions (name, args, calls, and
+  returns), module and instance variables, loop sites with nesting depth (reusing
+  the same decomposition the engines use), and imports classified as stdlib,
+  local, or third-party. It emits a `RepoGraph` that both feeds Plan Mode as
+  compact graph context before generation and renders an on-demand mermaid
+  diagram from the real repository. It is re-run per task rather than cached, and
+  Plan Mode only consumes it when a repo root is supplied, so prompt-only runs are
+  unchanged. Use `make repo-map` (or `scripts/run_repo_map.py`).
+- After a draft parses, `agents/execution_agent.py` can actually run it against
+  the behavior examples in an isolated sandbox and capture an `ExecutionTrace`
+  (per-case return values, captured stdout/stderr, exceptions, and timing).
+  `validation/behavior.py` now derives its `BehaviorResult` from that trace, so
+  behavior pass/fail is backed by a real run rather than a bare comparison. This
+  is evidence for the existing behavior gate, not a new structural gate.
+- `validation/debugger.py` is the debugger-mode hook: it diffs the observed trace
+  against the spec sheet (behavior examples plus accepted type/arity contracts)
+  and appends bounded, targeted repair hints to retry prompts. The full debugger
+  protocol is a follow-up that builds on the same trace.
+
+Both are opt-in and default off. `engines.behavior.execution_trace` enables the
+post-contract run; `engines.behavior.debugger_hints` enables the hints. The
+controller accepts `execution_agent`, `enable_execution_trace`, and
+`enable_debugger_hints`, and records the trace on each attempt for artifacts.
 
 ## Environment And Model Backends
 

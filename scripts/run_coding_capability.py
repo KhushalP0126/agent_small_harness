@@ -405,6 +405,8 @@ def run_tasks(
             crosshair_enabled=config.engines.formal.crosshair_enabled,
             crosshair_timeout_seconds=config.engines.formal.crosshair_timeout_seconds,
             repair_strategy=RepairStrategyAgent(),
+            enable_execution_trace=config.engines.behavior.execution_trace,
+            enable_debugger_hints=config.engines.behavior.debugger_hints,
         )
         result = controller.run(target=task["prompt"], initial_prompt=prompt)
         session = result.payload

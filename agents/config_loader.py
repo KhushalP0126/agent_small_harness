@@ -68,6 +68,8 @@ class PolicyConfig:
 class BehaviorConfig:
     enabled: bool = True
     timeout_seconds: float = 1.0
+    execution_trace: bool = False
+    debugger_hints: bool = False
 
 
 @dataclass(frozen=True)
@@ -190,7 +192,11 @@ class HarnessConfig:
             },
             "engines.policy",
         )
-        _ensure_known_keys(behavior, {"enabled", "timeout_seconds"}, "engines.behavior")
+        _ensure_known_keys(
+            behavior,
+            {"enabled", "timeout_seconds", "execution_trace", "debugger_hints"},
+            "engines.behavior",
+        )
         _ensure_known_keys(
             formal,
             {"crosshair_enabled", "crosshair_timeout_seconds"},
@@ -256,6 +262,8 @@ class HarnessConfig:
                 behavior=BehaviorConfig(
                     enabled=_bool(behavior, "enabled", True),
                     timeout_seconds=_float(behavior, "timeout_seconds", 1.0, minimum=0.1),
+                    execution_trace=_bool(behavior, "execution_trace", False),
+                    debugger_hints=_bool(behavior, "debugger_hints", False),
                 ),
                 formal=FormalConfig(
                     crosshair_enabled=_bool(formal, "crosshair_enabled", False),
