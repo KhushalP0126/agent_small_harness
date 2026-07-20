@@ -18,12 +18,13 @@ The model writes code, but the harness decides whether the code is acceptable.
 
 ```text
 user task
-  -> Plan Mode / compact task packet
+  -> optional fresh repository map
+  -> Plan Mode / TaskIR / compact worker packet
   -> small local worker model
   -> parse contract
   -> static engines
-  -> behavior and optional formal validation
-  -> scoped repair prompt
+  -> real behavior execution trace and optional formal validation
+  -> optional debugger hints and scoped repair prompt
   -> optional architect escalation
   -> completed or manual_review_required
 ```
@@ -42,24 +43,20 @@ The harness is intentionally generalized. Example specs such as Snake and Pong
 are kept as external experiment inputs and smoke-test fixtures, not as the
 definition of the product or controller behavior.
 
-## Interactive Document
+### Implemented Features
 
-`agent-harness.txt` is an interactive architecture sketch for discussing the
-operator flow. It is useful for orientation, but it is not the executable
-source of truth.
-
-When the text diagram and the code disagree, trust the code in:
-
-- `agents/` for orchestration, routing, repair, and artifact handling
-- `harness_kernel/` for the shared execution boundary and structured task handoff; the name avoids collision with the Kernel browser SDK
-- `engines/` and `validation/` for deterministic acceptance gates
-- `scripts/` and `Makefile` for the runnable operator surface
-
-In particular, the `Warp Terminal Pause`, numbered agent labels, and staged
-preprocessing/post-processing blocks in `agent-harness.txt` should be read as a
-conceptual walkthrough rather than a literal runtime pipeline. The current
-runtime is the create/repair loop shown below and implemented in
-`GenerationController`, `PlanModeAgent`, and the registered validation stack.
+| Capability | Current behavior |
+| --- | --- |
+| Repository mapping | `RepoMapAgent` walks Python files with `ast`, records functions, calls, returns, classes, all discovered variables, mutations, loop depth, and classified imports, and emits typed graph nodes/edges for compact Plan Mode context, JSON artifacts, or live Mermaid output. |
+| Structured planning | `PlanModeAgent` builds `TaskIR`, behavior examples, state rules, graph context, adapter constraints, and compact worker packets. Repo context is opt-in through a supplied root or graph. |
+| Local model generation | Ollama workers use configurable Qwen model profiles; harder failures can escalate to a separately configured architect model. |
+| Deterministic validation | Parsing, seven Python engine checks, policy evaluation, required Pylint, behavior checks, optional Deal examples, and optional CrossHair decide acceptance. |
+| Runtime tracing | `ExecutionAgent` runs parsed drafts against behavior cases in the isolated subprocess and captures returns, stdout, stderr, exceptions, timing, and match status in an `ExecutionTrace`. |
+| Debugger hints | The opt-in debugger hook converts trace/spec differences into bounded repair instructions instead of returning only a generic behavior failure. |
+| Bounded repair | Retry prompts preserve current failures and drafts under a prompt budget, detect stagnation/branch loops, and validate every worker or architect revision again. |
+| Structured-spec applications | Architect-ordered contract queues carry accepted field types and method arities forward, validate imports per contract, assemble one Python program, and run a bounded headless smoke test. |
+| Review evidence | Optional run artifacts preserve prompts, attempts, diffs, findings, execution traces, validation results, token estimates, and timelines. |
+| API boundary | FastAPI exposes synchronous runs, asynchronous submission, persisted job status, and health checks. |
 
 ## Engine Layer
 
@@ -83,70 +80,18 @@ clean and still fail if it does not satisfy the expected input/output behavior.
 
 ```mermaid
 flowchart TD
-    A[User task] --> B[PlanModeAgent]
-    B --> C[Compact worker packet]
-    C --> D[Small local worker]
-    D --> E[Generated Python draft]
-
-    E --> F[ParseContractAgent]
-    F -->|invalid| Z[manual_review_required]
-    F -->|valid| G[EngineRegistry]
-
-    G --> H1[Math]
-    G --> H2[Hazards]
-    G --> H3[Branching]
-    G --> H4[Cost]
-    G --> H5[Bounds]
-    G --> H6[State-flow]
-    G --> H7[Optional lint]
-
-    H1 --> I[Policy validator]
-    H2 --> I
-    H3 --> I
-    H4 --> I
-    H5 --> I
-    H6 --> I
-    H7 --> I
-
-    E --> J[Behavior validator]
-    E --> K[Optional CrossHair]
-
-    I --> L{All gates pass?}
-    J --> L
-    K --> L
-
-    L -->|yes| M[completed]
-    L -->|no| BL{Branch loop detected?}
-    BL -->|yes| Z
-    BL -->|no| N[RepairStrategyAgent]
-    N --> O[Scoped retry prompt]
-    O --> R{Retry threshold reached or diagnostics stagnant?}
-    R -->|ordinary retry| P[Small worker repair]
-    P --> E
-    P -->|unchanged| Q
-    P -->|backend error| Z
-    R -->|escalate| Q[Architect API worker]
-    Q --> E
-    Q -->|static gate still fails| Z
-
-    L -->|max retries or high risk| Z
-
-    M --> R[Artifacts and historian]
-    Z --> R
-```
-
-### Codebase Map: Controller, Gates, and Repair
-
-The diagram below is the runtime shape implemented by `GenerationController`.
-The vertical path is one attempt. The right-hand path is the bounded repair
-loop; the architect is a fallback worker, not a separate acceptance path.
-
-```mermaid
-flowchart TD
-    task[User task] --> plan[PlanModeAgent]
-    plan --> packet[Compact worker packet]
-    packet --> worker[Small local worker]
-    worker --> draft[Generated Python draft]
+    task[User task and optional repo root] --> map{Repository supplied?}
+    map -->|yes| repo[RepoMapAgent<br/>fresh typed nodes and edges]
+    map -->|no| plan[PlanModeAgent]
+    repo --> plan
+    plan --> ir[TaskIR and compact worker packet]
+    ir --> specmode{Structured application spec?}
+    specmode -->|no| worker[Small local worker]
+    specmode -->|yes| queue[Contract queue planner]
+    queue --> contracts[Sequential contract generation<br/>accepted interface registry]
+    contracts --> integration[Assemble one Python program]
+    integration --> draft[Generated Python draft]
+    worker --> draft
 
     draft --> parse[ParseContractAgent]
     parse -->|invalid source| review[manual_review_required]
@@ -159,7 +104,7 @@ flowchart TD
         registry --> cost[Cost engine<br/>membership hotspots]
         registry --> bounds[Bounds engine<br/>index patterns]
         registry --> stateflow[State-flow engine<br/>returned state]
-        registry --> lint[Pylint<br/>errors, fatals, and skip status]
+        registry --> lint[Required Pylint<br/>errors, fatals, skip status]
     end
 
     math --> policy[Policy validator]
@@ -170,30 +115,45 @@ flowchart TD
     stateflow --> policy
     lint --> policy
 
-    draft --> behavior[Behavior validator]
+    draft --> execute[Behavior sandbox<br/>optional retained ExecutionTrace]
+    execute --> trace[ExecutionTrace<br/>returns, output, errors, timing]
+    trace --> behavior[Behavior result]
     draft --> formal[Optional CrossHair/formal validator]
+    integration --> smoke[Headless integration smoke test]
     policy --> gates{All enabled gates pass?}
     behavior --> gates
     formal --> gates
+    smoke --> gates
 
     gates -->|yes| completed[completed]
     completed --> artifacts[Artifacts and historian]
 
-    gates -->|no| branch{Branch loop detected?}
+    gates -->|no| debug{Debugger hints enabled?}
+    debug -->|yes| hints[Trace-to-spec repair hints]
+    debug -->|no| branch{Branch loop or retry limit?}
+    hints --> branch
     branch -->|yes| review
     branch -->|no| strategy[RepairStrategyAgent]
-    strategy --> retry[Scoped retry prompt]
-    retry --> mode{Retry threshold reached or diagnostics stagnant?}
-    mode -->|ordinary retry| repair[Small worker repair]
+    strategy --> retry[Budgeted scoped retry prompt]
+    retry --> retrymode{Retry threshold reached or diagnostics stagnant?}
+    retrymode -->|ordinary retry| repair[Small worker repair]
     repair -->|changed| draft
     repair -->|unchanged| architect[Architect API worker]
     repair -->|backend error| review
-    mode -->|escalate| architect
+    retrymode -->|escalate| architect
     architect -->|passes to next attempt| draft
     architect -->|static gate still fails| review
-    gates -->|max retries or high risk| review
     review --> artifacts
 ```
+
+The repository map is rebuilt when requested instead of cached. Its JSON graph
+contains module, function, variable, and loop nodes plus containment,
+declaration, call, import, and mutation edges. Execution
+tracing and debugger hints are independently configurable and default off.
+Behavior validation still executes real examples when tracing is not retained;
+the trace option controls whether the richer evidence is attached to attempts
+and made available to the debugger hook. Architect output always returns to the
+same parse and validation path as local-worker output.
 
 ### What Each Engine Traverses
 
@@ -273,8 +233,10 @@ Those outcomes are recorded in artifact metadata and the contract queue results.
 
 | Path | Purpose |
 | --- | --- |
-| `agents/generation_controller.py` | Main create/repair loop, stagnation guard, branch-loop detection, architect escalation, final status |
-| `agents/plan_mode.py` | Converts raw user intent into compact task specs, behavior examples, constraints, graph context, and `TaskIR` |
+| `agents/generation_controller.py` | Main create/repair loop, execution-trace attachment, debugger-hint injection, stagnation guard, branch-loop detection, architect escalation, and final status |
+| `agents/repo_map_agent.py` | Fresh AST repository map with functions, calls, returns, variables, loops, imports, compact context, and Mermaid rendering |
+| `agents/execution_agent.py` | Isolated behavior-case execution and structured runtime trace capture |
+| `agents/plan_mode.py` | Converts raw user intent and optional repository context into behavior examples, constraints, graph context, and `TaskIR` |
 | `agents/engine_registry.py` | Routes parsed source to the registered engine set |
 | `agents/job_store.py` | File-locked append-only JSONL job store used by asynchronous run/status endpoints |
 | `agents/parse_contract.py` | Language detection and parser gate |
@@ -284,16 +246,19 @@ Those outcomes are recorded in artifact metadata and the contract queue results.
 | `harness_kernel/function_contracts.py` | Function-level contract queue and Deal scaffold rendering |
 | `harness_kernel/execution_kernel.py` | Thin execution wrapper around the controller |
 | `engines/` | Static analysis engines |
-| `validation/` | Policy, behavior, Deal/CrossHair formal validation, branch-loop detection, and violation types |
+| `validation/behavior.py` | Isolated behavior execution, `ExecutionTrace`, and derived behavior results |
+| `validation/debugger.py` | Bounded trace-to-spec repair hints for debugger mode |
+| `validation/` | Policy, import validation, Deal/CrossHair formal validation, branch-loop detection, and violation types |
 | `prompt/` | Initial, retry, architect, and contract-architect prompt builders |
 | `backends/` | Ollama worker and API architect clients |
-| `api/` | Minimal synchronous FastAPI request boundary |
-| `scripts/` | Ladder runners, raw-vs-harness comparison, history aggregation, review tools |
+| `api/` | FastAPI boundary for synchronous runs, asynchronous jobs, status lookup, and health checks |
+| `scripts/run_repo_map.py` | Repository-map CLI for compact context, JSON, Mermaid, and optional artifacts |
+| `scripts/run_structured_spec.py` | Plan-only or full contract-queue generation, integration, validation, and smoke execution |
+| `scripts/` | Ladder runners, raw-vs-harness comparison, history aggregation, and review tools |
 | `tests/` | Unit, integration, edge-case, ladder, and pipeline tests |
 | `pyproject.toml` | Python package metadata and runtime dependencies |
 | `Dockerfile` | Container entrypoint for the synchronous API service |
 | `.github/workflows/ci.yml` | Push/PR workflow for tests and Docker image build |
-| `agent-harness.txt` | Conceptual interactive flow document for operator discussion; not the authoritative runtime spec |
 | `context.md` | Current project context and experiment notes |
 | `design.md` | Architectural constraints and safety principles |
 | `structure.md` | File-by-file repository map |
@@ -345,7 +310,7 @@ Show command help:
 make help
 ```
 
-Run the minimal synchronous API:
+Run the API:
 
 ```bash
 make api-dev
@@ -383,6 +348,32 @@ make docker-build
 
 The image runs `uvicorn api.app:app` on port `8000`. Pass secrets such as
 `DEEPSEEK_API_KEY` at runtime; `.env` is excluded from the image context.
+
+Map a repository before generation or render its dependency graph:
+
+```bash
+make repo-map REPO_ROOT=. REPO_MAP_FORMAT=context
+make repo-map REPO_ROOT=. REPO_MAP_FORMAT=json
+make repo-map REPO_ROOT=. REPO_MAP_FORMAT=mermaid
+```
+
+Run only structured-spec planning, or execute the full contract queue with the
+local Qwen worker and architect fallback:
+
+```bash
+make structured-spec-plan SPEC_PATH=examples/specs/snake_game_spec.md
+make structured-spec SPEC_PATH=examples/specs/snake_game_spec.md \
+  MODEL=qwen2.5-coder:1.5b SAVE_ARTIFACTS=1
+```
+
+Runtime trace retention and debugger hints are opt-in in `config.yaml`:
+
+```yaml
+engines:
+  behavior:
+    execution_trace: true
+    debugger_hints: true
+```
 
 Run deterministic validation:
 
@@ -452,21 +443,49 @@ make approve-library LIB=clang.cindex
 - How often does architect escalation rescue a failed small-worker run?
 - Which engines produce useful repair pressure, and which create false positives?
 
-## Current Direction
+## Project Checklist
 
-The immediate goal is to harden the Python execution kernel before expanding to
-larger multi-file application generation. The next major platform layer is a
-stronger Spec/IR builder that can describe target functions, behavior examples,
-state transitions, allowed libraries, validation gates, and file scope before
-the execution kernel begins generation.
+### Implemented
 
-The documentation direction follows the same rule: keep the public story about
-generalized code creation and repair, and treat app-like specs as fixtures that
-exercise the harness rather than define it.
+- [x] Generalized Python create/repair controller with bounded local-worker and
+  architect retry paths.
+- [x] Fresh AST repository mapping with compact Plan Mode context and on-demand
+  typed JSON/Mermaid graphs for calls, imports, variables, loops, and mutations.
+- [x] Shared structural IR plus math, hazards, branching, cost, bounds,
+  state-flow, and required Pylint gates.
+- [x] Real isolated behavior execution with structured per-case traces.
+- [x] Opt-in trace-to-spec debugger hints in repair prompts.
+- [x] Prompt budgeting, architect response continuation, stagnation detection,
+  and branch-loop detection.
+- [x] Structured-spec contract queues with import-symbol validation, accepted
+  field/method context, single-file integration, and headless smoke execution.
+- [x] Synchronous and asynchronous API endpoints with persisted job status.
+- [x] Artifact capture, history aggregation, capability ladders, and
+  raw-versus-harness comparisons.
+- [x] Review-before-trust library discovery and registry approval workflow.
 
-Library discovery follows the same trust boundary. A discovered package surface
-and model-found documentation are proposal data until a human reviews and
-approves them into `data/library_registry.json`.
+### Remaining Work
+
+- [ ] Expose `repo_root`, execution-trace retention, and debugger controls
+  through the public API and remaining standalone run commands; the capability,
+  worker-limit/Python-ladder, and raw-versus-harness drivers already honor the
+  strict config toggles.
+- [ ] Expand debugger mode from bounded case-level hints to step/state deltas,
+  cross-contract failure localization, and reproducible minimal failing cases.
+- [ ] Add multi-file generation with explicit file ownership, cross-file symbol
+  and type contracts, dependency ordering, and whole-project integration tests.
+- [ ] Add adversarial runtime isolation beyond the current timeout-bound Python
+  subprocess before accepting untrusted code in a shared or hosted deployment.
+- [ ] Run repeated multi-model benchmark samples and publish confidence
+  intervals; current Snake/Pong and ladder results are useful but stochastic.
+- [ ] Add authentication, authorization, rate limits, and production-grade job
+  storage before exposing the API outside a trusted local environment.
+- [ ] Version the debugger and repository-map artifact/report schemas and add
+  backward-compatibility tests for external consumers.
+
+The public direction remains generalized code creation and repair. App-like
+specs are stress fixtures, and discovered library documentation remains proposal
+data until a human approves it into `data/library_registry.json`.
 
 ## Safety Boundary
 
