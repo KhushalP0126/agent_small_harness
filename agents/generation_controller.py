@@ -835,6 +835,9 @@ class GenerationController(BaseAgent):
             next_repair_supplier: RepairSupplier | None = None
             force_manual_review = False
             manual_review_reason = "repair_strategy_manual_review"
+            if any(violation.kind == "lint_skipped" for violation in validation_result.violations):
+                force_manual_review = True
+                manual_review_reason = "lint_validation_skipped"
             changed = attempt_index == 0 or not self._is_stagnant(previous_draft, draft)
             diff_text = self._diff_text(previous_draft, draft) if attempt_index > 0 else ""
             diagnostic_deltas = self._diagnostic_deltas(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import importlib
 import sys
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
@@ -11,10 +12,11 @@ class FileImportGraph:
     files: list[str]
     imports_by_file: dict[str, list[str]] = field(default_factory=dict)
     missing_imports: dict[str, list[str]] = field(default_factory=dict)
+    missing_symbols: dict[str, list[str]] = field(default_factory=dict)
 
     @property
     def is_compliant(self) -> bool:
-        return not any(self.missing_imports.values())
+        return not any(self.missing_imports.values()) and not any(self.missing_symbols.values())
 
 
 STDLIB_ROOTS = set(getattr(sys, "stdlib_module_names", set())) | {"__future__"}
@@ -25,17 +27,58 @@ def analyze_import_graph(files: dict[str, str], external_roots: set[str] | None 
     module_to_file = {_module_name(path): path for path in files}
     imports_by_file: dict[str, list[str]] = {}
     missing_imports: dict[str, list[str]] = {}
+    missing_symbols: dict[str, list[str]] = {}
     for path, source in files.items():
         imports = _local_imports(source, module_to_file, external_roots)
         imports_by_file[path] = sorted(imports)
         missing = sorted(module for module in imports if module not in module_to_file)
         if missing:
             missing_imports[path] = missing
+        unresolved = validate_imported_symbols(source, external_roots=external_roots)
+        if unresolved:
+            missing_symbols[path] = unresolved
     return FileImportGraph(
         files=sorted(files),
         imports_by_file=imports_by_file,
         missing_imports=missing_imports,
+        missing_symbols=missing_symbols,
     )
+
+
+def validate_imported_symbols(source: str, external_roots: set[str] | None = None) -> list[str]:
+    """Return absolute imported symbols that do not exist in real modules.
+
+    Local modules remain the import graph's responsibility. This check is for
+    stdlib and explicitly allowed installed packages, where importing the real
+    module lets the harness reject hallucinated ``from module import name``
+    statements before executing generated code.
+    """
+
+    external_roots = external_roots or set()
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return []
+    missing: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ImportFrom) or node.level or not node.module:
+            continue
+        root = node.module.split(".", 1)[0]
+        if root not in STDLIB_ROOTS and root not in external_roots:
+            continue
+        try:
+            module = importlib.import_module(node.module)
+        except Exception:
+            missing.append(node.module)
+            continue
+        for alias in node.names:
+            if alias.name == "*" or hasattr(module, alias.name):
+                continue
+            try:
+                importlib.import_module(f"{node.module}.{alias.name}")
+            except Exception:
+                missing.append(f"{node.module}.{alias.name}")
+    return sorted(set(missing))
 
 
 def _module_name(path: str) -> str:

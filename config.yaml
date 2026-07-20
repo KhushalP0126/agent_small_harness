@@ -18,6 +18,7 @@ engines:
     allow_bounds_warnings: true
     allow_state_flow_warnings: false
     allow_lint_errors: false
+    allow_lint_skips: false
   behavior:
     enabled: true
     timeout_seconds: 1.0

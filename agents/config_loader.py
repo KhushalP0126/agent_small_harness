@@ -41,6 +41,7 @@ class PolicyConfig:
     allow_bounds_warnings: bool = True
     allow_state_flow_warnings: bool = False
     allow_lint_errors: bool = False
+    allow_lint_skips: bool = False
 
     def to_validation_policy(self) -> dict[str, Any]:
         policy = dict(DEFAULT_POLICY)
@@ -57,6 +58,7 @@ class PolicyConfig:
                 "allow_bounds_warnings": self.allow_bounds_warnings,
                 "allow_state_flow_warnings": self.allow_state_flow_warnings,
                 "allow_lint_errors": self.allow_lint_errors,
+                "allow_lint_skips": self.allow_lint_skips,
             }
         )
         return policy
@@ -184,6 +186,7 @@ class HarnessConfig:
                 "allow_bounds_warnings",
                 "allow_state_flow_warnings",
                 "allow_lint_errors",
+                "allow_lint_skips",
             },
             "engines.policy",
         )
@@ -248,6 +251,7 @@ class HarnessConfig:
                     allow_bounds_warnings=_bool(policy, "allow_bounds_warnings", True),
                     allow_state_flow_warnings=_bool(policy, "allow_state_flow_warnings", False),
                     allow_lint_errors=_bool(policy, "allow_lint_errors", False),
+                    allow_lint_skips=_bool(policy, "allow_lint_skips", False),
                 ),
                 behavior=BehaviorConfig(
                     enabled=_bool(behavior, "enabled", True),

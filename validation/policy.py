@@ -17,6 +17,7 @@ DEFAULT_POLICY = {
     "allow_bounds_warnings": True,
     "allow_state_flow_warnings": False,
     "allow_lint_errors": False,
+    "allow_lint_skips": False,
     "demote_behavior_verified_structural_findings": False,
 }
 
@@ -218,7 +219,22 @@ def validate_findings(
                     behavior_verified=behavior_verified,
                 )
         elif finding.engine == "engine-5-lint":
-            if finding.summary in {"Pylint error", "Pylint fatal"} and not policy["allow_lint_errors"]:
+            if metrics.get("lint_skipped") and not policy["allow_lint_skips"]:
+                violations.append(
+                    Violation(
+                        kind="lint_skipped",
+                        engine=finding.engine,
+                        severity="High",
+                        summary=finding.summary,
+                        rationale=finding.details,
+                        current_value=str(metrics.get("lint_status", "skipped")),
+                        allowed_value="Pylint completed successfully",
+                        repair_hint="restore_lint_validation",
+                        location=finding.diagnostic.location,
+                        evidence=_evidence(finding),
+                    )
+                )
+            elif finding.summary in {"Pylint error", "Pylint fatal"} and not policy["allow_lint_errors"]:
                 violations.append(
                     Violation(
                         kind="lint_error",

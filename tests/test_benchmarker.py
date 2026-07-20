@@ -310,10 +310,14 @@ def common_items(items, selected):
         self.assertEqual(finding.summary, "No repeated linear membership hotspot detected")
         self.assertTrue(validate_findings([finding]).is_compliant)
 
-    def test_lint_engine_is_optional_when_pylint_missing(self) -> None:
+    def test_lint_engine_blocks_completion_when_pylint_is_missing(self) -> None:
         finding = LintEngine(executable="").scan("def analyze(value):\n    return value\n")[0]
         self.assertEqual(finding.summary, "Pylint unavailable")
-        self.assertTrue(validate_findings([finding]).is_compliant)
+        self.assertTrue(finding.metrics["lint_skipped"])
+        result = validate_findings([finding])
+        self.assertFalse(result.is_compliant)
+        self.assertEqual(result.violations[0].kind, "lint_skipped")
+        self.assertTrue(validate_findings([finding], policy={"allow_lint_skips": True}).is_compliant)
 
     def test_lint_engine_maps_pylint_error_to_policy_violation(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

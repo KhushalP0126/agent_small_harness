@@ -35,7 +35,7 @@ class LintEngine(BaseEngine):
                     severity="Low",
                     summary="Pylint unavailable",
                     details="Pylint is not installed; lint checks were skipped.",
-                    metrics={"available": False},
+                    metrics={"available": False, "lint_skipped": True, "lint_status": "unavailable"},
                 )
             ]
 
@@ -65,7 +65,12 @@ class LintEngine(BaseEngine):
                     severity="Low",
                     summary="Pylint timeout",
                     details="Pylint exceeded the lint timeout; lint checks were skipped for this draft.",
-                    metrics={"available": True, "timeout_seconds": self.timeout_seconds},
+                    metrics={
+                        "available": True,
+                        "lint_skipped": True,
+                        "lint_status": "timeout",
+                        "timeout_seconds": self.timeout_seconds,
+                    },
                 )
             ]
         finally:
@@ -83,6 +88,8 @@ class LintEngine(BaseEngine):
                         details="Pylint returned non-JSON output; lint checks were skipped for this draft.",
                         metrics={
                             "available": True,
+                            "lint_skipped": True,
+                            "lint_status": "output_parse_failure",
                             "returncode": completed.returncode,
                             "stderr": completed.stderr.strip(),
                         },
@@ -111,7 +118,12 @@ class LintEngine(BaseEngine):
                     severity="Low",
                     summary="No blocking lint issues detected",
                     details="Pylint reported no fatal or error category messages.",
-                    metrics={"available": True, "message_count": len(messages)},
+                    metrics={
+                        "available": True,
+                        "lint_skipped": False,
+                        "lint_status": "completed",
+                        "message_count": len(messages),
+                    },
                 )
             ]
 

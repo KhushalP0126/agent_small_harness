@@ -21,7 +21,8 @@ Current baseline:
   - `engine-4-cost`
   - `engine-6-bounds`
   - `engine-7-state-flow`
-  - `engine-5-lint` when Pylint is available.
+  - `engine-5-lint`; unavailable, timed-out, or unparseable Pylint runs emit a
+    blocking `lint_skipped` signal unless `allow_lint_skips` is explicitly set.
 - Repaired drafts and architect drafts must be rescanned by the same gates.
 - Behavior validation is the semantic ground truth when examples are available.
 - Optional CrossHair validation is available for contract/counterexample checks.
@@ -33,6 +34,31 @@ Current baseline:
   importable Python package, ask DeepSeek or local Qwen for documentation
   candidates, and write reviewable proposal/docs files before any API surface is
   approved into the trusted registry.
+
+## Structured-Spec Acceptance Gates
+
+Function-contract generation and final integration use complementary gates:
+
+- Absolute `from module import symbol` statements are checked against real
+  standard-library modules and explicitly allowed installed packages. Missing
+  symbols or submodules fail the contract before generated code is executed.
+- Each accepted class contract contributes a compact field-type registry to
+  downstream worker and architect prompts. Inferred tuple fields are marked
+  immutable so later contracts replace tuples instead of item-mutating them.
+- After static, behavioral, formal, and required-component checks, an assembled
+  Python program with an entrypoint is started in a subprocess with dummy SDL
+  video/audio drivers. Immediate nonzero exits become
+  `integration_smoke_crash`; interactive programs that remain alive through the
+  five-second startup window pass and are terminated by the bounded check.
+- Smoke-test status and issues are stored in structured-spec artifacts and
+  printed in the final run summary. A smoke crash downgrades an otherwise
+  completed session to `manual_review_required`.
+
+These gates are task-agnostic. Snake and Pong remain external stress fixtures;
+their failures motivated the checks but do not create game-specific controller
+or validator logic. The implementation baseline is covered by 268 passing unit
+tests, including regression cases for hallucinated imports, immutable
+cross-contract state, skipped lint, and integrated runtime crashes.
 
 ## Environment And Model Backends
 

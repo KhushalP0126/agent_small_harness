@@ -11,9 +11,17 @@ from backends.architect_client import (
     ContractArchitectSupplier,
     ContractPlannerSupplier,
 )
-from scripts.run_structured_spec import _apply_contract_plan, _contract_queue_from_architect, _fallback_contract_queue
-from scripts.run_structured_spec import _validate_structured_spec_output
-from scripts.run_structured_spec import _run_contract_queue_sequentially, _single_contract_prompt
+from scripts.run_structured_spec import (
+    _accepted_type_context,
+    _apply_contract_plan,
+    _contract_queue_from_architect,
+    _fallback_contract_queue,
+    _run_contract_queue_sequentially,
+    _run_integration_smoke_test,
+    _single_contract_prompt,
+    _validate_contract_source,
+    _validate_structured_spec_output,
+)
 from harness_kernel.function_contracts import ContractQueue, ContractQueuePlan, DealExample, FunctionContract
 
 
@@ -110,6 +118,121 @@ class StructuredSpecRunnerTests(unittest.TestCase):
         issues = _validate_structured_spec_output(source, plan)
 
         self.assertEqual(issues[0]["kind"], "missing_local_import")
+
+    def test_structured_spec_gate_rejects_hallucinated_stdlib_symbol(self) -> None:
+        plan = PlanModeAgent().plan(
+            """
+## Required Components
+
+- `main()`
+
+## Entrypoint
+
+- `main()`
+"""
+        )
+        source = "from dataclasses import FrozenDataclass\n\ndef main():\n    pass\n"
+
+        issues = _validate_structured_spec_output(source, plan)
+
+        self.assertEqual(issues[0]["kind"], "missing_import_symbol")
+        self.assertEqual(issues[0]["details"], "dataclasses.FrozenDataclass")
+
+    def test_contract_gate_rejects_hallucinated_stdlib_symbol_before_execution(self) -> None:
+        contract = FunctionContract(name="helper", signature="def helper() -> int")
+        source = "from dataclasses import FrozenDataclass\n\ndef helper() -> int:\n    return 1\n"
+
+        issues = _validate_contract_source(source, contract)
+
+        self.assertEqual(issues[0]["kind"], "contract_missing_import_symbol")
+        self.assertEqual(issues[0]["details"], "dataclasses.FrozenDataclass")
+
+    def test_contract_gate_rejects_hallucinated_stdlib_submodule(self) -> None:
+        contract = FunctionContract(name="helper", signature="def helper() -> int")
+        source = "from os.nonexistent_api import helper_value\n\ndef helper() -> int:\n    return 1\n"
+
+        issues = _validate_contract_source(source, contract)
+
+        self.assertEqual(issues[0]["kind"], "contract_missing_import_symbol")
+        self.assertEqual(issues[0]["details"], "os.nonexistent_api")
+
+    def test_downstream_prompt_includes_accepted_immutable_field_types(self) -> None:
+        accepted = """
+class Ball:
+    def __init__(self):
+        self.velocity = (3, -2)
+"""
+        type_context = _accepted_type_context([accepted])
+        plan = PlanModeAgent().plan("")
+        contract = FunctionContract(name="reflect", signature="def reflect(ball: Ball) -> None")
+
+        prompt = _single_contract_prompt(
+            plan,
+            contract,
+            [accepted],
+            ["Ball"],
+            accepted_type_context=type_context,
+        )
+
+        self.assertIn("ACCEPTED TYPE CONTRACTS:", prompt)
+        self.assertIn("Ball.velocity: tuple[int, int] (immutable)", prompt)
+        self.assertIn("must be replaced, not item-mutated", prompt)
+
+    def test_integration_smoke_gate_rejects_immediate_runtime_crash(self) -> None:
+        plan = PlanModeAgent().plan(
+            """
+## App Spec
+
+- language: python
+
+## Entrypoint
+
+- `main()`
+"""
+        )
+        source = """
+def main():
+    velocity = (1, 2)
+    velocity[0] *= -1
+
+if __name__ == "__main__":
+    main()
+"""
+
+        result = _run_integration_smoke_test(source, plan, timeout_seconds=0.5)
+
+        self.assertFalse(result["is_compliant"])
+        self.assertEqual(result["status"], "crashed")
+        self.assertEqual(result["issues"][0]["kind"], "integration_smoke_crash")
+        self.assertIn("tuple", result["issues"][0]["details"])
+
+    def test_integration_smoke_gate_accepts_long_running_interactive_entrypoint(self) -> None:
+        plan = PlanModeAgent().plan(
+            """
+## App Spec
+
+- language: python
+
+## Entrypoint
+
+- `main()`
+"""
+        )
+        source = """
+import time
+
+def main():
+    while True:
+        time.sleep(0.01)
+
+if __name__ == "__main__":
+    main()
+"""
+
+        result = _run_integration_smoke_test(source, plan, timeout_seconds=0.05)
+
+        self.assertTrue(result["is_compliant"])
+        self.assertEqual(result["status"], "running_after_smoke_window")
 
     def test_structured_spec_gets_generic_fallback_contract_queue(self) -> None:
         plan = PlanModeAgent().plan(

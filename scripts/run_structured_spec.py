@@ -3,8 +3,11 @@ from __future__ import annotations
 import argparse
 import ast
 import json
+import os
 import re
+import subprocess
 import sys
+import tempfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Callable
@@ -27,7 +30,7 @@ from backends.architect_client import (
 from backends.ollama_client import DEFAULT_OLLAMA_MODEL, OllamaModelSupplier
 from harness_kernel.function_contracts import ContractQueue, ContractQueuePlan, DealExample, FunctionContract
 from prompt.budget import budget_prompt
-from validation.import_graph import analyze_import_graph
+from validation.import_graph import analyze_import_graph, validate_imported_symbols
 
 
 DEFAULT_ARTIFACT_ROOT = Path("artifacts/runs")
@@ -376,11 +379,67 @@ def _local_graph_context(plan, contract: FunctionContract, dependencies: list[st
     return "\n".join(sections)
 
 
+def _expression_type(expression: ast.expr) -> str:
+    if isinstance(expression, ast.Tuple):
+        item_types = [_expression_type(item) for item in expression.elts]
+        return f"tuple[{', '.join(item_types)}] (immutable)"
+    if isinstance(expression, ast.List):
+        item_type = _expression_type(expression.elts[0]) if expression.elts else "unknown"
+        return f"list[{item_type}] (mutable)"
+    if isinstance(expression, ast.Dict):
+        return "dict (mutable)"
+    if isinstance(expression, ast.Set):
+        return "set (mutable)"
+    if isinstance(expression, ast.Constant):
+        return type(expression.value).__name__
+    if isinstance(expression, ast.UnaryOp) and isinstance(expression.operand, ast.Constant):
+        return type(expression.operand.value).__name__
+    if isinstance(expression, ast.Call):
+        if isinstance(expression.func, ast.Name):
+            return expression.func.id
+        if isinstance(expression.func, ast.Attribute):
+            return expression.func.attr
+    return "unknown"
+
+
+def _accepted_type_context(accepted_sources: list[str]) -> list[str]:
+    """Extract field-type commitments made by already accepted class contracts."""
+
+    fields: dict[str, str] = {}
+    for source in accepted_sources:
+        try:
+            tree = ast.parse(source)
+        except SyntaxError:
+            continue
+        for class_node in (node for node in tree.body if isinstance(node, ast.ClassDef)):
+            for node in ast.walk(class_node):
+                if isinstance(node, ast.AnnAssign):
+                    if isinstance(node.target, ast.Name):
+                        fields[f"{class_node.name}.{node.target.id}"] = ast.unparse(node.annotation)
+                    elif (
+                        isinstance(node.target, ast.Attribute)
+                        and isinstance(node.target.value, ast.Name)
+                        and node.target.value.id == "self"
+                    ):
+                        fields[f"{class_node.name}.{node.target.attr}"] = ast.unparse(node.annotation)
+                elif isinstance(node, ast.Assign):
+                    inferred = _expression_type(node.value)
+                    for target in node.targets:
+                        if (
+                            isinstance(target, ast.Attribute)
+                            and isinstance(target.value, ast.Name)
+                            and target.value.id == "self"
+                        ):
+                            fields.setdefault(f"{class_node.name}.{target.attr}", inferred)
+    return [f"{name}: {type_name}" for name, type_name in sorted(fields.items())]
+
+
 def _single_contract_prompt(
     plan,
     contract: FunctionContract,
     dependency_sources: list[str],
     dependencies: list[str],
+    accepted_type_context: list[str] | None = None,
 ) -> str:
     sections = [
         "You are a Python coding worker inside a verified Plan-Execute-Verify harness.",
@@ -400,6 +459,15 @@ def _single_contract_prompt(
                 "\n\n".join(dependency_sources),
                 "",
                 "Use these accepted dependencies only when needed. Do not rewrite them.",
+            ]
+        )
+    if accepted_type_context:
+        sections.extend(
+            [
+                "",
+                "ACCEPTED TYPE CONTRACTS:",
+                *[f"- {item}" for item in accepted_type_context],
+                "- Preserve these representations. Values marked immutable must be replaced, not item-mutated.",
             ]
         )
     sections.extend(
@@ -422,6 +490,7 @@ def _contract_repair_prompt(
     dependency_sources: list[str],
     dependencies: list[str],
     worker_name: str,
+    accepted_type_context: list[str] | None = None,
 ) -> str:
     sections = [
         "FUNCTION CONTRACT REPAIR",
@@ -449,6 +518,15 @@ def _contract_repair_prompt(
                 "\n\n".join(dependency_sources),
                 "",
                 "Use these accepted dependencies. Do not rewrite them.",
+            ]
+        )
+    if accepted_type_context:
+        sections.extend(
+            [
+                "",
+                "ACCEPTED TYPE CONTRACTS:",
+                *[f"- {item}" for item in accepted_type_context],
+                "- Preserve these representations. Values marked immutable must be replaced, not item-mutated.",
             ]
         )
     sections.extend(
@@ -488,6 +566,7 @@ def _validate_contract_source(
     source: str,
     contract: FunctionContract,
     accepted_sources: list[str] | None = None,
+    external_roots: set[str] | None = None,
 ) -> list[dict]:
     issues: list[dict] = []
     try:
@@ -512,6 +591,14 @@ def _validate_contract_source(
                 "kind": "contract_missing_function",
                 "summary": f"Contract `{contract.name}` did not define the required symbol",
                 "details": contract.normalized_signature(),
+            }
+        )
+    for missing_symbol in validate_imported_symbols(source, external_roots=external_roots):
+        issues.append(
+            {
+                "kind": "contract_missing_import_symbol",
+                "summary": f"Contract `{contract.name}` imports a symbol that does not exist",
+                "details": missing_symbol,
             }
         )
     if not contract.examples:
@@ -620,7 +707,14 @@ def _run_contract_queue_sequentially(
 
         generated_count += 1
         dependency_sources = [accepted_source_by_name[name] for name in dependencies if name in accepted_source_by_name]
-        prompt = _single_contract_prompt(plan, contract, dependency_sources, dependencies)
+        accepted_type_context = _accepted_type_context(accepted_sources)
+        prompt = _single_contract_prompt(
+            plan,
+            contract,
+            dependency_sources,
+            dependencies,
+            accepted_type_context=accepted_type_context,
+        )
         print(
             f"[contract-queue] {generated_count}/{total} {contract.name}: sending to small worker",
             flush=True,
@@ -649,7 +743,13 @@ def _run_contract_queue_sequentially(
                 )
             )
             break
-        issues = _validate_contract_source(source, contract, accepted_sources=accepted_sources)
+        allowed_libraries = set(getattr(plan, "allowed_libraries", []))
+        issues = _validate_contract_source(
+            source,
+            contract,
+            accepted_sources=accepted_sources,
+            external_roots=allowed_libraries,
+        )
         small_repair = repair_draft or (lambda draft, retry_prompt: generate_draft(retry_prompt))
         for retry_index in range(small_retries_per_contract):
             if not issues:
@@ -662,6 +762,7 @@ def _run_contract_queue_sequentially(
                 dependency_sources,
                 dependencies,
                 worker_name="small_worker",
+                accepted_type_context=accepted_type_context,
             )
             print(
                 f"[contract-queue] {generated_count}/{total} {contract.name}: retry {retry_index + 1} with small worker",
@@ -686,7 +787,12 @@ def _run_contract_queue_sequentially(
                 )
                 break
             source = repaired_source
-            issues = _validate_contract_source(source, contract, accepted_sources=accepted_sources)
+            issues = _validate_contract_source(
+                source,
+                contract,
+                accepted_sources=accepted_sources,
+                external_roots=allowed_libraries,
+            )
             repair_attempts.append(
                 {
                     "worker": "small_worker",
@@ -706,6 +812,7 @@ def _run_contract_queue_sequentially(
                 dependency_sources,
                 dependencies,
                 worker_name="architect_llm",
+                accepted_type_context=accepted_type_context,
             )
             print(
                 f"[contract-queue] {generated_count}/{total} {contract.name}: escalating contract to architect",
@@ -730,7 +837,12 @@ def _run_contract_queue_sequentially(
                 )
                 break
             source = architect_source
-            issues = _validate_contract_source(source, contract, accepted_sources=accepted_sources)
+            issues = _validate_contract_source(
+                source,
+                contract,
+                accepted_sources=accepted_sources,
+                external_roots=allowed_libraries,
+            )
             repair_attempts.append(
                 {
                     "worker": "architect_llm",
@@ -860,6 +972,14 @@ def _validate_structured_spec_output(source: str, plan) -> list[dict]:
                 "details": ", ".join(missing),
             }
         )
+    for path, missing in import_graph.missing_symbols.items():
+        issues.append(
+            {
+                "kind": "missing_import_symbol",
+                "summary": f"Generated file `{path}` imports symbols that do not exist",
+                "details": ", ".join(missing),
+            }
+        )
     return issues
 
 
@@ -868,6 +988,74 @@ def _structured_spec_file_map(source: str, plan) -> dict[str, str]:
     if not files:
         return {"generated_source.py": source}
     return {files[0]: source, **{path: "" for path in files[1:]}}
+
+
+def _run_integration_smoke_test(source: str, plan, timeout_seconds: float = 5.0) -> dict:
+    """Start the assembled Python entrypoint and reject immediate runtime crashes.
+
+    Interactive applications are expected to keep running. Surviving the bounded
+    startup window is therefore a pass; the subprocess is killed by the timeout.
+    Programs that exit cleanly are also accepted.
+    """
+
+    if not source or str(getattr(plan, "language", "python")).lower() != "python":
+        return {"is_compliant": True, "status": "skipped", "issues": []}
+    if not getattr(plan, "entrypoints", []):
+        return {"is_compliant": True, "status": "skipped_no_entrypoint", "issues": []}
+
+    temp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile("w", suffix=".py", encoding="utf-8", delete=False) as handle:
+            handle.write(source)
+            temp_path = Path(handle.name)
+        env = os.environ.copy()
+        env.update(
+            {
+                "SDL_VIDEODRIVER": "dummy",
+                "SDL_AUDIODRIVER": "dummy",
+                "PYTHONDONTWRITEBYTECODE": "1",
+                "HARNESS_SMOKE_TEST": "1",
+            }
+        )
+        try:
+            completed = subprocess.run(
+                [sys.executable, str(temp_path)],
+                capture_output=True,
+                text=True,
+                timeout=timeout_seconds,
+                check=False,
+                env=env,
+            )
+        except subprocess.TimeoutExpired:
+            return {
+                "is_compliant": True,
+                "status": "running_after_smoke_window",
+                "timeout_seconds": timeout_seconds,
+                "issues": [],
+            }
+        if completed.returncode == 0:
+            return {
+                "is_compliant": True,
+                "status": "exited_cleanly",
+                "returncode": completed.returncode,
+                "issues": [],
+            }
+        details = (completed.stderr or completed.stdout).strip()[-4000:]
+        return {
+            "is_compliant": False,
+            "status": "crashed",
+            "returncode": completed.returncode,
+            "issues": [
+                {
+                    "kind": "integration_smoke_crash",
+                    "summary": "Generated program crashed during integration smoke execution",
+                    "details": details or f"process exited with status {completed.returncode}",
+                }
+            ],
+        }
+    finally:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
 
 
 def run_spec(
@@ -1098,13 +1286,19 @@ def run_spec(
         _structured_spec_file_map(final_source, plan),
         external_roots=set(getattr(plan, "allowed_libraries", [])),
     )
-    if session.get("final_status") == "completed" and spec_issues:
+    smoke_result = _run_integration_smoke_test(final_source, plan)
+    final_gate_issues = [*spec_issues, *smoke_result["issues"]]
+    if session.get("final_status") == "completed" and final_gate_issues:
         session["final_status"] = "manual_review_required"
         session["human_review"] = {
             "status": "manual_review_required",
-            "reason": "structured_spec_validation_failed",
+            "reason": (
+                "integration_smoke_failed"
+                if smoke_result["issues"]
+                else "structured_spec_validation_failed"
+            ),
             "blocking_findings": [],
-            "blocking_violations": spec_issues,
+            "blocking_violations": final_gate_issues,
             "behavior_issues": [],
             "formal_issues": [],
             "last_retry_prompt": final_attempt.get("retry_prompt", ""),
@@ -1146,6 +1340,7 @@ def run_spec(
                     "is_compliant": not spec_issues,
                     "issues": spec_issues,
                     "import_graph": asdict(import_graph),
+                    "integration_smoke": smoke_result,
                 },
                 "model_telemetry": [
                     *contract_metadata.get("architect_contract_telemetry", []),
@@ -1187,6 +1382,9 @@ def run_spec(
                 "final_static_violations": validation.get("violations", []),
                 "structured_spec_compliant": not spec_issues,
                 "structured_spec_issues": spec_issues,
+                "integration_smoke_status": smoke_result["status"],
+                "integration_smoke_compliant": smoke_result["is_compliant"],
+                "integration_smoke_issues": smoke_result["issues"],
                 "final_formal_tool": formal.get("tool", ""),
                 "final_formal_compliant": formal.get("is_compliant", True),
                 "final_formal_issues": formal.get("issues", []),

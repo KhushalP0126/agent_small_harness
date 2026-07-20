@@ -916,6 +916,24 @@ class ControllerIntegrationTests(unittest.TestCase):
         violations = result.payload["attempts"][0]["validation"]["violations"]
         self.assertEqual(violations[0]["kind"], "parse_error")
 
+    def test_skipped_lint_blocks_completion_without_model_retries(self) -> None:
+        registry = EngineRegistry()
+        registry.register("python", [lambda: LintEngine(executable="")])
+        repair_calls = []
+        controller = GenerationController(
+            max_retries=2,
+            draft_supplier=lambda _prompt: "def analyze(value):\n    return value\n",
+            repair_supplier=lambda draft, _prompt: repair_calls.append(draft) or draft,
+            engine_registry=registry,
+        )
+
+        result = controller.run(target="lint-signal", initial_prompt="generate")
+
+        self.assertEqual(result.payload["final_status"], "manual_review_required")
+        self.assertEqual(result.payload["human_review"]["reason"], "lint_validation_skipped")
+        self.assertEqual(result.payload["attempts"][0]["validation"]["violations"][0]["kind"], "lint_skipped")
+        self.assertEqual(repair_calls, [])
+
     def test_completes_with_injected_default_registry(self) -> None:
         source = LINEAR.read_text(encoding="utf-8")
         controller = GenerationController(max_retries=1, draft_supplier=lambda _prompt: source)
