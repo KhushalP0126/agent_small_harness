@@ -77,7 +77,7 @@ class ApiTests(unittest.TestCase):
             model="qwen2.5-coder:3b",
             ollama_url="http://ollama:11434",
             use_architect=True,
-            architect_model="deepseek-chat",
+            architect_model="deepseek-v4-pro",
             architect_url="https://architect.example/v1/chat/completions",
         )
         with patch("api.app.OllamaModelSupplier") as worker_cls, patch(
@@ -90,7 +90,7 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(worker_kwargs["model"], "qwen2.5-coder:3b")
         self.assertEqual(worker_kwargs["client"].base_url, "http://ollama:11434")
         architect_config = architect_cls.call_args.kwargs["config"]
-        self.assertEqual(architect_config.model, "deepseek-chat")
+        self.assertEqual(architect_config.model, "deepseek-v4-pro")
         self.assertEqual(architect_config.base_url, "https://architect.example/v1/chat/completions")
         self.assertIsNotNone(controller.architect_supplier)
 

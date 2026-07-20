@@ -4,7 +4,7 @@
 
 - Worker backend: local Ollama at `http://127.0.0.1:11434`
 - Worker model: `qwen2.5-coder:1.5b`
-- Architect repair model: configured `deepseek-chat` API backend
+- Architect repair model: configured `deepseek-v4-pro` API backend
 - Raw coding-capability records: `data/runs.jsonl`, lines 49–76 in this commit
 
 The first two invocations were made without permission to reach the host's

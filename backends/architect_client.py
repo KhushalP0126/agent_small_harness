@@ -54,7 +54,7 @@ class ArchitectUsage:
 
 
 CONTRACT_PROFILE = ArchitectProfile(
-    model="deepseek-chat",
+    model=DEFAULT_ARCHITECT_MODEL,
     timeout_seconds=60,
     temperature=0.0,
     max_tokens=3000,
@@ -64,7 +64,7 @@ CONTRACT_PROFILE = ArchitectProfile(
 
 
 REPAIR_PROFILE = ArchitectProfile(
-    model="deepseek-chat",
+    model=DEFAULT_ARCHITECT_MODEL,
     timeout_seconds=90,
     temperature=0.1,
     max_tokens=4000,

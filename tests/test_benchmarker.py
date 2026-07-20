@@ -141,11 +141,11 @@ class BenchmarkerTests(unittest.TestCase):
         self.assertEqual(config.execution.models.resolve_for_difficulty(1), "qwen2.5-coder:1.5b")
         self.assertEqual(config.execution.models.resolve_for_difficulty(3), "qwen2.5-coder:3b")
         self.assertEqual(config.execution.models.resolve_for_difficulty(6), "qwen2.5-coder:3b")
-        self.assertEqual(config.execution.architect.contract.model, "deepseek-chat")
+        self.assertEqual(config.execution.architect.contract.model, "deepseek-v4-pro")
         self.assertEqual(config.execution.architect.contract.max_tokens, 3000)
         self.assertEqual(config.execution.architect.contract.thinking_type, "disabled")
         self.assertEqual(config.execution.architect.contract.reasoning_effort, "low")
-        self.assertEqual(config.execution.architect.repair.model, "deepseek-chat")
+        self.assertEqual(config.execution.architect.repair.model, "deepseek-v4-pro")
         self.assertEqual(config.execution.architect.repair.max_tokens, 4000)
         self.assertEqual(config.execution.architect.repair.thinking_type, "disabled")
         self.assertEqual(config.execution.architect.repair.reasoning_effort, "medium")
@@ -1102,7 +1102,7 @@ def analyze(matrix):
             )
             self.assertTrue(config.api_key_configured)
             self.assertEqual(config.api_key, "test-secret")
-            self.assertEqual(config.model, "deepseek-chat")
+            self.assertEqual(config.model, "deepseek-v4-pro")
             self.assertEqual(config.base_url, "https://api.deepseek.com/chat/completions")
         finally:
             if previous_key is None:

@@ -323,7 +323,7 @@ ARCHITECT_MODEL=deepseek-v4-pro
 
 `config.yaml` separates architect profiles:
 
-- `execution.architect.contract` uses a bounded `deepseek-chat` JSON-only path for function contract queues.
+- `execution.architect.contract` uses a bounded `deepseek-v4-pro` JSON-only path for function contract queues.
 - `execution.architect.repair` uses a separate bounded repair profile for code repair after worker failure.
 
 `.env` is ignored by git. Use `.env.example` as the committed template.
