@@ -87,8 +87,73 @@ runtime iteration.
    or collision functions should return a replacement tuple instead of mutating
    one in place.
 
-## Status
+## Original status
 
 Neither generated game is currently executable end-to-end. The failures are
 reproducible and the local artifacts retain the complete generation, retry,
 validation, and escalation records.
+
+## Post-fix verification — 2026-07-20
+
+The same full commands were rerun after adding symbol-level import validation,
+accepted cross-contract field types, blocking lint-skip signaling, and the
+five-second headless integration smoke gate.
+
+| Game/sample | Contracts | Static/spec/formal | Smoke execution | Final status |
+| --- | ---: | --- | --- | --- |
+| Snake | 16/16 accepted | Passed | Running after five-second window | `completed` |
+| Pong sample A | 20/20 accepted | Initially blocked by registry false positive | Running after five-second window | `manual_review_required` |
+| Pong sample B | 20/20 accepted | Complexity 8, limit 7 | Method-arity `TypeError` | `manual_review_required` |
+
+### Snake closure
+
+Artifact:
+`artifacts/runs/structured_spec_snake_game_spec-20260720T075236Z-511081d0`
+
+Snake completed all 16 contracts. `opposite_direction`, the original failure
+point, needed two Qwen retries and one architect repair but was accepted without
+the hallucinated `dataclasses.FrozenDataclass` import. The integrated game passed
+static, structured-spec, and formal checks and remained running through the
+bounded smoke window. This is a clean end-to-end recovery from the original
+failure.
+
+### Pong registry correction
+
+Artifact:
+`artifacts/runs/structured_spec_pong_game_spec-20260720T075757Z-1cd1473a`
+
+The first post-fix Pong sample accepted all 20 contracts and passed the runtime
+smoke check, so the original tuple-mutation crash was absent. It was downgraded
+because Pylint reported `pygame.KEYUP` as a missing dynamic member. Runtime
+inspection confirmed `pygame.KEYUP` exists in pygame 2.6.1; the trusted registry
+listed `KEYDOWN` but omitted `KEYUP`. Adding `KEYUP` to
+`data/library_registry.json` makes this exact artifact statically compliant with
+zero violations, while unknown pygame members remain blocking.
+
+### Pong smoke-gate confirmation
+
+Artifact:
+`artifacts/runs/structured_spec_pong_game_spec-20260720T080610Z-eff265b8`
+
+A fresh stochastic Pong generation again accepted all 20 contracts, but the
+architect-integrated source exceeded the complexity limit in
+`check_wall_collision` and crashed during smoke execution:
+
+```text
+TypeError: Ball.next_position() takes 3 positional arguments but 5 were given
+```
+
+The new gate therefore converted the run to `manual_review_required` and saved
+the traceback instead of reporting a false completion. This is a different
+cross-contract mismatch from the original tuple mutation and shows that Pong is
+not yet reliably generated across samples. It also confirms the integration
+smoke gate works on a newly generated live failure, not only on a regression
+fixture.
+
+## Updated status
+
+- Snake is verified end-to-end on the repaired pipeline.
+- Pong can produce a runtime-clean sample, but a fresh sample exposed a separate
+  method-signature mismatch and was correctly rejected.
+- The pygame registry now recognizes the real `KEYUP` event constant without
+  weakening rejection of unknown dynamic members.

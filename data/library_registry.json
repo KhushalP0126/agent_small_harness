@@ -36,6 +36,7 @@
       ],
       "allowed_constants": [
         "KEYDOWN",
+        "KEYUP",
         "QUIT",
         "K_UP",
         "K_DOWN",

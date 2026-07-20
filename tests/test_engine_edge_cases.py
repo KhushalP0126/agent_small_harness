@@ -459,7 +459,7 @@ class LintEngineEdgeCaseTests(unittest.TestCase):
         self.assertEqual(finding.severity, "Warn")
         self.assertTrue(validate_findings([finding]).is_compliant)
 
-    def test_registered_pygame_space_key_is_lint_warning(self) -> None:
+    def test_registered_pygame_keyup_event_is_lint_warning(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             fake_pylint = Path(tmpdir) / "fake_pylint"
             fake_pylint.write_text(
@@ -473,13 +473,13 @@ class LintEngineEdgeCaseTests(unittest.TestCase):
                 "    'column': 6,\n"
                 "    'path': 'tmp.py',\n"
                 "    'symbol': 'no-member',\n"
-                "    'message': \"Module 'pygame' has no 'K_SPACE' member\",\n"
+                "    'message': \"Module 'pygame' has no 'KEYUP' member\",\n"
                 "    'message-id': 'E1101'\n"
                 "}]))\n",
                 encoding="utf-8",
             )
             fake_pylint.chmod(fake_pylint.stat().st_mode | stat.S_IXUSR)
-            finding = LintEngine(executable=str(fake_pylint)).scan("import pygame\nkey = pygame.K_SPACE\n")[0]
+            finding = LintEngine(executable=str(fake_pylint)).scan("import pygame\nevent_type = pygame.KEYUP\n")[0]
         self.assertEqual(finding.summary, "Registered dynamic library member warning")
         self.assertEqual(finding.severity, "Warn")
         self.assertTrue(validate_findings([finding]).is_compliant)
