@@ -74,7 +74,7 @@ Python drafts pass through a registered engine set:
 | Cost engine | Detects avoidable algorithmic hotspots such as repeated linear membership in loops |
 | Bounds engine | Warns on high-confidence out-of-bounds read/write patterns |
 | State-flow engine | Flags helper functions that update parser/event state without returning it |
-| Lint engine | Optional Pylint-backed fatal/error gate |
+| Lint engine | Required Pylint-backed fatal/error gate; skipped runs require explicit policy allowance |
 
 Static checks are paired with behavior validation. A draft can be structurally
 clean and still fail if it does not satisfy the expected input/output behavior.
@@ -159,7 +159,7 @@ flowchart TD
         registry --> cost[Cost engine<br/>membership hotspots]
         registry --> bounds[Bounds engine<br/>index patterns]
         registry --> stateflow[State-flow engine<br/>returned state]
-        registry --> lint[Optional Pylint<br/>errors and fatals]
+        registry --> lint[Pylint<br/>errors, fatals, and skip status]
     end
 
     math --> policy[Policy validator]
@@ -209,7 +209,7 @@ below describe what each loop is doing and what it can detect.
 | `engine-2-hazards` | Reuses IR mutation/global records. Separate AST walks iterate import nodes to classify dependencies, import bindings to resolve registered libraries, and call nodes to validate API paths. | Explicit `global`, mutation of module-level containers, indexed module-state writes, non-standard-library imports, and calls missing from a registered library schema. | One finding per hazard category, with names, calls, imports, locations, and repair hints. |
 | `engine-3-branching` | Starts with IR loops and branches, then walks the AST for exception handlers, assertions, conditional expressions, boolean operands, and comprehension filters. A nested function visitor repeats the decision count per function while skipping nested functions. | Cyclomatic-style path density at module and function scope, including decisions that are not plain `if` statements. | Complexity metrics and the worst function; policy blocks complexity above seven. |
 | `engine-4-cost` | Consumes `StructuralIR.symbols` and `StructuralIR.membership_checks`. The IR builder records assignments, annotations, arguments, constructors, `for`/`while`, comprehensions, and `in`/`not in` comparisons with scope and line information. | Repeated membership against an inferred `list` or `tuple` inside a loop, which can become an avoidable linear lookup hotspot. | Container names, lines, and hotspot count; policy can require a precomputed set. |
-| `engine-5-lint` | Writes the draft to a temporary file and delegates traversal to Pylint. It parses the returned JSON and filters registered dynamic-library `no-member` messages into non-blocking warnings. | Pylint fatal/error categories, while allowing known dynamic members from the library registry. | Blocking lint findings or an explicit skipped/unavailable/timeout result. It is optional and external to the AST IR. |
+| `engine-5-lint` | Writes the draft to a temporary file and delegates traversal to Pylint. It parses the returned JSON and filters registered dynamic-library `no-member` messages into non-blocking warnings. | Pylint fatal/error categories, while allowing known dynamic members from the library registry. | Blocking lint findings or an explicit skipped/unavailable/timeout result. Pylint is a base dependency because skipped lint blocks completion by default. |
 | `engine-6-bounds` | Consumes `StructuralIR.bounds_risks`, populated while the IR builder visits every subscript and `for` loop whose iterator is a `range(...)` call. | High-confidence one-past-end reads/writes and range upper-bound overflow patterns. | Warning-first bounds finding with expressions and lines; full dataflow proof is intentionally out of scope. |
 | `engine-7-state-flow` | Consumes `StructuralIR.state_flow_risks`, populated while the IR builder walks each function’s descendant nodes for state-parameter assignments and return values. | Helpers that mutate parameters named like state/context/section/current/total but fail to return the updated value. | Potential lost-state finding with function, parameter, and line; policy blocks it by default. |
 
@@ -300,7 +300,7 @@ Those outcomes are recorded in artifact metadata and the contract queue results.
 
 ## Setup
 
-Install optional dependencies:
+Install the base runtime and optional formal-verification dependencies:
 
 ```bash
 make install

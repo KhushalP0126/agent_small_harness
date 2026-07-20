@@ -129,7 +129,7 @@ test-engine-edge-cases:
 	$(PYTHON) -m unittest tests.test_engine_edge_cases
 
 test-lint-engine:
-	$(PYTHON) -m unittest tests.test_benchmarker.BenchmarkerTests.test_lint_engine_is_optional_when_pylint_missing tests.test_benchmarker.BenchmarkerTests.test_lint_engine_maps_pylint_error_to_policy_violation
+	$(PYTHON) -m unittest tests.test_benchmarker.BenchmarkerTests.test_lint_engine_blocks_completion_when_pylint_is_missing tests.test_benchmarker.BenchmarkerTests.test_lint_engine_maps_pylint_error_to_policy_violation
 
 test-adversarial:
 	$(PYTHON) scripts/run_adversarial_prompts.py --runs "$(RUNS_PATH)"

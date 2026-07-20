@@ -7,10 +7,6 @@ crosshair-tool>=0.0.80
 # Deal is used by the plan layer as a contract syntax for architect-written specs.
 deal>=4.24.0
 
-# Pylint powers the optional lint engine when installed. The lint engine remains
-# skip-safe when this package is absent.
-pylint>=3.0.0
-
 # Nagini is intentionally not pinned here. It is an architect-tier formalization
 # target with a heavier research-toolchain install; follow the Nagini/Viper
 # project installation instructions for the target machine before enabling it.
