@@ -129,3 +129,27 @@ The run was recorded in `data/runs.jsonl` with artifact path
 regression coverage separately verifies that when static and behavioral gates
 fail together, both categories and their exact expected/actual values reach the
 small-worker retry prompt in stable, deduplicated order.
+
+## Prompt-routing leakage fix
+
+A later artifact-backed sweep exposed unrelated section-parser state-machine
+instructions in an architect repair prompt for `summarize_transactions`. The
+specialized prompt had been selected whenever examples were preserved and a
+broad failure kind such as behavioral mismatch or cyclomatic complexity was
+present.
+
+The route now additionally requires explicit section-parser state context:
+state rules naming active-section state plus key/value or nested-dictionary
+flow. Ordinary aggregation tasks use the generic architect repair prompt.
+
+A focused live rerun exercised the corrected retry path:
+
+| Result | Attempts | Initial static failures | Initial behavior failures | Architect repairs |
+| --- | ---: | ---: | ---: | ---: |
+| completed | 3 | 1 | 1 | 2 |
+
+The saved prompts included cyclomatic complexity and the exact `zero retained`
+failure (`{}` versus `{'a': 0}`), while excluding state-machine mode,
+`active_section`, section-header, and nested-dictionary instructions. The trace
+is stored at
+`artifacts/runs/summarize_transactions-20260720T003952Z-9f113d9f`.

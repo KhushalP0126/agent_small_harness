@@ -457,9 +457,36 @@ class GenerationController(BaseAgent):
             ]
         )
 
-    def _is_state_machine_failure(self, violations: list[Violation]) -> bool:
+    def _is_state_machine_failure(
+        self,
+        violations: list[Violation],
+        preserved_context: str,
+    ) -> bool:
+        """Return whether the section-parser-specific architect prompt applies."""
+
         kinds = {violation.kind for violation in violations}
-        return bool(kinds & {"state_flow_risk", "behavior_mismatch", "cyclomatic_complexity", "loop_depth"})
+        context = preserved_context.lower()
+        has_section_state = "state rules:" in context and any(
+            marker in context
+            for marker in ("active section", "active_section", "section state")
+        )
+        has_key_value_flow = any(
+            marker in context
+            for marker in ("key/value", "key=value", "equals sign", "nested dict")
+        )
+        return (
+            has_section_state
+            and has_key_value_flow
+            and bool(
+                kinds
+                & {
+                    "state_flow_risk",
+                    "behavior_mismatch",
+                    "cyclomatic_complexity",
+                    "loop_depth",
+                }
+            )
+        )
 
     def _is_metric_scope_ambiguous(
         self,
@@ -518,7 +545,10 @@ class GenerationController(BaseAgent):
                     )
         else:
             preserved_context = self._preserved_plan_context(initial_prompt)
-            if preserved_context and self._is_state_machine_failure(scoped_violations):
+            if preserved_context and self._is_state_machine_failure(
+                scoped_violations,
+                preserved_context,
+            ):
                 retry_prompt = build_state_machine_architect_prompt(
                     current_code=source,
                     violations=scoped_violations,

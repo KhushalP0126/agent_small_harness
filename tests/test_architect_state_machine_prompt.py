@@ -3,6 +3,7 @@ import unittest
 from agents.generation_controller import GenerationController
 from agents.plan_mode import PlanModeAgent
 from prompt.architect_builder import build_state_machine_architect_prompt
+from scripts.run_coding_capability import _behavior_spec, _build_prompt
 from validation.types import Violation
 
 
@@ -92,6 +93,67 @@ def parse_sectioned_config(text):
         self.assertIn("active_section = None", retry_prompt)
         self.assertIn("return the updated state", retry_prompt)
         self.assertIn("exactly one equals sign", retry_prompt)
+
+    def test_transaction_failure_does_not_receive_section_parser_prompt(self) -> None:
+        task = {
+            "name": "summarize_transactions",
+            "task_type": "general_code",
+            "language": "python",
+            "prompt": (
+                "Write a Python function named summarize_transactions(rows). Each row is a dict "
+                "with account, kind, and amount keys. Credits add and debits subtract. Ignore "
+                "invalid rows and retain accounts whose final total is zero."
+            ),
+            "function_name": "summarize_transactions",
+            "cases": [
+                {
+                    "name": "zero retained",
+                    "args": [[
+                        {"account": "a", "kind": "credit", "amount": 5},
+                        {"account": "a", "kind": "debit", "amount": 5},
+                    ]],
+                    "expected": {"a": 0},
+                }
+            ],
+        }
+        behavior_spec = _behavior_spec(task)
+        initial_prompt = _build_prompt(task, behavior_spec)
+        source = """
+def summarize_transactions(rows):
+    totals = {}
+    for row in rows:
+        if 'account' not in row or 'kind' not in row or 'amount' not in row:
+            continue
+        account = row['account']
+        if row['kind'] == 'credit':
+            totals[account] = totals.get(account, 0) + row['amount']
+        elif row['kind'] == 'debit':
+            totals[account] = totals.get(account, 0) - row['amount']
+    return {account: total for account, total in totals.items() if total != 0}
+"""
+        captured_prompts: list[str] = []
+
+        def architect_supplier(draft: str, retry_prompt: str) -> str:
+            captured_prompts.append(retry_prompt)
+            return draft
+
+        controller = GenerationController(
+            max_retries=1,
+            draft_supplier=lambda _prompt: source,
+            architect_supplier=architect_supplier,
+            architect_after_repair_attempts=0,
+            behavior_spec=behavior_spec,
+        )
+        controller.run(target=task["prompt"], initial_prompt=initial_prompt)
+
+        self.assertEqual(len(captured_prompts), 1)
+        retry_prompt = captured_prompts[0]
+        self.assertNotIn("STATE MACHINE ARCHITECT MODE", retry_prompt)
+        self.assertNotIn("active_section", retry_prompt)
+        self.assertNotIn("section headers", retry_prompt)
+        self.assertIn("cyclomatic complexity", retry_prompt.lower())
+        self.assertIn("zero retained returned {}", retry_prompt)
+        self.assertIn("{'a': 0}", retry_prompt)
 
 
 if __name__ == "__main__":
