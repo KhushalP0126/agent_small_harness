@@ -3,7 +3,6 @@ from __future__ import annotations
 import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any
 
 from agents.base import AgentResult, BaseAgent
 from agents.prompt_normalizer import PromptNormalizerAgent
@@ -361,8 +360,8 @@ class PlanModeAgent(BaseAgent):
             return []
         libraries = list(classification.libraries)
         structured_sections = structured_sections or {}
-        for field in ("library", "libraries", "allowed_libraries"):
-            value = self._structured_meta_field(structured_sections, field)
+        for field_name in ("library", "libraries", "allowed_libraries"):
+            value = self._structured_meta_field(structured_sections, field_name)
             for item in re.split(r"[, ]+", value):
                 item = item.strip()
                 if item and item not in libraries:

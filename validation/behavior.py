@@ -37,6 +37,7 @@ SAFE_BUILTINS = {
     "set": set,
     "object": object,
     "property": property,
+    "print": print,
     "sorted": sorted,
     "staticmethod": staticmethod,
     "str": str,
@@ -217,24 +218,39 @@ def behavior_result_from_trace(trace: ExecutionTrace) -> BehaviorResult:
     issues: list[BehaviorIssue] = []
     for case in trace.cases:
         if case.exception_type:
+            details = _case_runtime_details(case, case.exception_message)
             issues.append(
                 BehaviorIssue(
                     case=case.name,
                     expected=case.expected,
                     actual=case.exception_type,
-                    details=case.exception_message,
+                    details=details,
                 )
             )
         elif not case.matched:
+            details = _case_runtime_details(
+                case, "Return value did not match the behavior spec."
+            )
             issues.append(
                 BehaviorIssue(
                     case=case.name,
                     expected=case.expected,
                     actual=case.returned,
-                    details="Return value did not match the behavior spec.",
+                    details=details,
                 )
             )
     return BehaviorResult(is_compliant=not issues, issues=issues)
+
+
+def _case_runtime_details(case: CaseTrace, summary: str) -> str:
+    parts = [summary]
+    if case.stdout:
+        parts.append(f"stdout: {case.stdout}")
+    if case.stderr:
+        parts.append(f"stderr: {case.stderr}")
+    if case.traceback:
+        parts.append(f"traceback: {case.traceback}")
+    return _clip("\n".join(parts))
 
 
 def validate_function_behavior(

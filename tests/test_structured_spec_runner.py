@@ -489,6 +489,52 @@ if __name__ == "__main__":
         self.assertEqual(results[0].repair_attempts[-1]["status"], "accepted")
         self.assertEqual(len(accepted_sources), 1)
 
+    def test_contract_queue_isolates_independent_contract_failure(self) -> None:
+        plan = PlanModeAgent().plan("")
+        queue = ContractQueue(
+            [
+                FunctionContract(
+                    name="doomed",
+                    signature="def doomed() -> int",
+                    examples=[DealExample("doomed()", "1")],
+                ),
+                FunctionContract(
+                    name="independent",
+                    signature="def independent() -> int",
+                    examples=[DealExample("independent()", "5")],
+                ),
+                FunctionContract(
+                    name="depends_on_doomed",
+                    signature="def depends_on_doomed() -> int",
+                    dependencies=["doomed"],
+                ),
+            ]
+        )
+
+        def generate(prompt: str) -> str:
+            if "NAME: doomed" in prompt:
+                return "def doomed() -> int:\n    return 0\n"
+            if "NAME: independent" in prompt:
+                return "def independent() -> int:\n    return 5\n"
+            raise AssertionError(f"unexpected prompt: {prompt[:80]}")
+
+        accepted_sources, results = _run_contract_queue_sequentially(
+            queue,
+            plan,
+            generate,
+            repair_draft=lambda _draft, _prompt: "def doomed() -> int:\n    return -1\n",
+            small_retries_per_contract=1,
+        )
+
+        results_by_name = {result.name: result for result in results}
+        self.assertEqual(results_by_name["doomed"].status, "validation_failed")
+        self.assertEqual(results_by_name["independent"].status, "accepted")
+        self.assertIn("def independent", "\n".join(accepted_sources))
+        blocked = next(
+            result for result in results if result.status == "dependency_blocked"
+        )
+        self.assertIn("depends_on_doomed", blocked.issues[0]["details"])
+
     def test_small_worker_contract_prompt_uses_local_graph_slice(self) -> None:
         plan = PlanModeAgent().plan(
             """

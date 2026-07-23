@@ -321,12 +321,13 @@ class RepairStrategyTests(unittest.TestCase):
 
 
 class BehaviorSpecTests(unittest.TestCase):
-    def test_for_source_does_not_auto_map_problem_specific_specs(self) -> None:
-        spec = BehaviorSpecAgent().for_source(MIXED.read_text(encoding="utf-8"))
-        self.assertIsNone(spec)
-
-    def test_for_source_returns_none_for_unknown(self) -> None:
-        self.assertIsNone(BehaviorSpecAgent().for_source("def analyze(matrix):\n    return 0\n"))
+    def test_resolve_uses_explicit_fallback_without_hidden_fixture_routing(self) -> None:
+        fallback = mixed_hard_case_spec()
+        resolved = BehaviorSpecAgent().resolve(
+            MIXED.read_text(encoding="utf-8"),
+            fallback=fallback,
+        )
+        self.assertIs(resolved, fallback)
 
     def test_load_from_file_matches_inline_spec(self) -> None:
         loaded = BehaviorSpecAgent().load_from_file(DEFAULT_BEHAVIOR_CASES, "scoring_matrix")
@@ -1589,6 +1590,35 @@ def analyze(value):
         self.assertEqual(len(architect_calls), 1)
         self.assertEqual(result.payload["attempts"][-1]["draft_source_worker"], "architect_llm")
         self.assertEqual(result.payload["attempts"][-1]["validation"]["violations"][0]["kind"], "parse_error")
+
+    def test_architect_repair_retry_opt_in_gets_second_attempt(self) -> None:
+        bad_source = """
+def analyze(value):
+    if value:
+        return value
+    return 0
+"""
+        architect_calls = []
+
+        def architect_supplier(_draft: str, retry_prompt: str) -> str:
+            architect_calls.append(retry_prompt)
+            if len(architect_calls) == 1:
+                return "def broken(:\n    return 1\n"
+            return "def analyze(value):\n    return value\n"
+
+        controller = GenerationController(
+            max_retries=3,
+            draft_supplier=lambda _prompt: bad_source,
+            repair_supplier=lambda draft, _prompt: draft,
+            architect_supplier=architect_supplier,
+            architect_after_repair_attempts=0,
+            policy={"max_cyclomatic_complexity": 1},
+            allow_architect_repair_retry=True,
+        )
+        result = controller.run(target="architect-parse-error", initial_prompt="generate")
+
+        self.assertEqual(len(architect_calls), 2)
+        self.assertEqual(result.payload["final_status"], "completed")
 
     def test_unknown_registered_api_feedback_repairs_through_controller(self) -> None:
         violating_source = (

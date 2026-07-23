@@ -9,7 +9,6 @@ from validation.behavior import (
     BehaviorResult,
     FunctionBehaviorSpec,
     format_behavior_spec,
-    mixed_hard_case_spec,
     validate_function_behavior,
 )
 
@@ -28,11 +27,6 @@ class BehaviorSpecAgent:
 
     name = "agent-behavior-spec"
 
-    def for_source(self, source: str) -> FunctionBehaviorSpec | None:
-        """Map a detected code pattern to a behavior spec, or None if unknown."""
-        del source
-        return None
-
     def resolve(
         self,
         source: str,
@@ -40,12 +34,10 @@ class BehaviorSpecAgent:
         spec_name: str | None = None,
         fallback: FunctionBehaviorSpec | None = None,
     ) -> FunctionBehaviorSpec | None:
-        """Best-effort resolution: explicit file first, then pattern, then fallback."""
+        """Resolve an explicit JSON spec, otherwise return the supplied fallback."""
+        del source
         if spec_file is not None and spec_name:
             return self.load_from_file(spec_file, spec_name)
-        detected = self.for_source(source)
-        if detected is not None:
-            return detected
         return fallback
 
     def load_from_file(

@@ -68,8 +68,8 @@ class PolicyConfig:
 class BehaviorConfig:
     enabled: bool = True
     timeout_seconds: float = 1.0
-    execution_trace: bool = False
-    debugger_hints: bool = False
+    execution_trace: bool = True
+    debugger_hints: bool = True
 
 
 @dataclass(frozen=True)
@@ -126,6 +126,7 @@ class ModelsConfig:
 class RoutingConfig:
     architect_after_repair_attempts: int | None = 1
     complexity_threshold: float = 0.7
+    allow_architect_repair_retry: bool = False
 
 
 @dataclass(frozen=True)
@@ -222,7 +223,11 @@ class HarnessConfig:
         )
         _ensure_known_keys(
             routing,
-            {"architect_after_repair_attempts", "complexity_threshold"},
+            {
+                "architect_after_repair_attempts",
+                "complexity_threshold",
+                "allow_architect_repair_retry",
+            },
             "execution.routing",
         )
         _ensure_known_keys(
@@ -262,8 +267,8 @@ class HarnessConfig:
                 behavior=BehaviorConfig(
                     enabled=_bool(behavior, "enabled", True),
                     timeout_seconds=_float(behavior, "timeout_seconds", 1.0, minimum=0.1),
-                    execution_trace=_bool(behavior, "execution_trace", False),
-                    debugger_hints=_bool(behavior, "debugger_hints", False),
+                    execution_trace=_bool(behavior, "execution_trace", True),
+                    debugger_hints=_bool(behavior, "debugger_hints", True),
                 ),
                 formal=FormalConfig(
                     crosshair_enabled=_bool(formal, "crosshair_enabled", False),
@@ -305,6 +310,9 @@ class HarnessConfig:
                     ),
                     complexity_threshold=_float(
                         routing, "complexity_threshold", 0.7, minimum=0.0
+                    ),
+                    allow_architect_repair_retry=_bool(
+                        routing, "allow_architect_repair_retry", False
                     ),
                 ),
                 gates=GatesConfig(

@@ -789,7 +789,7 @@ def _run_contract_queue_sequentially(
                     dependencies=dependencies,
                 )
             )
-            break
+            continue
         allowed_libraries = set(getattr(plan, "allowed_libraries", []))
         issues = _validate_contract_source(
             source,
@@ -911,7 +911,7 @@ def _run_contract_queue_sequentially(
                     repair_attempts=repair_attempts,
                 )
             )
-            break
+            continue
         print(f"[contract-queue] {generated_count}/{total} {contract.name}: accepted", flush=True)
         accepted_sources.append(source)
         accepted_source_by_name[contract.name] = source
@@ -1243,7 +1243,7 @@ def run_spec(
             small_retries_per_contract=max_retries,
             architect_retries_per_contract=1 if architect_supplier is not None else 0,
         )
-        if len(accepted_sources) != len(queue.contracts):
+        if not accepted_sources:
             session = {
                 "target": spec_text,
                 "route": "function_contract_queue",

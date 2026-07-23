@@ -22,8 +22,8 @@ engines:
   behavior:
     enabled: true
     timeout_seconds: 1.0
-    execution_trace: false
-    debugger_hints: false
+    execution_trace: true
+    debugger_hints: true
   formal:
     crosshair_enabled: false
     crosshair_timeout_seconds: 3.0
@@ -59,6 +59,7 @@ execution:
   routing:
     architect_after_repair_attempts: 1
     complexity_threshold: 0.7
+    allow_architect_repair_retry: false
   gates:
     auto_repair: true
     max_retries: 3

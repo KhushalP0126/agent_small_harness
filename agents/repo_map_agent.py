@@ -3,7 +3,7 @@ from __future__ import annotations
 import ast
 import os
 import sys
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
 from agents.base import AgentResult, BaseAgent
@@ -42,8 +42,10 @@ _MAX_CONTEXT_EDGES = 40
 @dataclass
 class FunctionInfo:
     name: str
+    qualified_name: str = ""
     args: list[str] = field(default_factory=list)
     calls: list[str] = field(default_factory=list)
+    variables: list[str] = field(default_factory=list)
     returns: str = "none"
     line: int = 0
 
@@ -65,15 +67,52 @@ class LoopSite:
 
 
 @dataclass
+class VariableInfo:
+    name: str
+    scope: str
+    kind: str
+    line: int
+
+
+@dataclass
+class MutationInfo:
+    target: str
+    scope: str
+    mutation_type: str
+    line: int
+
+
+@dataclass
+class GraphNode:
+    id: str
+    kind: str
+    label: str
+    module: str = ""
+    line: int = 0
+
+
+@dataclass
+class GraphEdge:
+    source: str
+    target: str
+    kind: str
+    label: str = ""
+    line: int = 0
+
+
+@dataclass
 class FileRecord:
     path: str
     module: str
     functions: list[FunctionInfo] = field(default_factory=list)
     classes: list[str] = field(default_factory=list)
     module_vars: list[str] = field(default_factory=list)
+    class_vars: list[str] = field(default_factory=list)
     instance_vars: list[str] = field(default_factory=list)
+    variables: list[VariableInfo] = field(default_factory=list)
     loops: list[LoopSite] = field(default_factory=list)
     imports: list[ImportInfo] = field(default_factory=list)
+    mutations: list[MutationInfo] = field(default_factory=list)
     parse_error: str = ""
 
     @property
@@ -86,6 +125,8 @@ class RepoGraph:
     root: str
     files: list[FileRecord] = field(default_factory=list)
     local_modules: list[str] = field(default_factory=list)
+    nodes: list[GraphNode] = field(default_factory=list)
+    edges: list[GraphEdge] = field(default_factory=list)
 
 
 class RepoMapAgent(BaseAgent):
@@ -129,7 +170,9 @@ class RepoMapAgent(BaseAgent):
                 )
                 continue
             files.append(self._build_file_record(rel, module, source, tree, local_tops))
-        return RepoGraph(root=str(root_path), files=files, local_modules=sorted(local_tops))
+        graph = RepoGraph(root=str(root_path), files=files, local_modules=sorted(local_tops))
+        graph.nodes, graph.edges = self._build_graph(files)
+        return graph
 
     def _iter_python_files(self, root: Path) -> list[Path]:
         collected: list[Path] = []
@@ -177,11 +220,14 @@ class RepoMapAgent(BaseAgent):
         functions: list[FunctionInfo] = []
         classes: list[str] = []
         module_vars: list[str] = []
+        class_vars: list[str] = []
         instance_vars: list[str] = []
         imports: list[ImportInfo] = []
         seen_instance: set[str] = set()
         seen_module_vars: set[str] = set()
 
+        parents = {child: parent for parent in ast.walk(tree) for child in ast.iter_child_nodes(parent)}
+        ir = self._decomposer.decompose(source)
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
@@ -204,8 +250,12 @@ class RepoMapAgent(BaseAgent):
                 )
             elif isinstance(node, ast.ClassDef):
                 classes.append(node.name)
+                for statement in node.body:
+                    for target in self._assignment_targets(statement):
+                        if isinstance(target, ast.Name):
+                            class_vars.append(f"{node.name}.{target.id}")
             elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                info, function_instance_vars = self._function_info(node)
+                info, function_instance_vars = self._function_info(node, parents)
                 functions.append(info)
                 for name in function_instance_vars:
                     if name not in seen_instance:
@@ -224,12 +274,38 @@ class RepoMapAgent(BaseAgent):
             functions=functions,
             classes=classes,
             module_vars=module_vars,
+            class_vars=class_vars,
             instance_vars=instance_vars,
-            loops=self._loop_sites(source),
+            variables=[
+                VariableInfo(
+                    name=symbol.name,
+                    scope=".".join(symbol.scope_path),
+                    kind=symbol.kind,
+                    line=symbol.line,
+                )
+                for symbol in ir.symbols
+            ],
+            loops=[
+                LoopSite(loop_type=loop.loop_type, depth=loop.depth, line=loop.line)
+                for loop in ir.loops
+            ],
             imports=imports,
+            mutations=[
+                MutationInfo(
+                    target=mutation.target,
+                    scope=mutation.scope,
+                    mutation_type=mutation.mutation_type,
+                    line=mutation.line,
+                )
+                for mutation in ir.mutations
+            ],
         )
 
-    def _function_info(self, node: ast.FunctionDef | ast.AsyncFunctionDef) -> tuple[FunctionInfo, list[str]]:
+    def _function_info(
+        self,
+        node: ast.FunctionDef | ast.AsyncFunctionDef,
+        parents: dict[ast.AST, ast.AST],
+    ) -> tuple[FunctionInfo, list[str]]:
         arguments = node.args
         args = [arg.arg for arg in (*arguments.posonlyargs, *arguments.args, *arguments.kwonlyargs)]
         if arguments.vararg is not None:
@@ -241,6 +317,8 @@ class RepoMapAgent(BaseAgent):
         seen_calls: set[str] = set()
         returns_value = False
         instance_vars: list[str] = []
+        variables = list(args)
+        seen_variables = set(variables)
         for child in ast.walk(node):
             if isinstance(child, ast.Call):
                 name = self._call_name(child.func)
@@ -249,8 +327,17 @@ class RepoMapAgent(BaseAgent):
                     calls.append(name)
             elif isinstance(child, ast.Return) and child.value is not None:
                 returns_value = True
+            elif isinstance(child, (ast.For, ast.AsyncFor)):
+                for name in self._target_names(child.target):
+                    if name not in seen_variables:
+                        seen_variables.add(name)
+                        variables.append(name)
             elif isinstance(child, (ast.Assign, ast.AnnAssign)):
                 for target in self._assignment_targets(child):
+                    for name in self._target_names(target):
+                        if name not in seen_variables:
+                            seen_variables.add(name)
+                            variables.append(name)
                     if (
                         isinstance(target, ast.Attribute)
                         and isinstance(target.value, ast.Name)
@@ -263,23 +350,48 @@ class RepoMapAgent(BaseAgent):
         else:
             returns = "value" if returns_value else "none"
         return (
-            FunctionInfo(name=node.name, args=args, calls=calls, returns=returns, line=node.lineno),
+            FunctionInfo(
+                name=node.name,
+                qualified_name=self._qualified_function_name(node, parents),
+                args=args,
+                calls=calls,
+                variables=variables,
+                returns=returns,
+                line=node.lineno,
+            ),
             instance_vars,
         )
-
-    def _loop_sites(self, source: str) -> list[LoopSite]:
-        try:
-            ir = self._decomposer.decompose(source)
-        except SyntaxError:
-            return []
-        return [LoopSite(loop_type=loop.loop_type, depth=loop.depth, line=loop.line) for loop in ir.loops]
 
     def _assignment_targets(self, node: ast.AST) -> list[ast.expr]:
         if isinstance(node, ast.Assign):
             return list(node.targets)
         if isinstance(node, ast.AnnAssign):
             return [node.target]
+        if isinstance(node, ast.AugAssign):
+            return [node.target]
         return []
+
+    def _target_names(self, node: ast.AST) -> list[str]:
+        if isinstance(node, ast.Name):
+            return [node.id]
+        if isinstance(node, ast.Attribute):
+            return [self._call_name(node)]
+        if isinstance(node, (ast.Tuple, ast.List)):
+            return [name for item in node.elts for name in self._target_names(item)]
+        return []
+
+    def _qualified_function_name(
+        self,
+        node: ast.FunctionDef | ast.AsyncFunctionDef,
+        parents: dict[ast.AST, ast.AST],
+    ) -> str:
+        names = [node.name]
+        parent = parents.get(node)
+        while parent is not None:
+            if isinstance(parent, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+                names.append(parent.name)
+            parent = parents.get(parent)
+        return ".".join(reversed(names))
 
     def _call_name(self, func: ast.expr) -> str:
         if isinstance(func, ast.Name):
@@ -308,6 +420,221 @@ class RepoMapAgent(BaseAgent):
             return "stdlib"
         return "third_party"
 
+    # -- graph construction -----------------------------------------------------
+
+    def _build_graph(self, files: list[FileRecord]) -> tuple[list[GraphNode], list[GraphEdge]]:
+        nodes: list[GraphNode] = []
+        edges: list[GraphEdge] = []
+        node_ids: set[str] = set()
+        known_functions: dict[tuple[str, str], str] = {}
+        known_modules = {
+            record.module for record in files if not record.parse_error and record.module
+        }
+
+        def add_node(node: GraphNode) -> None:
+            if node.id not in node_ids:
+                node_ids.add(node.id)
+                nodes.append(node)
+
+        for record in files:
+            if record.parse_error:
+                continue
+            module_id = self._node_id("module", record.module or record.path)
+            add_node(GraphNode(id=module_id, kind="module", label=record.module or record.path, module=record.module))
+            for function in record.functions:
+                qualified = function.qualified_name or function.name
+                function_id = self._node_id("function", f"{record.module}:{qualified}")
+                known_functions[(record.module, function.name)] = function_id
+                known_functions[(record.module, qualified)] = function_id
+                add_node(
+                    GraphNode(
+                        id=function_id,
+                        kind="function",
+                        label=f"{record.module}.{qualified}",
+                        module=record.module,
+                        line=function.line,
+                    )
+                )
+                edges.append(GraphEdge(source=module_id, target=function_id, kind="contains"))
+            for variable in record.variables:
+                variable_id = self._node_id(
+                    "variable", f"{record.module}:{variable.scope}:{variable.name}"
+                )
+                add_node(
+                    GraphNode(
+                        id=variable_id,
+                        kind="variable",
+                        label=f"{variable.scope}.{variable.name}",
+                        module=record.module,
+                        line=variable.line,
+                    )
+                )
+                edges.append(GraphEdge(source=module_id, target=variable_id, kind="declares"))
+            for loop in record.loops:
+                loop_id = self._node_id("loop", f"{record.module}:{loop.line}:{loop.depth}")
+                add_node(
+                    GraphNode(
+                        id=loop_id,
+                        kind="loop",
+                        label=f"{loop.loop_type} loop depth {loop.depth}",
+                        module=record.module,
+                        line=loop.line,
+                    )
+                )
+                edges.append(GraphEdge(source=module_id, target=loop_id, kind="contains"))
+
+        for record in files:
+            if record.parse_error:
+                continue
+            module_id = self._node_id("module", record.module or record.path)
+            import_aliases: dict[str, str] = {}
+            for imported in record.imports:
+                target_name = self._resolve_import_module(record, imported, known_modules)
+                if not target_name:
+                    target_name = imported.module or "."
+                target_id = self._node_id("module", target_name)
+                add_node(
+                    GraphNode(
+                        id=target_id,
+                        kind=f"{imported.kind}_module",
+                        label=target_name,
+                        module=target_name,
+                        line=imported.line,
+                    )
+                )
+                edges.append(
+                    GraphEdge(
+                        source=module_id,
+                        target=target_id,
+                        kind="imports",
+                        label=imported.kind,
+                        line=imported.line,
+                    )
+                )
+                import_aliases[target_name.rsplit(".", 1)[-1]] = target_name
+                for name in imported.names:
+                    if not imported.module and imported.level > 0:
+                        import_aliases[name] = target_name
+                    else:
+                        import_aliases[name] = (
+                            f"{target_name}.{name}" if target_name != "." else name
+                        )
+
+            for function in record.functions:
+                source_id = known_functions[(record.module, function.qualified_name or function.name)]
+                for call in function.calls:
+                    target_id = self._resolve_call_target(
+                        record.module, call, import_aliases, known_functions
+                    )
+                    if target_id not in node_ids:
+                        add_node(
+                            GraphNode(
+                                id=target_id,
+                                kind="callable",
+                                label=call,
+                                module=record.module,
+                            )
+                        )
+                    edges.append(
+                        GraphEdge(
+                            source=source_id,
+                            target=target_id,
+                            kind="calls",
+                            label=call,
+                            line=function.line,
+                        )
+                    )
+
+            for mutation in record.mutations:
+                source_id = known_functions.get(
+                    (record.module, mutation.scope), module_id
+                )
+                target_id = self._node_id(
+                    "variable", f"{record.module}:{mutation.scope}:{mutation.target}"
+                )
+                add_node(
+                    GraphNode(
+                        id=target_id,
+                        kind="variable",
+                        label=mutation.target,
+                        module=record.module,
+                        line=mutation.line,
+                    )
+                )
+                edges.append(
+                    GraphEdge(
+                        source=source_id,
+                        target=target_id,
+                        kind="mutates",
+                        label=mutation.mutation_type,
+                        line=mutation.line,
+                    )
+                )
+        return self._dedupe_nodes(nodes), self._dedupe_edges(edges)
+
+    def _resolve_call_target(
+        self,
+        module: str,
+        call: str,
+        import_aliases: dict[str, str],
+        known_functions: dict[tuple[str, str], str],
+    ) -> str:
+        if (module, call) in known_functions:
+            return known_functions[(module, call)]
+        head, _, tail = call.partition(".")
+        imported = import_aliases.get(head, "")
+        if imported:
+            imported_module = imported if not tail else imported
+            candidate = tail or imported.rsplit(".", 1)[-1]
+            if (imported_module, candidate) in known_functions:
+                return known_functions[(imported_module, candidate)]
+            parent = imported_module.rsplit(".", 1)[0] if "." in imported_module else imported_module
+            if (parent, candidate) in known_functions:
+                return known_functions[(parent, candidate)]
+        return self._node_id("callable", f"{module}:{call}")
+
+    def _resolve_import_module(
+        self,
+        record: FileRecord,
+        imported: ImportInfo,
+        known_modules: set[str],
+    ) -> str:
+        """Resolve an import to the concrete local module when one exists."""
+
+        if imported.level > 0:
+            package_parts = record.module.split(".") if record.module else []
+            if not record.path.endswith("/__init__.py") and record.path != "__init__.py":
+                package_parts = package_parts[:-1]
+            ascend = imported.level - 1
+            if ascend:
+                package_parts = package_parts[: max(0, len(package_parts) - ascend)]
+            module_parts = imported.module.split(".") if imported.module else []
+            base = ".".join([*package_parts, *module_parts])
+        else:
+            base = imported.module
+
+        if base in known_modules:
+            resolved_base = base
+        else:
+            resolved_base = ""
+        for name in imported.names:
+            candidate = f"{base}.{name}" if base else name
+            if candidate in known_modules:
+                return candidate
+        return resolved_base or base
+
+    def _node_id(self, kind: str, value: str) -> str:
+        return f"{kind}:{value}"
+
+    def _dedupe_nodes(self, nodes: list[GraphNode]) -> list[GraphNode]:
+        return list({node.id: node for node in nodes}.values())
+
+    def _dedupe_edges(self, edges: list[GraphEdge]) -> list[GraphEdge]:
+        unique: dict[tuple[str, str, str, str, int], GraphEdge] = {}
+        for edge in edges:
+            unique[(edge.source, edge.target, edge.kind, edge.label, edge.line)] = edge
+        return list(unique.values())
+
     # -- renderings --------------------------------------------------------------
 
     def to_plan_context(self, graph: RepoGraph) -> list[str]:
@@ -334,27 +661,41 @@ class RepoMapAgent(BaseAgent):
             lines.append(summary)
         if len(analyzed) > _MAX_CONTEXT_FILES:
             lines.append(f"- (+{len(analyzed) - _MAX_CONTEXT_FILES} more files omitted from compact context)")
-        edges = self._import_edges(graph)
-        if edges:
-            lines.append("Local import edges:")
-            for source_module, target_module in edges[:_MAX_CONTEXT_EDGES]:
-                lines.append(f"- {source_module} -> {target_module}")
+        call_edges = [edge for edge in graph.edges if edge.kind == "calls"]
+        if call_edges:
+            lines.append("Call edges:")
+            for edge in call_edges[:_MAX_CONTEXT_EDGES]:
+                lines.append(f"- {self._node_label(graph, edge.source)} -> {self._node_label(graph, edge.target)}")
+        import_edges = [edge for edge in graph.edges if edge.kind == "imports"]
+        if import_edges:
+            lines.append("Import edges:")
+            for edge in import_edges[:_MAX_CONTEXT_EDGES]:
+                lines.append(
+                    f"- {self._node_label(graph, edge.source)} imports "
+                    f"{self._node_label(graph, edge.target)} ({edge.label})"
+                )
         return lines
 
     def to_mermaid(self, graph: RepoGraph) -> str:
-        analyzed = [record for record in graph.files if not record.parse_error]
-        module_ids = {record.module: f"m{index}" for index, record in enumerate(analyzed)}
         lines = ["flowchart LR"]
-        for record in analyzed:
-            node_id = module_ids[record.module]
-            label = record.module or record.path
-            function_names = ", ".join(function.name for function in record.functions[:_MAX_CONTEXT_FUNCTIONS])
-            caption = f"{label}<br/>{function_names}" if function_names else label
-            lines.append(f'  {node_id}["{caption}"]')
-        for source_module, target_module in self._import_edges(graph):
-            if source_module in module_ids and target_module in module_ids:
-                lines.append(f"  {module_ids[source_module]} --> {module_ids[target_module]}")
+        mermaid_ids = {node.id: f"n{index}" for index, node in enumerate(graph.nodes)}
+        for node in graph.nodes:
+            label = node.label.replace('"', "'")
+            lines.append(f'  {mermaid_ids[node.id]}["{node.kind}: {label}"]')
+        for edge in graph.edges:
+            if edge.source in mermaid_ids and edge.target in mermaid_ids:
+                label = edge.kind if not edge.label else f"{edge.kind}: {edge.label}"
+                lines.append(
+                    f"  {mermaid_ids[edge.source]} -->|{label.replace('|', '/')}| "
+                    f"{mermaid_ids[edge.target]}"
+                )
         return "\n".join(lines)
+
+    def _node_label(self, graph: RepoGraph, node_id: str) -> str:
+        for node in graph.nodes:
+            if node.id == node_id:
+                return node.label
+        return node_id
 
     def _import_edges(self, graph: RepoGraph) -> list[tuple[str, str]]:
         known_modules = {record.module for record in graph.files if not record.parse_error and record.module}
@@ -364,11 +705,11 @@ class RepoMapAgent(BaseAgent):
             if record.parse_error or not record.module:
                 continue
             for imp in record.imports:
-                if imp.kind != "local" or not imp.module:
+                if imp.kind != "local":
                     continue
                 # Prefer a `from package import submodule` target so the edge points
                 # at the concrete dependency rather than the package __init__.
-                target = self._resolve_local_module(imp, known_modules) or (
+                target = self._resolve_local_module(record, imp, known_modules) or (
                     imp.module if imp.module in known_modules else ""
                 )
                 if not target or target == record.module:
@@ -379,13 +720,13 @@ class RepoMapAgent(BaseAgent):
                     edges.append(edge)
         return edges
 
-    def _resolve_local_module(self, imp: ImportInfo, known_modules: set[str]) -> str:
-        # ``from package import symbol`` where ``package.symbol`` is itself a module.
-        for name in imp.names:
-            candidate = f"{imp.module}.{name}" if imp.module else name
-            if candidate in known_modules:
-                return candidate
-        return ""
+    def _resolve_local_module(
+        self,
+        record: FileRecord,
+        imp: ImportInfo,
+        known_modules: set[str],
+    ) -> str:
+        return self._resolve_import_module(record, imp, known_modules)
 
     def run(self, root: Path | str) -> AgentResult:
         graph = self.map_repo(root)
@@ -397,5 +738,6 @@ class RepoMapAgent(BaseAgent):
                 "skipped": [record.path for record in graph.files if record.parse_error],
                 "local_modules": graph.local_modules,
                 "plan_context": self.to_plan_context(graph),
+                "graph": asdict(graph),
             },
         )

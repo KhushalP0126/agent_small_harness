@@ -163,6 +163,14 @@ class ExecutionTraceTests(unittest.TestCase):
         self.assertEqual(trace.cases[0].exception_type, "ZeroDivisionError")
         self.assertTrue(trace.cases[0].traceback)
 
+    def test_trace_captures_stdout_and_behavior_issue_cites_it(self) -> None:
+        source = "def add(a, b):\n    print('observed', a, b)\n    return a - b\n"
+        trace = execute_behavior_trace(source, self._spec())
+        self.assertIn("observed 2 3", trace.cases[0].stdout)
+        result = behavior_result_from_trace(trace)
+        self.assertFalse(result.is_compliant)
+        self.assertIn("stdout: observed 2 3", result.issues[0].details)
+
     def test_result_derived_from_trace_matches_validator(self) -> None:
         source = "def add(a, b):\n    return a - b\n"
         spec = self._spec()

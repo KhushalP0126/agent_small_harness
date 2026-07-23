@@ -10,6 +10,8 @@ from agents.execution_agent import ExecutionAgent
 from agents.parse_contract import ParseContractAgent, ParseFailure
 from agents.repair_strategy import MANUAL_REVIEW, RepairStrategyAgent
 from engines.base import EngineFinding
+from harness_kernel.tool_handlers import ExecutionRequest
+from harness_kernel.tool_registry import ToolRegistry
 from prompt.architect_builder import build_state_machine_architect_prompt
 from prompt.backend_failure_builder import build_backend_failure_architect_prompt
 from prompt.budget import budget_prompt
@@ -124,8 +126,11 @@ class GenerationController(BaseAgent):
         repair_strategy: RepairStrategyAgent | None = None,
         language: str | None = None,
         execution_agent: ExecutionAgent | None = None,
-        enable_execution_trace: bool = False,
-        enable_debugger_hints: bool = False,
+        enable_execution_trace: bool = True,
+        enable_debugger_hints: bool = True,
+        debugger_type_contracts: list[str] | None = None,
+        allow_architect_repair_retry: bool = False,
+        tool_registry: ToolRegistry | None = None,
     ) -> None:
         self.max_retries = max_retries
         self.draft_supplier = draft_supplier or (lambda prompt: prompt)
@@ -144,6 +149,9 @@ class GenerationController(BaseAgent):
         self.language = language
         self.enable_execution_trace = enable_execution_trace
         self.enable_debugger_hints = enable_debugger_hints
+        self.debugger_type_contracts = list(debugger_type_contracts or [])
+        self.allow_architect_repair_retry = allow_architect_repair_retry
+        self.tool_registry = tool_registry
         self.execution_agent = execution_agent or (
             ExecutionAgent() if (enable_execution_trace or enable_debugger_hints) else None
         )
@@ -171,6 +179,12 @@ class GenerationController(BaseAgent):
                 )
             ]
         return self.engine_registry.findings_for(source, parse_result.language)
+
+    def _can_execute_behavior(self, source: str) -> bool:
+        parse_result = self.parse_contract.parse(source, language=self.language)
+        return not isinstance(parse_result, ParseFailure) and self.engine_registry.has_language(
+            parse_result.language
+        )
 
     def _route(self, findings: list[EngineFinding]) -> str:
         complexity = next(
@@ -817,6 +831,7 @@ class GenerationController(BaseAgent):
         draft = initial_draft
         draft_source_worker = draft_source_override if draft_override is not None else "draft_supplier"
         previous_draft = ""
+        architect_repair_retry_used = False
         for attempt_index in range(len(failed_attempts), self.max_retries + 1):
             findings = self._scan(draft)
             validation_result: ValidationResult = validate_findings(findings, policy=self.policy)
@@ -830,15 +845,48 @@ class GenerationController(BaseAgent):
                 )
                 if self.execution_agent is not None and (
                     self.enable_execution_trace or self.enable_debugger_hints
-                ):
+                ) and self._can_execute_behavior(draft):
                     # After the contract parses, actually run the draft. The trace
                     # feeds the behavior gate below; it does not gate on its own.
-                    trace = self.execution_agent.execute(
-                        draft, self.behavior_spec, timeout_seconds=behavior_timeout
-                    )
-                    execution_trace_payload = serialize_execution_trace(trace)
-                    execution_trace_obj = trace
-                    behavior_validation = serialize_behavior_result(behavior_result_from_trace(trace))
+                    trace = None
+                    dispatch_error: str | None = None
+                    if self.tool_registry is not None:
+                        dispatch_result = self.tool_registry.dispatch(
+                            "execution_sandbox",
+                            ExecutionRequest(
+                                source=draft,
+                                spec=self.behavior_spec,
+                                timeout_seconds=behavior_timeout,
+                            ),
+                        )
+                        if dispatch_result.ok:
+                            trace = dispatch_result.value
+                        else:
+                            dispatch_error = dispatch_result.error
+                    else:
+                        trace = self.execution_agent.execute(
+                            draft,
+                            self.behavior_spec,
+                            timeout_seconds=behavior_timeout,
+                        )
+                    if trace is not None:
+                        execution_trace_payload = serialize_execution_trace(trace)
+                        execution_trace_obj = trace
+                        behavior_validation = serialize_behavior_result(
+                            behavior_result_from_trace(trace)
+                        )
+                    else:
+                        if dispatch_error:
+                            self._debug_print(
+                                f"execution_sandbox tool failed: {dispatch_error}"
+                            )
+                        behavior_validation = serialize_behavior_result(
+                            validate_function_behavior(
+                                draft,
+                                self.behavior_spec,
+                                timeout_seconds=behavior_timeout,
+                            )
+                        )
                 else:
                     behavior_validation = serialize_behavior_result(
                         validate_function_behavior(
@@ -920,6 +968,19 @@ class GenerationController(BaseAgent):
                 not is_complete
                 and draft_source_worker == "architect_llm"
                 and not validation_result.is_compliant
+                and self.allow_architect_repair_retry
+                and not architect_repair_retry_used
+                and attempt_index < self.max_retries
+            ):
+                architect_repair_retry_used = True
+                self._debug_print(
+                    "Architect output failed static engine gates. Allowing one "
+                    "execution-informed repair attempt before manual review."
+                )
+            elif (
+                not is_complete
+                and draft_source_worker == "architect_llm"
+                and not validation_result.is_compliant
             ):
                 force_manual_review = True
                 if self._is_metric_scope_ambiguous(validation_result, behavior_validation, formal_validation):
@@ -991,7 +1052,10 @@ class GenerationController(BaseAgent):
                         )
                         retry_prompt = budget_prompt(retry_prompt).text
                 if self.enable_debugger_hints and execution_trace_obj is not None:
-                    debugger_hints = build_debugger_hints(execution_trace_obj)
+                    debugger_hints = build_debugger_hints(
+                        execution_trace_obj,
+                        type_contracts=self.debugger_type_contracts,
+                    )
                     if debugger_hints:
                         retry_prompt = (
                             f"{retry_prompt}\n\n"

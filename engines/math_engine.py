@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import ast
-
 from engines.base import BaseEngine, EngineDiagnostic, EngineFinding
 from engines.decomposition_engine import DecompositionEngine, StructuralIR
 

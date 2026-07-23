@@ -21,3 +21,6 @@ data/jobs.jsonl
 *.log
 *.tmp
 *.bak
+
+# Keep tool-specific AI instruction files out of the repository.
+[Aa][Ii].md

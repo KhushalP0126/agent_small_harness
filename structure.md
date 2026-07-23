@@ -36,7 +36,6 @@ described where relevant but are intentionally not tracked.
 - `.github/workflows/ci.yml` - GitHub Actions workflow for package install, tests, and Docker image build.
 - `.env.example` - Safe template for local secrets such as architect API keys.
 - `benchmarker.py` - Benchmark entrypoint and helper factory for Ollama-backed controllers.
-- `agent-harness.txt` - Historical ASCII architecture blueprint for the preprocessing, human-intercept, execution, validation, and postprocessing flow.
 - `requirements.txt` - Pip-compatible runtime dependency list, including tree-sitter, pygame, required Pylint, FastAPI, and Uvicorn.
 - `requirements-kernel.txt` - Optional Kernel browser documentation dependency manifest.
 - `requirements-formal.txt` - Optional Deal and CrossHair formal-validation dependency manifest.
@@ -58,7 +57,7 @@ agents; they prepare, route, validate, and record work.
 - `agents/prompt_normalizer.py` - Removes conversational filler from raw prompts.
 - `agents/task_classifier.py` - Infers task type, language, library hints, and route hints.
 - `agents/plan_mode.py` - Extracts target functions, behavior examples, state rules, graph context, adapter contracts, Deal candidates, and `TaskIR`. Optionally merges repo-map context when a repo root is supplied.
-- `agents/repo_map_agent.py` - AST repo walker that maps functions, variables, loop sites, and classified imports per file into a `RepoGraph`, with compact Plan Mode context and an on-demand mermaid renderer.
+- `agents/repo_map_agent.py` - AST repo walker that maps functions, variables, mutations, loop sites, and classified imports into typed `RepoGraph` nodes/edges, compact Plan Mode context, JSON, and live Mermaid output.
 - `agents/template_registry.py` - Optional injected template-route selector. It has no built-in app-specific route.
 - `agents/routing_policy.py` - Chooses worker, template-assisted worker, architect escalation, or manual review.
 - `agents/coder.py` - Builds initial model prompts from context and behavior specs.
@@ -122,7 +121,7 @@ Validation turns findings and runtime checks into pass/fail decisions.
 
 - `validation/types.py` - `Violation`, `ValidationResult`, violation kinds, and repair hints.
 - `validation/policy.py` - Maps engine findings to blocking or advisory violations.
-- `validation/behavior.py` - Timeout-bound behavioral validation for generated Python; the sandbox emits an `ExecutionTrace` and the pass/fail `BehaviorResult` is derived from it.
+- `validation/behavior.py` - Timeout-bound behavioral validation whose sandbox emits bounded per-case returns, output, exceptions, tracebacks, and timing in an `ExecutionTrace`; `BehaviorResult` and runtime-backed issue details are derived from it.
 - `validation/debugger.py` - Debugger-mode hook that diffs an `ExecutionTrace` against the spec sheet into bounded, targeted repair hints.
 - `validation/deal_contracts.py` - Executes explicit `@deal.example` contracts from generated code.
 - `validation/formal.py` - Optional CrossHair semantic validation.
@@ -221,7 +220,7 @@ Unit and integration coverage.
 - `tests/test_benchmarker.py` - Controller, prompt, behavior, supplier, and benchmark tests.
 - `tests/test_api.py` - Synchronous and asynchronous FastAPI boundary and job-store tests.
 - `tests/test_agents_pipeline.py` - Agent, registry, repair, historian, library, and controller integration tests.
-- `tests/test_behavior.py` - Behavior validator tests.
+- `tests/test_behavior.py` - Behavior validator parity, isolation, timeout, trace, output-capture, exception, and runtime-backed issue tests.
 - `tests/test_engine_edge_cases.py` - Engine false-positive and boundary tests.
 - `tests/test_cost_engine_scoping.py` - Cost-engine type/scoping tests.
 - `tests/test_graph_grounded_context.py` - Graph/context preservation tests.
@@ -231,8 +230,8 @@ Unit and integration coverage.
 - `tests/test_treesitter_pipeline.py` - Optional C/C++ tree-sitter tests.
 - `tests/test_deal_contract_queue.py` - Deal example extraction, contract queue, scaffold, and worker-packet tests.
 - `tests/test_structured_spec_runner.py` - Structured-spec parsing, contract validation, imported-symbol checks, accepted field/method context, artifact output, and smoke-execution regressions.
-- `tests/test_repo_map_agent.py` - Repo mapper record extraction, import classification, unparseable-file skip, renderings, and opt-in Plan Mode merge.
-- `tests/test_execution_agent.py` - Execution-trace capture and controller trace attachment gated by the opt-in flag.
+- `tests/test_repo_map_agent.py` - Repo mapper record/node/edge extraction, call/import/mutation graphing, import classification, unparseable-file skip, renderings, and opt-in Plan Mode merge.
+- `tests/test_execution_agent.py` - Execution-trace capture, parse-success controller attachment, default-off behavior, and debugger type-contract hook tests.
 - `tests/coding_capability/tasks.json` - Seven code-generation tasks with executable expected behaviors and edge cases.
 - `tests/worker_limit/tasks.json` - Graduated task set used to locate the local worker's capability boundary.
 - `tests/worker_limit/decompositions.json` - Decomposed versions of worker-limit tasks for testing whether smaller contracts improve completion.

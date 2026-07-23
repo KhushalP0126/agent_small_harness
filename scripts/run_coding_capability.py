@@ -407,6 +407,7 @@ def run_tasks(
             repair_strategy=RepairStrategyAgent(),
             enable_execution_trace=config.engines.behavior.execution_trace,
             enable_debugger_hints=config.engines.behavior.debugger_hints,
+            allow_architect_repair_retry=config.execution.routing.allow_architect_repair_retry,
         )
         result = controller.run(target=task["prompt"], initial_prompt=prompt)
         session = result.payload

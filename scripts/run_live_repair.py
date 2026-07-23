@@ -9,7 +9,6 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from agents.behavior_spec import BehaviorSpecAgent
 from agents.coder import CoderAgent
 from agents.generation_controller import GenerationController
 from agents.historian import HistorianAgent
@@ -31,7 +30,7 @@ def run_live_repair(
     gen_id: str = "live-repair",
 ) -> dict:
     source = fixture_path.read_text(encoding="utf-8")
-    behavior_spec = BehaviorSpecAgent().for_source(source) or mixed_hard_case_spec()
+    behavior_spec = mixed_hard_case_spec()
     strategy = RepairStrategyAgent()
     initial_prompt = CoderAgent().build_repair_prompt(
         source,

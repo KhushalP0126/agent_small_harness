@@ -27,7 +27,7 @@ def _documentation_search_agent(provider: str, model: str, config_path: Path) ->
         selected_model = model or DEFAULT_OLLAMA_MODEL
         client = OllamaClient()
 
-        def generate(prompt: str) -> str:
+        def qwen_generate(prompt: str) -> str:
             return client.generate(
                 prompt=prompt,
                 model=selected_model,
@@ -35,7 +35,9 @@ def _documentation_search_agent(provider: str, model: str, config_path: Path) ->
                 system="You are a library documentation research agent. Return JSON only.",
             )
 
-        return LibraryDocumentationSearchAgent(provider="qwen", model=selected_model, generate_text=generate)
+        return LibraryDocumentationSearchAgent(
+            provider="qwen", model=selected_model, generate_text=qwen_generate
+        )
     if provider == "deepseek":
         harness_config = load_config(config_path)
         architect_config = ArchitectConfig(repair_profile=harness_config.execution.architect.repair)
@@ -52,14 +54,16 @@ def _documentation_search_agent(provider: str, model: str, config_path: Path) ->
                 reasoning_effort=profile.reasoning_effort,
             )
 
-        def generate(prompt: str) -> str:
+        def deepseek_generate(prompt: str) -> str:
             return client.generate(
                 prompt=prompt,
                 system="You are a library documentation research agent. Return JSON only.",
                 profile=profile,
             )
 
-        return LibraryDocumentationSearchAgent(provider="deepseek", model=selected_model, generate_text=generate)
+        return LibraryDocumentationSearchAgent(
+            provider="deepseek", model=selected_model, generate_text=deepseek_generate
+        )
     if provider == "kernel":
         if model:
             raise ValueError("DOC_MODEL is not used with the kernel browser provider")
