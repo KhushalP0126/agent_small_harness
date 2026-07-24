@@ -207,8 +207,8 @@ Runnable experiments and operator tooling.
 - `scripts/discover_library.py` - Writes a reviewable library proposal and can ask DeepSeek, Qwen, or Kernel for documentation.
 - `scripts/approve_library.py` - Merges an approved proposal into the trusted registry.
 - `scripts/run_adversarial_prompts.py` - Runs trap prompts through the PEV loop.
-- `scripts/run_coding_capability.py` - Runs codegen tasks through engines, behavior checks, and optional architect escalation.
-- `scripts/run_worker_limit.py` - Harder-and-harder worker ladder.
+- `scripts/run_coding_capability.py` - Runs codegen tasks through engines, behavior checks, and optional architect escalation; `--resume-run` reloads a saved matching task checkpoint.
+- `scripts/run_worker_limit.py` - Harder-and-harder worker ladder with checkpoint resume through `--resume-run`.
 - `scripts/run_plan_mode_ladder.py` - Deterministic Plan Mode extraction ladder.
 - `scripts/run_raw_vs_harness.py` - Raw model versus harness comparison.
 - `scripts/run_formal_experiment.py` - Optional CrossHair smoke experiment.

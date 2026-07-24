@@ -58,7 +58,7 @@ Function-contract generation and final integration use complementary gates:
 
 These gates are task-agnostic. Snake and Pong remain external stress fixtures;
 their failures motivated the checks but do not create game-specific controller
-or validator logic. The implementation baseline is covered by 307 passing unit
+or validator logic. The implementation baseline is covered by 310 passing unit
 tests, including regression cases for hallucinated imports, immutable
 cross-contract state, method-call arity, skipped lint, and integrated runtime
 crashes.
@@ -120,6 +120,12 @@ ready. `ArtifactManager.load_checkpoint(run_id)` and
 prior diagnostics, draft lineage, and architect-retry state without rerunning
 completed attempts. Final metadata, prompts, findings, and timelines remain
 separate artifact files.
+
+The checkpoint read path is also exposed to operators:
+`make resume-coding-capability RESUME_RUN=<run-id>` and
+`make resume-worker-limit RESUME_RUN=<run-id>` load the matching task from
+`ARTIFACT_ROOT/<run-id>/checkpoint.json`, reuse its artifact directory, and
+continue from the saved attempt rather than generating a fresh initial draft.
 
 ## Typed Tool Dispatch
 

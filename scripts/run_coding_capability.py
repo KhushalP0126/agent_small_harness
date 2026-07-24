@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from agents.artifact_manager import ArtifactManager
+from agents.artifact_manager import ArtifactManager, ArtifactPaths
 from agents.generation_controller import GenerationController
 from agents.config_loader import DEFAULT_CONFIG_PATH, HarnessConfig, load_config
 from agents.historian import HistorianAgent
@@ -371,6 +371,7 @@ def run_tasks(
     save_artifacts: bool,
     config: HarnessConfig | None = None,
     architect_after_repair_attempts: int | None = None,
+    resume_run_id: str | None = None,
 ) -> int:
     config = config or HarnessConfig()
     policy = config.engines.policy.to_validation_policy()
@@ -379,6 +380,24 @@ def run_tasks(
     tasks = _load_tasks(tasks_path)
     historian = HistorianAgent(history_path)
     artifact_manager = ArtifactManager(artifact_root)
+    resume_checkpoint = None
+    resume_paths = None
+    if resume_run_id:
+        resume_checkpoint = artifact_manager.load_checkpoint(resume_run_id)
+        if resume_checkpoint is None:
+            raise ValueError(
+                f"No checkpoint found for run '{resume_run_id}' under {artifact_root}"
+            )
+        resume_target = resume_checkpoint.get("session", {}).get("target", "")
+        tasks = [task for task in tasks if task.get("prompt") == resume_target]
+        if not tasks:
+            raise ValueError(
+                f"Checkpoint '{resume_run_id}' target does not match any task in {tasks_path}"
+            )
+        resume_paths = ArtifactPaths(
+            run_id=resume_run_id,
+            run_dir=artifact_root / resume_run_id,
+        )
     passed = 0
     sessions: list[dict] = []
 
@@ -391,7 +410,7 @@ def run_tasks(
             model=model,
             supplier_mode=supplier_mode,
         )
-        paths = (
+        paths = resume_paths or (
             artifact_manager.create_run(prefix=task["name"])
             if save_artifacts
             else None
@@ -419,7 +438,11 @@ def run_tasks(
                 else None
             ),
         )
-        result = controller.run(target=task["prompt"], initial_prompt=prompt)
+        result = controller.run(
+            target=task["prompt"],
+            initial_prompt=prompt,
+            resume_from=resume_checkpoint,
+        )
         session = result.payload
         sessions.append(session)
         completed = session.get("final_status") == "completed"
@@ -519,6 +542,11 @@ def main() -> int:
     parser.add_argument("--record-runs", action="store_true")
     parser.add_argument("--save-artifacts", action="store_true")
     parser.add_argument(
+        "--resume-run",
+        default=None,
+        help="Resume one interrupted task from ARTIFACT_ROOT/<run_id>/checkpoint.json.",
+    )
+    parser.add_argument(
         "--architect-after-repair-attempts",
         type=int,
         default=None,
@@ -546,6 +574,7 @@ def main() -> int:
         save_artifacts=args.save_artifacts,
         config=config,
         architect_after_repair_attempts=args.architect_after_repair_attempts,
+        resume_run_id=args.resume_run,
     )
 
 

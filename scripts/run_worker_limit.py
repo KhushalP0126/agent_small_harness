@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from agents.artifact_manager import ArtifactManager
+from agents.artifact_manager import ArtifactManager, ArtifactPaths
 from agents.config_loader import DEFAULT_CONFIG_PATH, load_config
 from agents.generation_controller import GenerationController
 from agents.repair_strategy import RepairStrategyAgent
@@ -135,15 +135,35 @@ def run_ladder(
     decompose: bool,
     architect_after_repair_attempts: int | None,
     debug_controller: bool,
+    resume_run_id: str | None = None,
 ) -> int:
     config = load_config(DEFAULT_CONFIG_PATH)
     policy = config.engines.policy.to_validation_policy()
     artifact_manager = ArtifactManager(artifact_root)
+    tasks = _load_tasks(tasks_path)
+    resume_checkpoint = None
+    resume_paths = None
+    if resume_run_id:
+        resume_checkpoint = artifact_manager.load_checkpoint(resume_run_id)
+        if resume_checkpoint is None:
+            raise ValueError(
+                f"No checkpoint found for run '{resume_run_id}' under {artifact_root}"
+            )
+        resume_target = resume_checkpoint.get("session", {}).get("target", "")
+        tasks = [task for task in tasks if task.get("prompt") == resume_target]
+        if not tasks:
+            raise ValueError(
+                f"Checkpoint '{resume_run_id}' target does not match any task in {tasks_path}"
+            )
+        resume_paths = ArtifactPaths(
+            run_id=resume_run_id,
+            run_dir=artifact_root / resume_run_id,
+        )
     decompositions = _load_decompositions(decompositions_path) if decompose else {}
     rows: list[dict[str, Any]] = []
     first_break: dict[str, Any] | None = None
 
-    for task in _load_tasks(tasks_path):
+    for task in tasks:
         spec = _behavior_spec(task)
         active_model = (
             config.execution.models.resolve_for_difficulty(int(task.get("difficulty", 0)))
@@ -166,7 +186,7 @@ def run_ladder(
             f"model={active_model} mode={mode} architect_after={architect_after_repair_attempts}",
             flush=True,
         )
-        paths = (
+        paths = resume_paths or (
             artifact_manager.create_run(
                 prefix=f"worker_limit_{task['difficulty']}_{task['name']}"
             )
@@ -196,7 +216,11 @@ def run_ladder(
                 else None
             ),
         )
-        result = controller.run(target=task["prompt"], initial_prompt=prompt)
+        result = controller.run(
+            target=task["prompt"],
+            initial_prompt=prompt,
+            resume_from=resume_checkpoint,
+        )
         session = result.payload
         contribution = _worker_contribution(session)
         final_static = _final_static_violations(session)
@@ -276,6 +300,11 @@ def main() -> int:
     parser.add_argument("--decompose", action="store_true")
     parser.add_argument("--architect-after-repair-attempts", type=int, default=None)
     parser.add_argument("--debug-controller", action="store_true")
+    parser.add_argument(
+        "--resume-run",
+        default=None,
+        help="Resume one interrupted task from ARTIFACT_ROOT/<run_id>/checkpoint.json.",
+    )
     args = parser.parse_args()
     return run_ladder(
         tasks_path=args.tasks,
@@ -290,6 +319,7 @@ def main() -> int:
         decompose=args.decompose,
         architect_after_repair_attempts=args.architect_after_repair_attempts,
         debug_controller=args.debug_controller,
+        resume_run_id=args.resume_run,
     )
 
 

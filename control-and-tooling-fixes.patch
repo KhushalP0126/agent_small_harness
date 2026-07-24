@@ -1,0 +1,875 @@
+diff --git a/agents/config_loader.py b/agents/config_loader.py
+index f60f92f..a8b7d1f 100644
+--- a/agents/config_loader.py
++++ b/agents/config_loader.py
+@@ -68,8 +68,8 @@ class PolicyConfig:
+ class BehaviorConfig:
+     enabled: bool = True
+     timeout_seconds: float = 1.0
+-    execution_trace: bool = False
+-    debugger_hints: bool = False
++    execution_trace: bool = True
++    debugger_hints: bool = True
+ 
+ 
+ @dataclass(frozen=True)
+@@ -126,6 +126,7 @@ class ModelsConfig:
+ class RoutingConfig:
+     architect_after_repair_attempts: int | None = 1
+     complexity_threshold: float = 0.7
++    allow_architect_repair_retry: bool = False
+ 
+ 
+ @dataclass(frozen=True)
+@@ -222,7 +223,7 @@ class HarnessConfig:
+         )
+         _ensure_known_keys(
+             routing,
+-            {"architect_after_repair_attempts", "complexity_threshold"},
++            {"architect_after_repair_attempts", "complexity_threshold", "allow_architect_repair_retry"},
+             "execution.routing",
+         )
+         _ensure_known_keys(
+@@ -262,8 +263,8 @@ class HarnessConfig:
+                 behavior=BehaviorConfig(
+                     enabled=_bool(behavior, "enabled", True),
+                     timeout_seconds=_float(behavior, "timeout_seconds", 1.0, minimum=0.1),
+-                    execution_trace=_bool(behavior, "execution_trace", False),
+-                    debugger_hints=_bool(behavior, "debugger_hints", False),
++                    execution_trace=_bool(behavior, "execution_trace", True),
++                    debugger_hints=_bool(behavior, "debugger_hints", True),
+                 ),
+                 formal=FormalConfig(
+                     crosshair_enabled=_bool(formal, "crosshair_enabled", False),
+@@ -306,6 +307,9 @@ class HarnessConfig:
+                     complexity_threshold=_float(
+                         routing, "complexity_threshold", 0.7, minimum=0.0
+                     ),
++                    allow_architect_repair_retry=_bool(
++                        routing, "allow_architect_repair_retry", False
++                    ),
+                 ),
+                 gates=GatesConfig(
+                     auto_repair=_bool(gates, "auto_repair", True),
+diff --git a/agents/generation_controller.py b/agents/generation_controller.py
+index ceab17a..b2a9038 100644
+--- a/agents/generation_controller.py
++++ b/agents/generation_controller.py
+@@ -10,6 +10,8 @@ from agents.execution_agent import ExecutionAgent
+ from agents.parse_contract import ParseContractAgent, ParseFailure
+ from agents.repair_strategy import MANUAL_REVIEW, RepairStrategyAgent
+ from engines.base import EngineFinding
++from harness_kernel.tool_handlers import ExecutionRequest
++from harness_kernel.tool_registry import ToolRegistry
+ from prompt.architect_builder import build_state_machine_architect_prompt
+ from prompt.backend_failure_builder import build_backend_failure_architect_prompt
+ from prompt.budget import budget_prompt
+@@ -124,8 +126,10 @@ class GenerationController(BaseAgent):
+         repair_strategy: RepairStrategyAgent | None = None,
+         language: str | None = None,
+         execution_agent: ExecutionAgent | None = None,
+-        enable_execution_trace: bool = False,
+-        enable_debugger_hints: bool = False,
++        enable_execution_trace: bool = True,
++        enable_debugger_hints: bool = True,
++        allow_architect_repair_retry: bool = False,
++        tool_registry: ToolRegistry | None = None,
+     ) -> None:
+         self.max_retries = max_retries
+         self.draft_supplier = draft_supplier or (lambda prompt: prompt)
+@@ -144,6 +148,8 @@ class GenerationController(BaseAgent):
+         self.language = language
+         self.enable_execution_trace = enable_execution_trace
+         self.enable_debugger_hints = enable_debugger_hints
++        self.allow_architect_repair_retry = allow_architect_repair_retry
++        self.tool_registry = tool_registry
+         self.execution_agent = execution_agent or (
+             ExecutionAgent() if (enable_execution_trace or enable_debugger_hints) else None
+         )
+@@ -817,6 +823,7 @@ class GenerationController(BaseAgent):
+         draft = initial_draft
+         draft_source_worker = draft_source_override if draft_override is not None else "draft_supplier"
+         previous_draft = ""
++        architect_repair_retry_used = False
+         for attempt_index in range(len(failed_attempts), self.max_retries + 1):
+             findings = self._scan(draft)
+             validation_result: ValidationResult = validate_findings(findings, policy=self.policy)
+@@ -833,12 +840,42 @@ class GenerationController(BaseAgent):
+                 ):
+                     # After the contract parses, actually run the draft. The trace
+                     # feeds the behavior gate below; it does not gate on its own.
+-                    trace = self.execution_agent.execute(
+-                        draft, self.behavior_spec, timeout_seconds=behavior_timeout
+-                    )
+-                    execution_trace_payload = serialize_execution_trace(trace)
+-                    execution_trace_obj = trace
+-                    behavior_validation = serialize_behavior_result(behavior_result_from_trace(trace))
++                    trace = None
++                    dispatch_error: str | None = None
++                    if self.tool_registry is not None:
++                        dispatch_result = self.tool_registry.dispatch(
++                            "execution_sandbox",
++                            ExecutionRequest(
++                                source=draft,
++                                spec=self.behavior_spec,
++                                timeout_seconds=behavior_timeout,
++                            ),
++                        )
++                        if dispatch_result.ok:
++                            trace = dispatch_result.value
++                        else:
++                            dispatch_error = dispatch_result.error
++                    else:
++                        trace = self.execution_agent.execute(
++                            draft, self.behavior_spec, timeout_seconds=behavior_timeout
++                        )
++                    if trace is not None:
++                        execution_trace_payload = serialize_execution_trace(trace)
++                        execution_trace_obj = trace
++                        behavior_validation = serialize_behavior_result(behavior_result_from_trace(trace))
++                    else:
++                        # The sandbox tool failed unexpectedly (not a normal
++                        # behavior mismatch) - fall back to the legacy behavior
++                        # gate rather than letting this crash the whole attempt.
++                        if dispatch_error:
++                            self._debug_print(f"execution_sandbox tool failed: {dispatch_error}")
++                        behavior_validation = serialize_behavior_result(
++                            validate_function_behavior(
++                                draft,
++                                self.behavior_spec,
++                                timeout_seconds=behavior_timeout,
++                            )
++                        )
+                 else:
+                     behavior_validation = serialize_behavior_result(
+                         validate_function_behavior(
+@@ -920,6 +957,19 @@ class GenerationController(BaseAgent):
+                 not is_complete
+                 and draft_source_worker == "architect_llm"
+                 and not validation_result.is_compliant
++                and self.allow_architect_repair_retry
++                and not architect_repair_retry_used
++                and attempt_index < self.max_retries
++            ):
++                architect_repair_retry_used = True
++                self._debug_print(
++                    "Architect output failed static engine gates. Allowing one execution-informed "
++                    "repair attempt (with debugger observations, if available) before manual review."
++                )
++            elif (
++                not is_complete
++                and draft_source_worker == "architect_llm"
++                and not validation_result.is_compliant
+             ):
+                 force_manual_review = True
+                 if self._is_metric_scope_ambiguous(validation_result, behavior_validation, formal_validation):
+diff --git a/config.yaml b/config.yaml
+index 92d36ff..630228c 100644
+--- a/config.yaml
++++ b/config.yaml
+@@ -22,8 +22,8 @@ engines:
+   behavior:
+     enabled: true
+     timeout_seconds: 1.0
+-    execution_trace: false
+-    debugger_hints: false
++    execution_trace: true
++    debugger_hints: true
+   formal:
+     crosshair_enabled: false
+     crosshair_timeout_seconds: 3.0
+@@ -59,6 +59,7 @@ execution:
+   routing:
+     architect_after_repair_attempts: 1
+     complexity_threshold: 0.7
++    allow_architect_repair_retry: false
+   gates:
+     auto_repair: true
+     max_retries: 3
+diff --git a/harness_kernel/__init__.py b/harness_kernel/__init__.py
+index 3c5bff0..4ef52d8 100644
+--- a/harness_kernel/__init__.py
++++ b/harness_kernel/__init__.py
+@@ -1,4 +1,15 @@
+-from harness_kernel.execution_kernel import ExecutionKernel
++"""Lazy package exports.
++
++`execution_kernel.py` imports `agents.generation_controller.GenerationController`
++(an intentional but inverted dependency: kernel -> agents). Eagerly importing
++it here at package-init time means importing *any* `harness_kernel.*`
++submodule forces that chain to run first — which becomes a circular import
++the moment something under `agents/` needs a `harness_kernel` submodule
++(as `generation_controller.py` now does, for the tool registry). Deferring
++the heavy names to attribute access on first use avoids that without
++changing what's importable.
++"""
++
+ from harness_kernel.function_contracts import ContractQueue, DealExample, FunctionContract, parse_contract_queue_json
+ from harness_kernel.task_ir import TaskIR, TemplateRoute, ValidationPlan
+ 
+@@ -12,3 +23,11 @@ __all__ = [
+     "ValidationPlan",
+     "parse_contract_queue_json",
+ ]
++
++
++def __getattr__(name: str):
++    if name == "ExecutionKernel":
++        from harness_kernel.execution_kernel import ExecutionKernel
++
++        return ExecutionKernel
++    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+diff --git a/harness_kernel/tool_handlers.py b/harness_kernel/tool_handlers.py
+new file mode 100644
+index 0000000..3a6b627
+--- /dev/null
++++ b/harness_kernel/tool_handlers.py
+@@ -0,0 +1,86 @@
++"""Concrete typed tools registered on a `ToolRegistry`.
++
++These wrap existing, already-working behavior (`LintEngine`,
++`ExecutionAgent`) rather than reimplementing it — the point is a uniform,
++typed dispatch/failure-handling seam on top, not a new lint or sandbox
++implementation.
++"""
++
++from __future__ import annotations
++
++from dataclasses import dataclass, field
++
++from agents.execution_agent import ExecutionAgent
++from engines.base import EngineFinding
++from engines.lint_engine import LintEngine
++from harness_kernel.tool_registry import ToolHandler, ToolRegistry
++from validation.behavior import DEFAULT_BEHAVIOR_TIMEOUT_SECONDS, ExecutionTrace, FunctionBehaviorSpec
++
++
++@dataclass(frozen=True)
++class LintRequest:
++    source: str
++
++
++@dataclass(frozen=True)
++class LintResult:
++    findings: list[EngineFinding] = field(default_factory=list)
++
++    @property
++    def blocking(self) -> bool:
++        return any(finding.severity in {"High", "Fatal"} for finding in self.findings)
++
++
++@dataclass(frozen=True)
++class ExecutionRequest:
++    source: str
++    spec: FunctionBehaviorSpec
++    timeout_seconds: float | None = None
++
++
++def _make_lint_handler(engine: LintEngine | None = None) -> ToolHandler[LintRequest, LintResult]:
++    engine = engine or LintEngine()
++
++    def invoke(request: LintRequest) -> LintResult:
++        return LintResult(findings=engine.scan(request.source))
++
++    return ToolHandler(
++        name="lint",
++        request_type=LintRequest,
++        response_type=LintResult,
++        invoke=invoke,
++        description="Run pylint (error/fatal categories only) against a source string.",
++    )
++
++
++def _make_execution_sandbox_handler(
++    agent: ExecutionAgent | None = None,
++) -> ToolHandler[ExecutionRequest, ExecutionTrace]:
++    agent = agent or ExecutionAgent(timeout_seconds=DEFAULT_BEHAVIOR_TIMEOUT_SECONDS)
++
++    def invoke(request: ExecutionRequest) -> ExecutionTrace:
++        return agent.execute(
++            request.source,
++            request.spec,
++            timeout_seconds=request.timeout_seconds,
++        )
++
++    return ToolHandler(
++        name="execution_sandbox",
++        request_type=ExecutionRequest,
++        response_type=ExecutionTrace,
++        invoke=invoke,
++        description="Run a draft against its behavior examples in an isolated process and capture a trace.",
++    )
++
++
++def build_default_tool_registry(
++    lint_engine: LintEngine | None = None,
++    execution_agent: ExecutionAgent | None = None,
++) -> ToolRegistry:
++    """Build a registry pre-populated with the harness's core dispatched tools."""
++
++    registry = ToolRegistry()
++    registry.register(_make_lint_handler(lint_engine))
++    registry.register(_make_execution_sandbox_handler(execution_agent))
++    return registry
+diff --git a/harness_kernel/tool_registry.py b/harness_kernel/tool_registry.py
+new file mode 100644
+index 0000000..7b2983a
+--- /dev/null
++++ b/harness_kernel/tool_registry.py
+@@ -0,0 +1,140 @@
++"""Typed tool-handler dispatch layer.
++
++The harness already has several "do a thing and catch what goes wrong"
++operations scattered around the codebase — running pylint in a subprocess
++(`engines/lint_engine.py`), running a draft in a sandboxed process
++(`agents/execution_agent.py`), calling out to a model backend
++(`backends/*.py`). Each of those catches its own failures in its own way,
++with its own ad-hoc result shape.
++
++This module gives them one typed, uniform seam: a `ToolHandler` declares
++what request/response types it accepts, a `ToolRegistry` looks handlers up
++by name and dispatches to them, and every dispatch returns a `ToolResult`
++(`ok`/`value`/`error`) instead of letting the handler's exception surface
++directly to the caller. Callers stop needing to know which tool raises
++what; they just check `result.ok`.
++
++This is intentionally a *thin* seam, not a new execution engine — it wraps
++existing behavior (`ExecutionAgent`, `LintEngine`, ...) rather than
++reimplementing it, so the underlying logic keeps exactly the semantics it
++already had.
++"""
++
++from __future__ import annotations
++
++from dataclasses import dataclass
++from typing import Any, Callable, Generic, TypeVar
++
++RequestT = TypeVar("RequestT")
++ResponseT = TypeVar("ResponseT")
++
++
++class ToolError(Exception):
++    """Raised by a handler to report a typed, expected failure.
++
++    Handlers may also raise anything else (a bug, a timeout from an
++    underlying subprocess, ...) — the registry catches both `ToolError`
++    and any other `Exception` and turns them into a `ToolResult`, but
++    `ToolError` lets a handler attach a stable `kind` for callers that
++    want to branch on failure type without string-matching a message.
++    """
++
++    def __init__(self, message: str, kind: str = "tool_error") -> None:
++        super().__init__(message)
++        self.kind = kind
++
++
++@dataclass(frozen=True)
++class ToolResult(Generic[ResponseT]):
++    """Uniform outcome of a dispatched tool call."""
++
++    ok: bool
++    tool: str = ""
++    value: ResponseT | None = None
++    error: str | None = None
++    error_kind: str | None = None
++
++    @classmethod
++    def success(cls, tool: str, value: ResponseT) -> "ToolResult[ResponseT]":
++        return cls(ok=True, tool=tool, value=value)
++
++    @classmethod
++    def failure(cls, tool: str, error: str, error_kind: str = "tool_error") -> "ToolResult[Any]":
++        return cls(ok=False, tool=tool, error=error, error_kind=error_kind)
++
++
++@dataclass(frozen=True)
++class ToolHandler(Generic[RequestT, ResponseT]):
++    """A named, typed action the registry can dispatch to.
++
++    `invoke` receives the *unwrapped* validated request and should return a
++    plain response value or raise (`ToolError` for an expected/typed
++    failure, any other `Exception` for an unexpected one) — the registry
++    handles both, so handlers should not need their own try/except for the
++    purpose of producing a `ToolResult`.
++    """
++
++    name: str
++    request_type: type
++    response_type: type
++    invoke: Callable[[RequestT], ResponseT]
++    description: str = ""
++
++
++class ToolRegistry:
++    """Looks up handlers by name and dispatches with uniform failure handling."""
++
++    def __init__(self) -> None:
++        self._handlers: dict[str, ToolHandler] = {}
++
++    def register(self, handler: ToolHandler) -> None:
++        if handler.name in self._handlers:
++            raise ValueError(f"Tool '{handler.name}' is already registered")
++        self._handlers[handler.name] = handler
++
++    def unregister(self, name: str) -> None:
++        self._handlers.pop(name, None)
++
++    def get(self, name: str) -> ToolHandler | None:
++        return self._handlers.get(name)
++
++    def known_tools(self) -> list[str]:
++        return sorted(self._handlers)
++
++    def dispatch(self, name: str, request: Any) -> ToolResult:
++        handler = self._handlers.get(name)
++        if handler is None:
++            return ToolResult.failure(
++                tool=name,
++                error=f"No tool registered under '{name}'. Known tools: {self.known_tools()}",
++                error_kind="unknown_tool",
++            )
++        if handler.request_type is not type(None) and not isinstance(request, handler.request_type):
++            return ToolResult.failure(
++                tool=name,
++                error=(
++                    f"Tool '{name}' expected a {handler.request_type.__name__} request, "
++                    f"got {type(request).__name__}"
++                ),
++                error_kind="invalid_request_type",
++            )
++        try:
++            response = handler.invoke(request)
++        except ToolError as exc:
++            return ToolResult.failure(tool=name, error=str(exc), error_kind=exc.kind)
++        except Exception as exc:  # noqa: BLE001 - deliberately catch-all at the dispatch boundary
++            return ToolResult.failure(
++                tool=name,
++                error=f"{type(exc).__name__}: {exc}",
++                error_kind="handler_exception",
++            )
++        if handler.response_type is not type(None) and not isinstance(response, handler.response_type):
++            return ToolResult.failure(
++                tool=name,
++                error=(
++                    f"Tool '{name}' returned a {type(response).__name__}, "
++                    f"expected {handler.response_type.__name__}"
++                ),
++                error_kind="invalid_response_type",
++            )
++        return ToolResult.success(tool=name, value=response)
+diff --git a/scripts/run_coding_capability.py b/scripts/run_coding_capability.py
+index 576ee6f..7e3d63f 100644
+--- a/scripts/run_coding_capability.py
++++ b/scripts/run_coding_capability.py
+@@ -407,6 +407,7 @@ def run_tasks(
+             repair_strategy=RepairStrategyAgent(),
+             enable_execution_trace=config.engines.behavior.execution_trace,
+             enable_debugger_hints=config.engines.behavior.debugger_hints,
++            allow_architect_repair_retry=config.execution.routing.allow_architect_repair_retry,
+         )
+         result = controller.run(target=task["prompt"], initial_prompt=prompt)
+         session = result.payload
+diff --git a/scripts/run_structured_spec.py b/scripts/run_structured_spec.py
+index 09c1594..eb9d332 100644
+--- a/scripts/run_structured_spec.py
++++ b/scripts/run_structured_spec.py
+@@ -789,7 +789,7 @@ def _run_contract_queue_sequentially(
+                     dependencies=dependencies,
+                 )
+             )
+-            break
++            continue
+         allowed_libraries = set(getattr(plan, "allowed_libraries", []))
+         issues = _validate_contract_source(
+             source,
+@@ -911,7 +911,7 @@ def _run_contract_queue_sequentially(
+                     repair_attempts=repair_attempts,
+                 )
+             )
+-            break
++            continue
+         print(f"[contract-queue] {generated_count}/{total} {contract.name}: accepted", flush=True)
+         accepted_sources.append(source)
+         accepted_source_by_name[contract.name] = source
+@@ -1243,7 +1243,7 @@ def run_spec(
+             small_retries_per_contract=max_retries,
+             architect_retries_per_contract=1 if architect_supplier is not None else 0,
+         )
+-        if len(accepted_sources) != len(queue.contracts):
++        if not accepted_sources:
+             session = {
+                 "target": spec_text,
+                 "route": "function_contract_queue",
+diff --git a/tests/test_agents_pipeline.py b/tests/test_agents_pipeline.py
+index 12796a3..a213dbb 100644
+--- a/tests/test_agents_pipeline.py
++++ b/tests/test_agents_pipeline.py
+@@ -1590,6 +1590,37 @@ def analyze(value):
+         self.assertEqual(result.payload["attempts"][-1]["draft_source_worker"], "architect_llm")
+         self.assertEqual(result.payload["attempts"][-1]["validation"]["violations"][0]["kind"], "parse_error")
+ 
++    def test_architect_repair_retry_opt_in_gets_second_attempt_before_manual_review(self) -> None:
++        bad_source = """
++def analyze(value):
++    if value:
++        return value
++    return 0
++"""
++        architect_calls = []
++
++        def architect_supplier(_draft: str, retry_prompt: str) -> str:
++            architect_calls.append(retry_prompt)
++            if len(architect_calls) == 1:
++                # Same syntax-error failure as the hard-stop test above.
++                return "def broken(:\n    return 1\n"
++            # Second, execution-informed attempt actually parses and is simple.
++            return "def analyze(value):\n    return value\n"
++
++        controller = GenerationController(
++            max_retries=3,
++            draft_supplier=lambda _prompt: bad_source,
++            repair_supplier=lambda draft, _prompt: draft,
++            architect_supplier=architect_supplier,
++            architect_after_repair_attempts=0,
++            policy={"max_cyclomatic_complexity": 1},
++            allow_architect_repair_retry=True,
++        )
++        result = controller.run(target="architect-parse-error", initial_prompt="generate")
++
++        self.assertEqual(len(architect_calls), 2)
++        self.assertEqual(result.payload["final_status"], "completed")
++
+     def test_unknown_registered_api_feedback_repairs_through_controller(self) -> None:
+         violating_source = (
+             "import pygame\n\n"
+diff --git a/tests/test_execution_agent.py b/tests/test_execution_agent.py
+index 799b373..9a0a0ab 100644
+--- a/tests/test_execution_agent.py
++++ b/tests/test_execution_agent.py
+@@ -2,6 +2,7 @@ import unittest
+ 
+ from agents.execution_agent import ExecutionAgent
+ from agents.generation_controller import GenerationController
++from harness_kernel.tool_registry import ToolHandler, ToolRegistry
+ from validation.behavior import BehaviorCase, FunctionBehaviorSpec
+ 
+ 
+@@ -61,7 +62,7 @@ class ExecutionAgentTests(unittest.TestCase):
+         self.assertEqual(attempt["execution_trace"]["cases"][0]["returned"], "-1")
+         self.assertFalse(attempt["behavior_validation"]["is_compliant"])
+ 
+-    def test_controller_default_off_leaves_trace_empty(self) -> None:
++    def test_controller_default_on_attaches_trace(self) -> None:
+         spec = _spec()
+         default = GenerationController(
+             max_retries=0,
+@@ -69,10 +70,63 @@ class ExecutionAgentTests(unittest.TestCase):
+             behavior_spec=spec,
+         )
+         attempt = default.run(target="add", initial_prompt="x").payload["attempts"][-1]
++        # Execution trace/debugger hints are on by default so the worker gets
++        # real runtime evidence instead of a bare rejection.
++        self.assertTrue(attempt["execution_trace"])
++        self.assertEqual(attempt["execution_trace"]["cases"][0]["returned"], "-1")
++        self.assertFalse(attempt["behavior_validation"]["is_compliant"])
++
++    def test_controller_explicit_opt_out_leaves_trace_empty(self) -> None:
++        spec = _spec()
++        disabled = GenerationController(
++            max_retries=0,
++            draft_supplier=lambda _prompt: WRONG_SOURCE,
++            behavior_spec=spec,
++            enable_execution_trace=False,
++            enable_debugger_hints=False,
++        )
++        attempt = disabled.run(target="add", initial_prompt="x").payload["attempts"][-1]
+         self.assertEqual(attempt["execution_trace"], {})
+         # Behavior gate still runs via the legacy path.
+         self.assertFalse(attempt["behavior_validation"]["is_compliant"])
+ 
++    def test_controller_uses_tool_registry_when_provided(self) -> None:
++        from harness_kernel.tool_handlers import build_default_tool_registry
++
++        spec = _spec()
++        controller = GenerationController(
++            max_retries=0,
++            draft_supplier=lambda _prompt: WRONG_SOURCE,
++            behavior_spec=spec,
++            tool_registry=build_default_tool_registry(),
++        )
++        attempt = controller.run(target="add", initial_prompt="x").payload["attempts"][-1]
++        self.assertTrue(attempt["execution_trace"])
++        self.assertEqual(attempt["execution_trace"]["cases"][0]["returned"], "-1")
++
++    def test_controller_falls_back_gracefully_when_tool_registry_handler_breaks(self) -> None:
++        spec = _spec()
++        registry = ToolRegistry()
++        registry.register(
++            ToolHandler(
++                name="execution_sandbox",
++                request_type=object,
++                response_type=object,
++                invoke=lambda _request: (_ for _ in ()).throw(RuntimeError("sandbox is on fire")),
++            )
++        )
++        controller = GenerationController(
++            max_retries=0,
++            draft_supplier=lambda _prompt: WRONG_SOURCE,
++            behavior_spec=spec,
++            tool_registry=registry,
++        )
++        # Must not raise, even though the registered tool always blows up.
++        attempt = controller.run(target="add", initial_prompt="x").payload["attempts"][-1]
++        self.assertEqual(attempt["execution_trace"], {})
++        # Falls back to the legacy behavior gate and still reports the mismatch.
++        self.assertFalse(attempt["behavior_validation"]["is_compliant"])
++
+ 
+ if __name__ == "__main__":
+     unittest.main()
+diff --git a/tests/test_structured_spec_runner.py b/tests/test_structured_spec_runner.py
+index f958096..41a4d83 100644
+--- a/tests/test_structured_spec_runner.py
++++ b/tests/test_structured_spec_runner.py
+@@ -489,6 +489,67 @@ if __name__ == "__main__":
+         self.assertEqual(results[0].repair_attempts[-1]["status"], "accepted")
+         self.assertEqual(len(accepted_sources), 1)
+ 
++    def test_contract_queue_isolates_independent_contract_failure(self) -> None:
++        plan = PlanModeAgent().plan("")
++        queue = ContractQueue(
++            [
++                FunctionContract(
++                    name="doomed",
++                    signature="def doomed() -> int",
++                    examples=[DealExample("doomed()", "1")],
++                ),
++                FunctionContract(
++                    name="independent",
++                    signature="def independent() -> int",
++                    examples=[DealExample("independent()", "5")],
++                ),
++                FunctionContract(
++                    name="depends_on_doomed",
++                    signature="def depends_on_doomed() -> int",
++                    dependencies=["doomed"],
++                ),
++            ]
++        )
++        calls = []
++
++        def generate(prompt: str) -> str:
++            if "NAME: doomed" in prompt:
++                calls.append("generate:doomed")
++                # Never satisfies its example; will exhaust retries and fail.
++                return "def doomed() -> int:\n    return 0\n"
++            if "NAME: independent" in prompt:
++                calls.append("generate:independent")
++                return "def independent() -> int:\n    return 5\n"
++            raise AssertionError(f"unexpected prompt for: {prompt[:80]}")
++
++        def repair(draft: str, prompt: str) -> str:
++            calls.append("repair:doomed")
++            # Repair keeps failing on purpose to simulate an unfixable contract.
++            return "def doomed() -> int:\n    return -1\n"
++
++        accepted_sources, results = _run_contract_queue_sequentially(
++            queue,
++            plan,
++            generate,
++            repair_draft=repair,
++            small_retries_per_contract=1,
++        )
++
++        results_by_name = {result.name: result for result in results}
++        # The independent contract must still be attempted and accepted even
++        # though `doomed` (which it does not depend on) failed permanently.
++        self.assertEqual(results_by_name["doomed"].status, "validation_failed")
++        self.assertEqual(results_by_name["independent"].status, "accepted")
++        self.assertIn("def independent", "\n".join(accepted_sources))
++        # The contract that genuinely depends on the failed one must be
++        # reported as blocked rather than silently dropped or attempted.
++        blocked_result = next(
++            (result for result in results if result.status == "dependency_blocked"),
++            None,
++        )
++        self.assertIsNotNone(blocked_result)
++        self.assertIn("depends_on_doomed", blocked_result.issues[0]["details"])
++
+     def test_small_worker_contract_prompt_uses_local_graph_slice(self) -> None:
+         plan = PlanModeAgent().plan(
+             """
+diff --git a/tests/test_tool_registry.py b/tests/test_tool_registry.py
+new file mode 100644
+index 0000000..29252f0
+--- /dev/null
++++ b/tests/test_tool_registry.py
+@@ -0,0 +1,168 @@
++import unittest
++from dataclasses import dataclass
++
++from engines.base import EngineFinding
++from harness_kernel.tool_handlers import (
++    ExecutionRequest,
++    LintRequest,
++    LintResult,
++    build_default_tool_registry,
++)
++from harness_kernel.tool_registry import ToolError, ToolHandler, ToolRegistry
++from validation.behavior import BehaviorCase, FunctionBehaviorSpec
++
++
++@dataclass(frozen=True)
++class _EchoRequest:
++    value: int
++
++
++@dataclass(frozen=True)
++class _EchoResponse:
++    value: int
++
++
++class ToolRegistryTests(unittest.TestCase):
++    def test_dispatch_success_returns_ok_result(self) -> None:
++        registry = ToolRegistry()
++        registry.register(
++            ToolHandler(
++                name="echo",
++                request_type=_EchoRequest,
++                response_type=_EchoResponse,
++                invoke=lambda request: _EchoResponse(value=request.value + 1),
++            )
++        )
++        result = registry.dispatch("echo", _EchoRequest(value=1))
++        self.assertTrue(result.ok)
++        self.assertEqual(result.value, _EchoResponse(value=2))
++        self.assertEqual(result.tool, "echo")
++
++    def test_dispatch_unknown_tool_fails_without_raising(self) -> None:
++        registry = ToolRegistry()
++        result = registry.dispatch("does_not_exist", _EchoRequest(value=1))
++        self.assertFalse(result.ok)
++        self.assertEqual(result.error_kind, "unknown_tool")
++
++    def test_dispatch_wrong_request_type_fails_without_raising(self) -> None:
++        registry = ToolRegistry()
++        registry.register(
++            ToolHandler(
++                name="echo",
++                request_type=_EchoRequest,
++                response_type=_EchoResponse,
++                invoke=lambda request: _EchoResponse(value=request.value),
++            )
++        )
++        result = registry.dispatch("echo", "not a request")
++        self.assertFalse(result.ok)
++        self.assertEqual(result.error_kind, "invalid_request_type")
++
++    def test_handler_exception_is_caught_into_failed_result(self) -> None:
++        registry = ToolRegistry()
++
++        def boom(_request: _EchoRequest) -> _EchoResponse:
++            raise RuntimeError("kaboom")
++
++        registry.register(
++            ToolHandler(
++                name="echo",
++                request_type=_EchoRequest,
++                response_type=_EchoResponse,
++                invoke=boom,
++            )
++        )
++        result = registry.dispatch("echo", _EchoRequest(value=1))
++        self.assertFalse(result.ok)
++        self.assertEqual(result.error_kind, "handler_exception")
++        self.assertIn("kaboom", result.error)
++
++    def test_typed_tool_error_preserves_kind(self) -> None:
++        registry = ToolRegistry()
++
++        def boom(_request: _EchoRequest) -> _EchoResponse:
++            raise ToolError("bad input", kind="validation_failed")
++
++        registry.register(
++            ToolHandler(
++                name="echo",
++                request_type=_EchoRequest,
++                response_type=_EchoResponse,
++                invoke=boom,
++            )
++        )
++        result = registry.dispatch("echo", _EchoRequest(value=1))
++        self.assertFalse(result.ok)
++        self.assertEqual(result.error_kind, "validation_failed")
++
++    def test_duplicate_registration_rejected(self) -> None:
++        registry = ToolRegistry()
++        handler = ToolHandler(
++            name="echo",
++            request_type=_EchoRequest,
++            response_type=_EchoResponse,
++            invoke=lambda request: _EchoResponse(value=request.value),
++        )
++        registry.register(handler)
++        with self.assertRaises(ValueError):
++            registry.register(handler)
++
++    def test_known_tools_lists_registered_names(self) -> None:
++        registry = ToolRegistry()
++        registry.register(
++            ToolHandler(
++                name="b_tool",
++                request_type=_EchoRequest,
++                response_type=_EchoResponse,
++                invoke=lambda request: _EchoResponse(value=request.value),
++            )
++        )
++        registry.register(
++            ToolHandler(
++                name="a_tool",
++                request_type=_EchoRequest,
++                response_type=_EchoResponse,
++                invoke=lambda request: _EchoResponse(value=request.value),
++            )
++        )
++        self.assertEqual(registry.known_tools(), ["a_tool", "b_tool"])
++
++
++class DefaultToolRegistryTests(unittest.TestCase):
++    def test_lint_tool_dispatches_and_returns_findings(self) -> None:
++        registry = build_default_tool_registry()
++        result = registry.dispatch("lint", LintRequest(source="x = 1\n"))
++        self.assertTrue(result.ok)
++        self.assertIsInstance(result.value, LintResult)
++        self.assertIsInstance(result.value.findings[0], EngineFinding)
++
++    def test_execution_sandbox_tool_dispatches_and_returns_trace(self) -> None:
++        spec = FunctionBehaviorSpec(
++            function_name="add",
++            cases=[BehaviorCase(name="basic", args=(2, 3), kwargs={}, expected=5)],
++        )
++        registry = build_default_tool_registry()
++        result = registry.dispatch(
++            "execution_sandbox",
++            ExecutionRequest(source="def add(a, b):\n    return a + b\n", spec=spec),
++        )
++        self.assertTrue(result.ok)
++        self.assertEqual(result.value.function_name, "add")
++        self.assertTrue(result.value.cases[0].matched)
++
++    def test_execution_sandbox_tool_reports_mismatch_without_raising(self) -> None:
++        spec = FunctionBehaviorSpec(
++            function_name="add",
++            cases=[BehaviorCase(name="basic", args=(2, 3), kwargs={}, expected=5)],
++        )
++        registry = build_default_tool_registry()
++        result = registry.dispatch(
++            "execution_sandbox",
++            ExecutionRequest(source="def add(a, b):\n    return a - b\n", spec=spec),
++        )
++        self.assertTrue(result.ok)
++        self.assertFalse(result.value.cases[0].matched)
++
++
++if __name__ == "__main__":
++    unittest.main()

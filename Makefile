@@ -6,6 +6,7 @@ SAVE_ARTIFACTS ?= 1
 MODEL ?= qwen2.5-coder:1.5b
 MAX_RETRIES ?= 3
 RUN ?=
+RESUME_RUN ?=
 ARCHITECT_AFTER ?= 1
 ARCHITECT_MAX_RETRIES ?= 2
 SPEC_PATH ?=
@@ -18,7 +19,7 @@ IMAGE ?= agent-small-harness:local
 ARTIFACT_ARGS = $(if $(filter 1 true yes,$(SAVE_ARTIFACTS)),--save-artifacts --artifact-root "$(ARTIFACT_ROOT)",)
 DOC_ARGS = --doc-agent "$(DOC_AGENT)" $(if $(DOC_MODEL),--doc-model "$(DOC_MODEL)",) $(if $(DOC_OUTPUT),--doc-output "$(DOC_OUTPUT)",)
 
-.PHONY: help install install-formal install-kernel env-path init-env api-dev docker-build test test-claude-fixes test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-fixture test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-worker-limit-architect test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-python-ladder-stateful test-python-ladder-stateful-architect test-plan-mode-ladder test-raw-vs-harness test-formal-experiment structured-spec structured-spec-plan repo-map review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library ollama-smoke inference-smoke live-repair day1 clean-history
+.PHONY: help install install-formal install-kernel env-path init-env api-dev docker-build test test-claude-fixes test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-fixture resume-coding-capability test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-worker-limit-architect resume-worker-limit test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-python-ladder-stateful test-python-ladder-stateful-architect test-plan-mode-ladder test-raw-vs-harness test-formal-experiment structured-spec structured-spec-plan repo-map review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library ollama-smoke inference-smoke live-repair day1 clean-history
 
 help:
 	@printf "Agent Small Harness commands\n"
@@ -47,6 +48,7 @@ help:
 	@printf "  make live-repair                     Run Ollama repair loop on data/snippets/mixed_hard_case.py\n"
 	@printf "  make test-coding-capability          Run model codegen through engines and behavior gates\n"
 	@printf "  make test-coding-capability-architect Run model codegen with API architect escalation\n"
+	@printf "  make resume-coding-capability RESUME_RUN=<id> Resume an interrupted capability run\n"
 	@printf "  make test-raw-vs-harness             Compare raw one-shot generation with full harness validation\n"
 	@printf "  make structured-spec SPEC_PATH=path   Run any external structured spec through Plan Mode, worker, architect, and gates\n"
 	@printf "  make structured-spec-plan SPEC_PATH=path Ask architect for queue plan, print JSON, then stop before worker generation\n"
@@ -55,6 +57,7 @@ help:
 	@printf "  make test-worker-limit-auto          Use config.yaml difficulty model routing\n"
 	@printf "  make test-worker-limit-decompose     Add skeleton decomposition prompts to worker-limit tasks\n"
 	@printf "  make test-worker-limit-architect     Use API architect escalation on worker-limit tasks\n"
+	@printf "  make resume-worker-limit RESUME_RUN=<id> Resume an interrupted worker-limit run\n"
 	@printf "  make test-python-ladder-parsing      Run parsing-focused Python ladder\n"
 	@printf "  make test-python-ladder-data         Run data-transform Python ladder\n"
 	@printf "  make test-python-ladder-algorithmic  Run algorithmic Python ladder\n"
@@ -82,6 +85,7 @@ help:
 	@printf "  ARCHITECT_MAX_RETRIES=2              Total repair budget for architect targets; default is $(ARCHITECT_MAX_RETRIES)\n"
 	@printf "  SAVE_ARTIFACTS=1                     Save attempts, prompts, diffs, and validations; default is $(SAVE_ARTIFACTS)\n"
 	@printf "  ARTIFACT_ROOT=artifacts/runs         Artifact directory; default is $(ARTIFACT_ROOT)\n"
+	@printf "  RESUME_RUN=<artifact-run-id>         Run ID containing checkpoint.json\n"
 	@printf "  SPEC_PATH=path/to/spec.md            Structured-spec input path\n"
 	@printf "  REPO_ROOT=.                          Repo root for make repo-map; default is $(REPO_ROOT)\n"
 	@printf "  REPO_MAP_FORMAT=context|json|mermaid Output for make repo-map; default is $(REPO_MAP_FORMAT)\n"
@@ -148,6 +152,10 @@ test-coding-capability-architect:
 test-coding-capability-fixture:
 	$(PYTHON) scripts/run_coding_capability.py --config "$(CONFIG_PATH)" --supplier fixture --runs "$(RUNS_PATH)" $(ARTIFACT_ARGS)
 
+resume-coding-capability:
+	@test -n "$(RESUME_RUN)" || (echo "Set RESUME_RUN, e.g. make resume-coding-capability RESUME_RUN=matrix_scoring_..." && exit 1)
+	$(PYTHON) scripts/run_coding_capability.py --config "$(CONFIG_PATH)" --model "$(MODEL)" --runs "$(RUNS_PATH)" --record-runs --artifact-root "$(ARTIFACT_ROOT)" --resume-run "$(RESUME_RUN)"
+
 test-worker-limit:
 	$(PYTHON) scripts/run_worker_limit.py --model "$(MODEL)" --max-retries "$(MAX_RETRIES)" $(ARTIFACT_ARGS)
 
@@ -159,6 +167,10 @@ test-worker-limit-decompose:
 
 test-worker-limit-architect:
 	$(PYTHON) scripts/run_worker_limit.py --model "$(MODEL)" --max-retries "$(ARCHITECT_MAX_RETRIES)" --architect-after-repair-attempts "$(ARCHITECT_AFTER)" $(ARTIFACT_ARGS)
+
+resume-worker-limit:
+	@test -n "$(RESUME_RUN)" || (echo "Set RESUME_RUN, e.g. make resume-worker-limit RESUME_RUN=worker_limit_6_..." && exit 1)
+	$(PYTHON) scripts/run_worker_limit.py --model "$(MODEL)" --max-retries "$(MAX_RETRIES)" --artifact-root "$(ARTIFACT_ROOT)" --resume-run "$(RESUME_RUN)"
 
 test-python-ladder-parsing:
 	$(PYTHON) scripts/run_worker_limit.py --tasks tests/python_ladders/parsing.json --model "$(MODEL)" --max-retries "$(MAX_RETRIES)" $(ARTIFACT_ARGS)

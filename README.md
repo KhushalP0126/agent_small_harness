@@ -225,7 +225,8 @@ Those outcomes are recorded in artifact metadata and the contract queue results.
   formal validation decide completion.
 - Architect is not trusted: API output is rescanned by the same gates.
 - Artifact-driven review: attempts, prompts, diffs, validations, and summaries
-  are saved under `artifacts/runs/` when requested.
+  are saved under `artifacts/runs/` when requested. Interrupted capability and
+  worker-limit runs can resume from their atomic `checkpoint.json`.
 - Contribution measurement: ladder tests record whether the small worker solved,
   repaired, helped the architect, stalled, or required manual review.
 
@@ -412,6 +413,8 @@ Review saved artifacts:
 
 ```bash
 make review-run RUN=<run-id-or-path>
+make resume-coding-capability RESUME_RUN=<run-id>
+make resume-worker-limit RESUME_RUN=<run-id>
 ```
 
 Discover a library API surface and ask DeepSeek for documentation by default:

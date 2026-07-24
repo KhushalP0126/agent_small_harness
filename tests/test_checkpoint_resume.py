@@ -1,9 +1,19 @@
+import json
 import tempfile
 import unittest
 from pathlib import Path
 
 from agents.artifact_manager import ArtifactManager
 from agents.generation_controller import GenerationController
+from scripts.run_coding_capability import (
+    DEFAULT_TASKS as CAPABILITY_TASKS,
+    run_tasks,
+)
+from scripts.run_worker_limit import (
+    DEFAULT_DECOMPOSITIONS,
+    DEFAULT_TASKS as WORKER_TASKS,
+    run_ladder,
+)
 
 
 BAD_SOURCE = """
@@ -13,6 +23,28 @@ def analyze(value):
     return 0
 """
 GOOD_SOURCE = "def analyze(value):\n    return value\n"
+
+
+def _terminal_checkpoint(target: str) -> dict:
+    return {
+        "version": 1,
+        "session": {
+            "target": target,
+            "route": "repair_loop",
+            "max_retries": 2,
+            "attempts": [],
+            "final_status": "completed",
+            "human_review": None,
+        },
+        "runtime": {
+            "phase": "terminal",
+            "draft": GOOD_SOURCE,
+            "previous_draft": BAD_SOURCE,
+            "draft_source_worker": "small_worker",
+            "next_attempt": 1,
+            "architect_repair_retry_used": False,
+        },
+    }
 
 
 class CheckpointResumeTests(unittest.TestCase):
@@ -70,6 +102,64 @@ class CheckpointResumeTests(unittest.TestCase):
             [attempt["attempt"] for attempt in resumed.payload["attempts"]],
             [0, 1],
         )
+
+    def test_coding_capability_runner_loads_checkpoint_by_run_id(self) -> None:
+        task = json.loads(CAPABILITY_TASKS.read_text(encoding="utf-8"))[0]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir) / "runs"
+            manager = ArtifactManager(root)
+            paths = manager.create_run(run_id="capability-resume")
+            manager.checkpoint(_terminal_checkpoint(task["prompt"]), paths)
+
+            exit_code = run_tasks(
+                tasks_path=CAPABILITY_TASKS,
+                runs_path=Path(tmpdir) / "runs.jsonl",
+                history_path=Path(tmpdir) / "history.json",
+                artifact_root=root,
+                model="unused",
+                max_retries=2,
+                supplier_mode="fixture",
+                record_runs=False,
+                save_artifacts=False,
+                resume_run_id=paths.run_id,
+            )
+
+            self.assertEqual(exit_code, 0)
+            self.assertTrue((paths.run_dir / "session_summary.json").is_file())
+            self.assertFalse((root / "capability-resume-2").exists())
+
+    def test_worker_limit_runner_loads_checkpoint_by_run_id(self) -> None:
+        task = json.loads(WORKER_TASKS.read_text(encoding="utf-8"))[0]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir) / "runs"
+            manager = ArtifactManager(root)
+            paths = manager.create_run(run_id="worker-resume")
+            manager.checkpoint(_terminal_checkpoint(task["prompt"]), paths)
+
+            exit_code = run_ladder(
+                tasks_path=WORKER_TASKS,
+                decompositions_path=DEFAULT_DECOMPOSITIONS,
+                artifact_root=root,
+                model="unused",
+                max_retries=2,
+                num_ctx=512,
+                num_predict=64,
+                save_artifacts=False,
+                continue_after_failure=False,
+                decompose=False,
+                architect_after_repair_attempts=None,
+                debug_controller=False,
+                resume_run_id=paths.run_id,
+            )
+
+            self.assertEqual(exit_code, 0)
+            self.assertTrue((paths.run_dir / "session_summary.json").is_file())
+
+    def test_makefile_exposes_resume_targets(self) -> None:
+        makefile = Path("Makefile").read_text(encoding="utf-8")
+        self.assertIn("resume-coding-capability:", makefile)
+        self.assertIn("resume-worker-limit:", makefile)
+        self.assertIn('--resume-run "$(RESUME_RUN)"', makefile)
 
 
 if __name__ == "__main__":
