@@ -40,8 +40,9 @@ class _Controller:
 
 
 class RawVsHarnessTests(unittest.TestCase):
-    def test_architect_mode_wires_supplier_threshold_and_metrics(self) -> None:
-        tasks = [
+    @staticmethod
+    def _tasks() -> list[dict]:
+        return [
             {
                 "difficulty": 1,
                 "name": "identity",
@@ -50,9 +51,11 @@ class RawVsHarnessTests(unittest.TestCase):
                 "cases": [{"name": "basic", "args": [3], "expected": 3}],
             }
         ]
+
+    def test_architect_mode_wires_supplier_threshold_and_metrics(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             path = Path(tmpdir) / "tasks.json"
-            path.write_text(json.dumps(tasks), encoding="utf-8")
+            path.write_text(json.dumps(self._tasks()), encoding="utf-8")
             with (
                 patch(
                     "scripts.run_raw_vs_harness.OllamaModelSupplier",
@@ -78,6 +81,57 @@ class RawVsHarnessTests(unittest.TestCase):
         self.assertEqual(_Controller.kwargs["architect_after_repair_attempts"], 1)
         self.assertIsNotNone(_Controller.kwargs["architect_supplier"])
         self.assertEqual(_Controller.kwargs["max_retries"], 2)
+
+    def test_repeated_mode_saves_paired_drafts_and_aggregate_summary(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir) / "runs"
+            path = Path(tmpdir) / "tasks.json"
+            path.write_text(json.dumps(self._tasks()), encoding="utf-8")
+            with (
+                patch(
+                    "scripts.run_raw_vs_harness.OllamaModelSupplier",
+                    return_value=_WorkerSupplier(),
+                ),
+                patch(
+                    "scripts.run_raw_vs_harness.ArchitectModelSupplier",
+                    return_value=_ArchitectSupplier(),
+                ),
+                patch(
+                    "scripts.run_raw_vs_harness.GenerationController",
+                    _Controller,
+                ),
+            ):
+                result = run_raw_vs_harness(
+                    tasks_path=path,
+                    model="test-model",
+                    max_retries=2,
+                    architect_after_repair_attempts=1,
+                    samples=2,
+                    save_artifacts=True,
+                    artifact_root=root,
+                )
+
+            batch_dir = next(root.iterdir())
+            summary = json.loads(
+                (batch_dir / "raw_vs_harness_summary.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertEqual(result, 0)
+            self.assertEqual(summary["samples"], 2)
+            self.assertEqual(summary["total_pairs"], 2)
+            self.assertEqual(summary["sample_harness_pass_range"], [1, 1])
+            self.assertTrue(
+                (batch_dir / "sample_1" / "01_identity" / "raw_draft.py").is_file()
+            )
+            self.assertTrue(
+                (
+                    batch_dir
+                    / "sample_2"
+                    / "01_identity"
+                    / "attempt_timeline.json"
+                ).is_file()
+            )
 
 
 if __name__ == "__main__":

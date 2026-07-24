@@ -12,6 +12,7 @@ ARCHITECT_MAX_RETRIES ?= 2
 SPEC_PATH ?=
 REPO_ROOT ?= .
 REPO_MAP_FORMAT ?= context
+RAW_VS_HARNESS_SAMPLES ?= 5
 DOC_AGENT ?= deepseek
 DOC_MODEL ?=
 DOC_OUTPUT ?= $(if $(filter none,$(DOC_AGENT)),,data/library_proposals/$(LIB).docs.md)
@@ -19,7 +20,7 @@ IMAGE ?= agent-small-harness:local
 ARTIFACT_ARGS = $(if $(filter 1 true yes,$(SAVE_ARTIFACTS)),--save-artifacts --artifact-root "$(ARTIFACT_ROOT)",)
 DOC_ARGS = --doc-agent "$(DOC_AGENT)" $(if $(DOC_MODEL),--doc-model "$(DOC_MODEL)",) $(if $(DOC_OUTPUT),--doc-output "$(DOC_OUTPUT)",)
 
-.PHONY: help install install-formal install-kernel env-path init-env api-dev docker-build test test-claude-fixes test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-fixture resume-coding-capability test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-worker-limit-architect resume-worker-limit test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-python-ladder-stateful test-python-ladder-stateful-architect test-plan-mode-ladder test-raw-vs-harness test-raw-vs-harness-architect test-formal-experiment structured-spec structured-spec-plan repo-map review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library ollama-smoke inference-smoke live-repair day1 clean-history
+.PHONY: help install install-formal install-kernel env-path init-env api-dev docker-build test test-claude-fixes test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-fixture resume-coding-capability test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-worker-limit-architect resume-worker-limit test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-python-ladder-stateful test-python-ladder-stateful-architect test-plan-mode-ladder test-raw-vs-harness test-raw-vs-harness-architect test-raw-vs-harness-repeated test-formal-experiment structured-spec structured-spec-plan resume-structured-spec repo-map review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library ollama-smoke inference-smoke live-repair day1 clean-history
 
 help:
 	@printf "Agent Small Harness commands\n"
@@ -51,8 +52,10 @@ help:
 	@printf "  make resume-coding-capability RESUME_RUN=<id> Resume an interrupted capability run\n"
 	@printf "  make test-raw-vs-harness             Compare raw one-shot generation with full harness validation\n"
 	@printf "  make test-raw-vs-harness-architect   Compare raw output with repair and architect recovery\n"
+	@printf "  make test-raw-vs-harness-repeated    Save and aggregate repeated paired recovery samples\n"
 	@printf "  make structured-spec SPEC_PATH=path   Run any external structured spec through Plan Mode, worker, architect, and gates\n"
 	@printf "  make structured-spec-plan SPEC_PATH=path Ask architect for queue plan, print JSON, then stop before worker generation\n"
+	@printf "  make resume-structured-spec SPEC_PATH=path RESUME_RUN=<id> Resume a contract queue checkpoint\n"
 	@printf "\nWorker ladders:\n"
 	@printf "  make test-worker-limit               Push MODEL through harder worker-limit tasks\n"
 	@printf "  make test-worker-limit-auto          Use config.yaml difficulty model routing\n"
@@ -139,7 +142,7 @@ test-engine-edge-cases:
 	$(PYTHON) -m unittest tests.test_engine_edge_cases
 
 test-lint-engine:
-	$(PYTHON) -m unittest tests.test_benchmarker.BenchmarkerTests.test_lint_engine_blocks_completion_when_pylint_is_missing tests.test_benchmarker.BenchmarkerTests.test_lint_engine_maps_pylint_error_to_policy_violation
+	$(PYTHON) -m unittest tests.test_lint_engine tests.test_benchmarker.BenchmarkerTests.test_lint_engine_blocks_completion_when_pylint_is_missing tests.test_benchmarker.BenchmarkerTests.test_lint_engine_maps_pylint_error_to_policy_violation
 
 test-adversarial:
 	$(PYTHON) scripts/run_adversarial_prompts.py --runs "$(RUNS_PATH)"
@@ -197,6 +200,9 @@ test-raw-vs-harness:
 test-raw-vs-harness-architect:
 	$(PYTHON) scripts/run_raw_vs_harness.py --config "$(CONFIG_PATH)" --model "$(MODEL)" --max-retries "$(ARCHITECT_MAX_RETRIES)" --architect-after-repair-attempts "$(ARCHITECT_AFTER)"
 
+test-raw-vs-harness-repeated:
+	$(PYTHON) scripts/run_raw_vs_harness.py --config "$(CONFIG_PATH)" --model "$(MODEL)" --max-retries "$(ARCHITECT_MAX_RETRIES)" --architect-after-repair-attempts "$(ARCHITECT_AFTER)" --samples "$(RAW_VS_HARNESS_SAMPLES)" --save-artifacts --artifact-root "$(ARTIFACT_ROOT)"
+
 test-formal-experiment:
 	$(PYTHON) scripts/run_formal_experiment.py
 
@@ -207,6 +213,11 @@ structured-spec:
 structured-spec-plan:
 	@test -n "$(SPEC_PATH)" || (echo "Set SPEC_PATH, e.g. make structured-spec-plan SPEC_PATH=examples/specs/my_spec.md" && exit 1)
 	$(PYTHON) scripts/run_structured_spec.py --spec "$(SPEC_PATH)" --model "$(MODEL)" --max-retries "$(ARCHITECT_MAX_RETRIES)" --architect-after-repair-attempts "$(ARCHITECT_AFTER)" --plan-only $(ARTIFACT_ARGS)
+
+resume-structured-spec:
+	@test -n "$(SPEC_PATH)" || (echo "Set SPEC_PATH to the original structured spec" && exit 1)
+	@test -n "$(RESUME_RUN)" || (echo "Set RESUME_RUN to an artifact run ID" && exit 1)
+	$(PYTHON) scripts/run_structured_spec.py --spec "$(SPEC_PATH)" --model "$(MODEL)" --max-retries "$(ARCHITECT_MAX_RETRIES)" --architect-after-repair-attempts "$(ARCHITECT_AFTER)" --artifact-root "$(ARTIFACT_ROOT)" --resume-run "$(RESUME_RUN)"
 
 review-run:
 	@test -n "$(RUN)" || (echo "Set RUN, e.g. make review-run RUN=worker_limit_6" && exit 1)

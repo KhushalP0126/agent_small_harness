@@ -224,6 +224,9 @@ Those outcomes are recorded in artifact metadata and the contract queue results.
 - Deterministic gates: parsing, static checks, policy, behavior, and optional
   formal validation decide completion.
 - Architect is not trusted: API output is rescanned by the same gates.
+- Human-centered operation: the harness gathers evidence, explains failures,
+  and proposes repairs; `completed` means the configured checks passed, not
+  that a human has delegated final ownership or judgment to the harness.
 - Artifact-driven review: attempts, prompts, diffs, validations, and summaries
   are saved under `artifacts/runs/` when requested. Interrupted capability and
   worker-limit runs can resume from their atomic `checkpoint.json`.
@@ -392,6 +395,7 @@ make test-worker-limit MODEL=qwen2.5-coder:3b SAVE_ARTIFACTS=1
 make test-worker-limit-auto SAVE_ARTIFACTS=1
 make test-raw-vs-harness MODEL=qwen2.5-coder:3b
 make test-raw-vs-harness-architect MODEL=qwen2.5-coder:3b
+make test-raw-vs-harness-repeated MODEL=qwen2.5-coder:1.5b RAW_VS_HARNESS_SAMPLES=5
 ```
 
 Run focused Python ladders:
@@ -416,6 +420,7 @@ Review saved artifacts:
 make review-run RUN=<run-id-or-path>
 make resume-coding-capability RESUME_RUN=<run-id>
 make resume-worker-limit RESUME_RUN=<run-id>
+make resume-structured-spec SPEC_PATH=<original-spec> RESUME_RUN=<run-id>
 ```
 
 Discover a library API surface and ask DeepSeek for documentation by default:
@@ -466,6 +471,11 @@ make approve-library LIB=clang.cindex
 - [x] Synchronous and asynchronous API endpoints with persisted job status.
 - [x] Artifact capture, history aggregation, capability ladders, and
   raw-versus-harness comparisons.
+- [x] Durable repeated paired comparisons that retain raw drafts, repaired
+  attempts, per-sample ranges, and aggregate recovery lift.
+- [x] Contract-boundary checkpoint/resume for structured-spec queues.
+- [x] Task-agnostic wildcard-import blocking with qualified-symbol repair
+  guidance.
 - [x] Review-before-trust library discovery and registry approval workflow.
 
 ### Remaining Work
@@ -480,8 +490,8 @@ make approve-library LIB=clang.cindex
   and type contracts, dependency ordering, and whole-project integration tests.
 - [ ] Add adversarial runtime isolation beyond the current timeout-bound Python
   subprocess before accepting untrusted code in a shared or hosted deployment.
-- [ ] Run repeated multi-model benchmark samples and publish confidence
-  intervals; current Snake/Pong and ladder results are useful but stochastic.
+- [ ] Extend the repeated paired benchmark beyond Qwen 1.5B and publish
+  confidence intervals across models and larger task sets.
 - [ ] Add authentication, authorization, rate limits, and production-grade job
   storage before exposing the API outside a trusted local environment.
 - [ ] Version the debugger and repository-map artifact/report schemas and add
@@ -491,9 +501,20 @@ The public direction remains generalized code creation and repair. App-like
 specs are stress fixtures, and discovered library documentation remains proposal
 data until a human approves it into `data/library_registry.json`.
 
+## Run-storage contract
+
+JSON artifacts remain the source of truth. Repeated comparisons write one batch
+summary plus per-sample, per-task raw drafts and attempt timelines. A future TUI
+should read that stable artifact schema first. If cross-run querying becomes a
+bottleneck, SQLite should be a rebuildable index over the JSON artifacts, not a
+second authoritative store.
+
 ## Safety Boundary
 
 Generated code is never accepted from model text alone. The controller requires
 successful parsing, registered engine checks, policy validation, behavior
 validation when available, and optional formal checks when enabled. Otherwise the
-run ends as `manual_review_required`.
+run ends as `manual_review_required`. These gates organize evidence for a human
+reviewer; they do not make deployment, merge, or product-acceptance decisions on
+the reviewer's behalf. Manual review is a normal terminal outcome, not a harness
+failure.

@@ -489,6 +489,60 @@ if __name__ == "__main__":
         self.assertEqual(results[0].repair_attempts[-1]["status"], "accepted")
         self.assertEqual(len(accepted_sources), 1)
 
+    def test_contract_queue_resume_skips_checkpointed_contracts(self) -> None:
+        plan = PlanModeAgent().plan("")
+        queue = ContractQueue(
+            [
+                FunctionContract(
+                    name="first",
+                    signature="def first() -> int",
+                    examples=[DealExample("first()", "1")],
+                ),
+                FunctionContract(
+                    name="second",
+                    signature="def second() -> int",
+                    examples=[DealExample("second()", "2")],
+                ),
+            ]
+        )
+        checkpointed_results = []
+
+        def interrupt_after_first(_sources, results) -> None:
+            checkpointed_results[:] = [
+                type(result)(**result.__dict__) for result in results
+            ]
+            raise RuntimeError("simulated hard interruption")
+
+        with self.assertRaisesRegex(RuntimeError, "simulated hard interruption"):
+            _run_contract_queue_sequentially(
+                queue,
+                plan,
+                lambda prompt: (
+                    "def first() -> int:\n    return 1\n"
+                    if "NAME: first" in prompt
+                    else self.fail("second must not run before interruption")
+                ),
+                checkpoint_writer=interrupt_after_first,
+            )
+
+        calls = []
+
+        def resumed_generate(prompt: str) -> str:
+            calls.append(prompt)
+            self.assertIn("NAME: second", prompt)
+            return "def second() -> int:\n    return 2\n"
+
+        accepted_sources, results = _run_contract_queue_sequentially(
+            queue,
+            plan,
+            resumed_generate,
+            resume_results=checkpointed_results,
+        )
+
+        self.assertEqual(len(calls), 1)
+        self.assertEqual([result.name for result in results], ["first", "second"])
+        self.assertEqual(len(accepted_sources), 2)
+
     def test_contract_queue_isolates_independent_contract_failure(self) -> None:
         plan = PlanModeAgent().plan("")
         queue = ContractQueue(

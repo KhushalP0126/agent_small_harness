@@ -28,6 +28,9 @@ Current baseline:
 - Optional CrossHair validation is available for contract/counterexample checks.
 - The architect model is a second worker, not an authority. Its output is accepted
   only after normal validation.
+- The harness is a human-review aid, not an autonomous code owner. It should
+  preserve runtime and validation evidence, explain why a draft passed or
+  stopped, and leave merge/deployment/product acceptance to the operator.
 - Dedicated app-fixture routing was removed from the source surface. Template
   routing remains available only through injected/configured routes.
 - Library discovery is now part of the operator surface. It can inspect an
@@ -457,10 +460,23 @@ make test-python-ladder-stateful MODEL=qwen2.5-coder:3b
 make test-python-ladder-stateful-architect MODEL=qwen2.5-coder:3b SAVE_ARTIFACTS=1
 make test-raw-vs-harness MODEL=qwen2.5-coder:3b
 make test-raw-vs-harness-architect MODEL=qwen2.5-coder:3b
+make test-raw-vs-harness-repeated MODEL=qwen2.5-coder:1.5b RAW_VS_HARNESS_SAMPLES=5
 make discover-library LIB=clang.cindex
 make api-dev
 make review-run RUN=<artifact-run-id-or-path>
+make resume-structured-spec SPEC_PATH=<original-spec> RESUME_RUN=<artifact-run-id>
 ```
+
+Repeated raw-versus-harness batches preserve the exact raw draft, raw behavior
+result, full harness attempt history, and aggregate sample ranges. Structured
+specs checkpoint after every terminal contract result and resume without
+regenerating checkpointed contracts. Wildcard imports are blocking lint
+findings because generated code must retain explicit symbol ownership.
+
+JSON artifacts are the authoritative storage layer for future operator tools.
+A TUI should consume the batch summary and per-task artifact schema directly;
+SQLite, if added later, should be a rebuildable query index rather than a
+second source of truth.
 
 ## Session Cleanup Note
 

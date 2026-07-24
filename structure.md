@@ -14,12 +14,14 @@ raw prompt
   -> static engines
   -> policy, behavior, and optional formal validation
   -> checkpoint current attempt and next-draft state
-  -> repair, completion, or manual review
+  -> repair, evidence-backed completion recommendation, or manual review
+  -> human acceptance / rejection outside the harness
 ```
 
 The harness should stay task-agnostic. Domain-specific examples belong in test
 fixtures or external experiment specs, not in the controller, Plan Mode, or
-engine logic.
+engine logic. Its output supports human review; it does not independently
+authorize merges, deployment, or product acceptance.
 
 The inventory below names every file tracked by git. Runtime artifacts, virtual
 environments, caches, `.env`, `data/jobs.jsonl`, and generated statistics are
@@ -210,22 +212,23 @@ Runnable experiments and operator tooling.
 - `scripts/run_coding_capability.py` - Runs codegen tasks through engines, behavior checks, and optional architect escalation; `--resume-run` reloads a saved matching task checkpoint.
 - `scripts/run_worker_limit.py` - Harder-and-harder worker ladder with checkpoint resume through `--resume-run`.
 - `scripts/run_plan_mode_ladder.py` - Deterministic Plan Mode extraction ladder.
-- `scripts/run_raw_vs_harness.py` - Raw model versus harness comparison, with an optional bounded repair and architect-escalation mode.
+- `scripts/run_raw_vs_harness.py` - Raw model versus harness comparison with bounded repair/architect mode, repeated paired samples, retained raw drafts, and aggregate recovery metrics.
 - `scripts/run_formal_experiment.py` - Optional CrossHair smoke experiment.
 - `scripts/review_run.py` - Human-readable artifact-run summary.
 - `scripts/run_live_repair.py` - Live repair loop against a fixture.
 - `scripts/run_repo_map.py` - Runs the repo mapper and prints the compact context, JSON graph, or mermaid diagram (optionally saving artifacts).
-- `scripts/run_structured_spec.py` - Plans a structured specification into a contract queue, generates and validates each contract, assembles the program, injects accepted interface context, runs the integration smoke gate, and saves artifacts.
+- `scripts/run_structured_spec.py` - Plans a structured specification into a contract queue, checkpoints terminal contract results, resumes without regenerating checkpointed contracts, assembles the program, injects accepted interface context, runs the integration smoke gate, and saves artifacts.
 
 ## `tests/`
 
 Unit and integration coverage.
 
 - `tests/test_benchmarker.py` - Controller, prompt, behavior, supplier, and benchmark tests.
-- `tests/test_checkpoint_resume.py` - Atomic checkpoint persistence and interrupted controller-resume regressions.
+- `tests/test_checkpoint_resume.py` - Atomic checkpoint persistence plus controller, CLI-runner, and structured-spec resume surface regressions.
 - `tests/test_prompt_summarizer.py` - Default retry-history compression and verbatim live-diagnostic preservation tests.
 - `tests/test_tool_registry.py` - Typed tool dispatch, backend failure containment, and default-handler tests.
-- `tests/test_raw_vs_harness.py` - Repair-enabled raw comparison wiring and architect metric coverage.
+- `tests/test_raw_vs_harness.py` - Repair-enabled raw comparison wiring, repeated paired artifact retention, aggregation, and architect metric coverage.
+- `tests/test_lint_engine.py` - Task-agnostic wildcard-import blocking and explicit-import acceptance.
 - `tests/test_api.py` - Synchronous and asynchronous FastAPI boundary and job-store tests.
 - `tests/test_agents_pipeline.py` - Agent, registry, repair, historian, library, and controller integration tests.
 - `tests/test_behavior.py` - Behavior validator parity, isolation, timeout, trace, output-capture, exception, and runtime-backed issue tests.

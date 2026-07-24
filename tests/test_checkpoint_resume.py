@@ -159,6 +159,7 @@ class CheckpointResumeTests(unittest.TestCase):
         makefile = Path("Makefile").read_text(encoding="utf-8")
         self.assertIn("resume-coding-capability:", makefile)
         self.assertIn("resume-worker-limit:", makefile)
+        self.assertIn("resume-structured-spec:", makefile)
         self.assertIn('--resume-run "$(RESUME_RUN)"', makefile)
 
 

@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from agents.artifact_manager import ArtifactManager
+from agents.artifact_manager import ArtifactManager, ArtifactPaths
 from agents.config_loader import DEFAULT_CONFIG_PATH, load_config
 from agents.generation_controller import GenerationController
 from agents.plan_mode import PlanModeAgent
@@ -702,16 +702,38 @@ def _run_contract_queue_sequentially(
     small_retries_per_contract: int = 1,
     architect_retries_per_contract: int = 1,
     prompt_summarizer: Callable[[str], str] | None = None,
+    resume_results: list[ContractExecutionResult] | None = None,
+    checkpoint_writer: Callable[[list[str], list[ContractExecutionResult]], None] | None = None,
 ) -> tuple[list[str], list[ContractExecutionResult]]:
-    accepted_sources: list[str] = []
-    accepted_source_by_name: dict[str, str] = {}
-    accepted_names: set[str] = set()
-    results: list[ContractExecutionResult] = []
+    results: list[ContractExecutionResult] = list(resume_results or [])
+    accepted_results = [
+        result
+        for result in results
+        if result.status == "accepted" and result.source
+    ]
+    accepted_sources: list[str] = [result.source for result in accepted_results]
+    accepted_source_by_name: dict[str, str] = {
+        result.name: result.source for result in accepted_results
+    }
+    accepted_names: set[str] = set(accepted_source_by_name)
+    completed_names = {
+        result.name
+        for result in results
+        if result.name != "<queue>"
+    }
     total = len(queue.contracts)
     known_names = {contract.name for contract in queue.contracts}
-    ready_queue = list(queue.contracts)
+    ready_queue = [
+        contract
+        for contract in queue.contracts
+        if contract.name not in completed_names
+    ]
     blocked_stack: list[FunctionContract] = []
-    generated_count = 0
+    generated_count = len(completed_names)
+
+    def write_checkpoint() -> None:
+        if checkpoint_writer is not None:
+            checkpoint_writer(accepted_sources, results)
 
     while ready_queue or blocked_stack:
         if not ready_queue and blocked_stack:
@@ -743,6 +765,7 @@ def _run_contract_queue_sequentially(
                         ],
                     )
                 )
+                write_checkpoint()
                 break
             ready_queue.extend(progressable)
             blocked_stack = [contract for contract in blocked_stack if contract not in progressable]
@@ -795,6 +818,7 @@ def _run_contract_queue_sequentially(
                     dependencies=dependencies,
                 )
             )
+            write_checkpoint()
             continue
         allowed_libraries = set(getattr(plan, "allowed_libraries", []))
         issues = _validate_contract_source(
@@ -919,6 +943,7 @@ def _run_contract_queue_sequentially(
                     repair_attempts=repair_attempts,
                 )
             )
+            write_checkpoint()
             continue
         print(f"[contract-queue] {generated_count}/{total} {contract.name}: accepted", flush=True)
         accepted_sources.append(source)
@@ -934,6 +959,7 @@ def _run_contract_queue_sequentially(
                 repair_attempts=repair_attempts,
             )
         )
+        write_checkpoint()
     return accepted_sources, results
 
 
@@ -966,6 +992,7 @@ def _integration_prompt(
             "- Do not drop, rename, or omit required components or entrypoints from the structured spec.",
             "- The final module must define every required symbol even when a helper is implemented differently internally.",
             "- Do not use file I/O, network calls, eval, or exec.",
+            "- Do not use wildcard imports. Import modules and qualify their names, or import required symbols explicitly.",
             "- Keep the main loop guarded by if __name__ == \"__main__\" when an app entrypoint is required.",
             "- The final code will be scanned by all engines and formal/Deal gates.",
         ]
@@ -1129,10 +1156,41 @@ def run_spec(
     config_path: Path,
     plan_only: bool = False,
     prompt_summarizer: Callable[[str], str] | None = None,
+    resume_run_id: str | None = None,
 ) -> int:
+    if plan_only and resume_run_id:
+        raise ValueError("--resume-run cannot be combined with --plan-only")
     config = load_config(config_path)
     active_prompt_summarizer = prompt_summarizer or DefaultPromptSummarizer()
     spec_text = spec_path.read_text(encoding="utf-8")
+    manager = ArtifactManager(artifact_root)
+    paths: ArtifactPaths | None = None
+    resume_results: list[ContractExecutionResult] = []
+    if resume_run_id:
+        checkpoint = manager.load_checkpoint(resume_run_id)
+        if checkpoint is None:
+            raise ValueError(
+                f"No checkpoint found for run '{resume_run_id}' under {artifact_root}"
+            )
+        if checkpoint.get("kind") != "structured_spec":
+            raise ValueError(
+                f"Checkpoint '{resume_run_id}' is not a structured-spec checkpoint"
+            )
+        if checkpoint.get("spec_path") != str(spec_path):
+            raise ValueError(
+                f"Checkpoint '{resume_run_id}' belongs to {checkpoint.get('spec_path')}, "
+                f"not {spec_path}"
+            )
+        paths = ArtifactPaths(
+            run_id=resume_run_id,
+            run_dir=artifact_root / resume_run_id,
+        )
+        resume_results = [
+            ContractExecutionResult(**item)
+            for item in checkpoint.get("contract_results", [])
+        ]
+    elif save_artifacts and not plan_only:
+        paths = manager.create_run(prefix=f"structured_spec_{spec_path.stem}")
     plan_mode = PlanModeAgent()
     plan = plan_mode.plan(spec_text)
     plan_packet = plan_mode.to_worker_packet(plan)
@@ -1205,7 +1263,6 @@ def run_spec(
             },
         }
         if save_artifacts:
-            manager = ArtifactManager(artifact_root)
             paths = manager.create_run(prefix=f"structured_spec_plan_{spec_path.stem}")
             artifact_path = str(paths.run_dir)
             manager.save_session(session, paths, metadata=metadata)
@@ -1250,6 +1307,25 @@ def run_spec(
     )
     contract_execution_results: list[ContractExecutionResult] = []
     if queue.contracts:
+        def checkpoint_contract_queue(
+            accepted_sources: list[str],
+            results: list[ContractExecutionResult],
+        ) -> None:
+            if paths is None:
+                return
+            manager.checkpoint(
+                {
+                    "version": 1,
+                    "kind": "structured_spec",
+                    "phase": "contract_queue",
+                    "spec_path": str(spec_path),
+                    "model": model,
+                    "accepted_sources": accepted_sources,
+                    "contract_results": [asdict(result) for result in results],
+                },
+                paths,
+            )
+
         accepted_sources, contract_execution_results = _run_contract_queue_sequentially(
             queue,
             plan,
@@ -1259,6 +1335,8 @@ def run_spec(
             small_retries_per_contract=max_retries,
             architect_retries_per_contract=1 if architect_supplier is not None else 0,
             prompt_summarizer=active_prompt_summarizer,
+            resume_results=resume_results,
+            checkpoint_writer=checkpoint_contract_queue,
         )
         if not accepted_sources:
             session = {
@@ -1379,9 +1457,7 @@ def run_spec(
         }
 
     artifact_path = ""
-    if save_artifacts:
-        manager = ArtifactManager(artifact_root)
-        paths = manager.create_run(prefix=f"structured_spec_{spec_path.stem}")
+    if paths is not None:
         artifact_path = str(paths.run_dir)
         manager.save_session(
             session,
@@ -1416,6 +1492,25 @@ def run_spec(
                     *architect_model_supplier.telemetry,
                 ],
             },
+        )
+        manager.checkpoint(
+            {
+                "version": 1,
+                "kind": "structured_spec",
+                "phase": "terminal",
+                "spec_path": str(spec_path),
+                "model": model,
+                "accepted_sources": [
+                    result.source
+                    for result in contract_execution_results
+                    if result.status == "accepted" and result.source
+                ],
+                "contract_results": [
+                    asdict(result) for result in contract_execution_results
+                ],
+                "session": session,
+            },
+            paths,
         )
 
     repair_workers = [
@@ -1476,6 +1571,10 @@ def main() -> int:
     parser.add_argument("--architect-after-repair-attempts", type=int, default=None)
     parser.add_argument("--no-architect-contracts", action="store_true")
     parser.add_argument("--plan-only", action="store_true", help="Stop after architect queue planning and print the planned contracts.")
+    parser.add_argument(
+        "--resume-run",
+        help="Resume a structured-spec contract queue from ARTIFACT_ROOT/<run_id>/checkpoint.json.",
+    )
     args = parser.parse_args()
     return run_spec(
         spec_path=args.spec,
@@ -1487,6 +1586,7 @@ def main() -> int:
         use_architect_contracts=not args.no_architect_contracts,
         config_path=args.config,
         plan_only=args.plan_only,
+        resume_run_id=args.resume_run,
     )
 
 

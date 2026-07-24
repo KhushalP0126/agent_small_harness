@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ast
 import json
 import re
 import shutil
@@ -28,8 +29,10 @@ class LintEngine(BaseEngine):
         self.library_registry = library_registry or LibraryRegistry()
 
     def scan(self, source: str) -> list[EngineFinding]:
+        wildcard_findings = self._wildcard_import_findings(source)
         if not self.executable:
             return [
+                *wildcard_findings,
                 EngineFinding(
                     engine=self.name,
                     severity="Low",
@@ -112,7 +115,7 @@ class LintEngine(BaseEngine):
             for message in dynamic_member_messages
         ]
         if not blocking_messages:
-            return warning_findings or [
+            return [*wildcard_findings, *warning_findings] or [
                 EngineFinding(
                     engine=self.name,
                     severity="Low",
@@ -127,7 +130,56 @@ class LintEngine(BaseEngine):
                 )
             ]
 
-        return [*warning_findings, *[self._finding_for_message(message) for message in blocking_messages]]
+        return [
+            *wildcard_findings,
+            *warning_findings,
+            *[self._finding_for_message(message) for message in blocking_messages],
+        ]
+
+    def _wildcard_import_findings(self, source: str) -> list[EngineFinding]:
+        try:
+            tree = ast.parse(source)
+        except SyntaxError:
+            return []
+        findings: list[EngineFinding] = []
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ImportFrom):
+                continue
+            if not any(alias.name == "*" for alias in node.names):
+                continue
+            module_name = node.module or "(relative module)"
+            findings.append(
+                EngineFinding(
+                    engine=self.name,
+                    severity="High",
+                    summary="Wildcard import obscures symbol ownership",
+                    details=(
+                        f"`from {module_name} import *` makes generated names "
+                        "ambiguous and can hide undefined runtime symbols."
+                    ),
+                    metrics={
+                        "symbol": "wildcard-import",
+                        "line": int(getattr(node, "lineno", 0)),
+                        "column": int(getattr(node, "col_offset", 0)),
+                        "category": "error",
+                    },
+                    diagnostic=EngineDiagnostic(
+                        violation="WILDCARD_IMPORT",
+                        threshold="no wildcard imports",
+                        actual=f"from {module_name} import *",
+                        location=(
+                            f"line {int(getattr(node, 'lineno', 0))}:"
+                            f"{int(getattr(node, 'col_offset', 0))}"
+                        ),
+                        recommended_refactor=(
+                            f"Replace the wildcard import with `import {module_name}` "
+                            "and qualify names through that module, or import each "
+                            "required symbol explicitly."
+                        ),
+                    ),
+                )
+            )
+        return findings
 
     def _is_registered_dynamic_member(self, message: dict) -> bool:
         if str(message.get("symbol", "")) != "no-member":

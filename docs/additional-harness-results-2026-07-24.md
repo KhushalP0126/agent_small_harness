@@ -70,6 +70,73 @@ This is a separate stochastic sample from the one-attempt comparison above.
 The raw pass-rate change from 4/7 to 3/7 is model sampling variance; the useful
 within-run comparison is 3/7 raw versus 6/7 after the harness.
 
+### Five repeated paired samples with retained evidence
+
+Command:
+
+```sh
+make test-raw-vs-harness-repeated \
+  MODEL=qwen2.5-coder:1.5b \
+  RAW_VS_HARNESS_SAMPLES=5
+```
+
+Artifact batch:
+
+```text
+artifacts/runs/raw_vs_harness-20260724T183433Z-56d2008a
+```
+
+| Sample | Raw passes | Harness passes | Recovered raw failures |
+| ---: | ---: | ---: | ---: |
+| 1 | 3/7 | 7/7 | 4 |
+| 2 | 3/7 | 6/7 | 3 |
+| 3 | 4/7 | 6/7 | 2 |
+| 4 | 3/7 | 7/7 | 4 |
+| 5 | 4/7 | 7/7 | 3 |
+| **Total** | **17/35** | **33/35** | **16** |
+
+Raw completion was **48.6%** and harness completion was **94.3%**, a
+**45.7 percentage-point lift** within these paired samples. Per-sample raw
+completion ranged from 3–4/7; harness completion ranged from 6–7/7. There were
+18 architect calls across 35 pairs.
+
+Each pair retains `raw_draft.py`, `raw_behavior.json`, the harness attempt
+sources/prompts/validation, and an attempt timeline. The batch-level
+`raw_vs_harness_summary.json` contains all rows and aggregate ranges.
+
+This is stronger evidence than a single run, but it remains one model and seven
+tasks. It should not be generalized into a universal harness-effect estimate.
+The completion label is a validation recommendation for human review, not an
+autonomous decision to merge or deploy generated code.
+
+### Structured-spec resume and Pong import repair
+
+Structured-spec runs now create their artifact directory before contract
+generation, checkpoint after every terminal contract result, and expose:
+
+```sh
+make resume-structured-spec \
+  SPEC_PATH=<original-spec> \
+  RESUME_RUN=<artifact-run-id>
+```
+
+The contract-queue regression test simulates an interruption after the first
+accepted contract and verifies that resumption generates only the remaining
+contract.
+
+Wildcard imports are now blocking lint findings with generalized repair
+guidance. The post-fix Pong run no longer contained the earlier wildcard import
+or undefined pygame constants:
+
+```text
+artifacts/runs/structured_spec_pong_game_spec-20260724T184357Z-29e2d625
+```
+
+Pong still ended at manual review for different issues: `handle_input`
+cyclomatic complexity was 8 against a limit of 7, and the integrated module
+omitted required `check_wall_collision` and `check_paddle_collision` wrappers.
+The constants failure is closed; Pong as a whole is not yet a clean pass.
+
 ### Stateful ladder with architect recovery
 
 Command:
@@ -129,9 +196,8 @@ contract-bearing sample.
 | Screenshot item | Reason skipped |
 | --- | --- |
 | Parsing, data, algorithmic, and stateful ladders | Already run and documented in `docs/qwen-capability-results-2026-07-18.md` |
-| Snake and Pong structured-spec runs | Run in the current session and documented in `docs/structured-spec-repo-map-results-2026-07-24.md` |
+| Snake structured-spec run | Already documented in `docs/structured-spec-repo-map-results-2026-07-24.md` |
 | Repeating Pong three times | Would repeat the same command; excluded by the no-rerun instruction |
-| Hard-killing a structured-spec run | Repeats the Pong command, and structured-spec currently has no `--resume-run` read path |
 | Full `make test` | The complete 310-test suite already passed before this pass |
 | `make test-adversarial` and `make test-engine-edge-cases` | Their tests were already included in the completed full suite |
 | Repo-map checks | All formats, relative imports, and generated-output mapping were run in the current session |
@@ -139,8 +205,7 @@ contract-bearing sample.
 
 ## Follow-Up Signal
 
-The repair-enabled comparison now demonstrates both sides of the central
-claim: the harness blocks bad drafts and can convert some of them into correct
-programs. The next stronger experiment is repeated paired samples with saved
-raw drafts, fixed retry budgets, and confidence intervals so stochastic model
-variation is separated from harness effect.
+The repeated paired comparison now demonstrates both sides of the central
+claim: the harness blocks bad drafts and converted 16 raw failures into passing
+programs. The next stronger experiment is the same retained-evidence protocol
+across more models and tasks, with confidence intervals.
