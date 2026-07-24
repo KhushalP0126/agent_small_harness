@@ -58,7 +58,7 @@ Function-contract generation and final integration use complementary gates:
 
 These gates are task-agnostic. Snake and Pong remain external stress fixtures;
 their failures motivated the checks but do not create game-specific controller
-or validator logic. The implementation baseline is covered by 304 passing unit
+or validator logic. The implementation baseline is covered by 307 passing unit
 tests, including regression cases for hallucinated imports, immutable
 cross-contract state, method-call arity, skipped lint, and integrated runtime
 crashes.
@@ -98,10 +98,11 @@ artifact IDs, and outcomes are recorded in
 The current pipeline manages context within one generated program:
 
 - `prompt/budget.py` estimates tokens and applies a 24,000-character retry
-  prompt budget. Callers may supply a summarizer for older failed-attempt
-  context while the current draft and newest diagnostics remain verbatim.
-  Deterministic tail truncation remains the fallback when no summarizer is
-  configured or summarization fails.
+  prompt budget. `prompt/summarizer.py` supplies the default deterministic
+  compressor for older `PRIOR FAILED ATTEMPTS` blocks while the current draft
+  and `DIAGNOSTIC DELTAS` section remain verbatim. Callers may inject a
+  different summarizer; deterministic tail truncation remains the fallback if
+  summarization fails or cannot fit the budget.
 - Both small-worker and architect retry prompts pass through that budget gate.
 - The architect client detects likely truncated responses and requests a
   continuation from the response tail instead of restarting blindly.

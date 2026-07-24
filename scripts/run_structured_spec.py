@@ -30,6 +30,7 @@ from backends.architect_client import (
 from backends.ollama_client import DEFAULT_OLLAMA_MODEL, OllamaModelSupplier
 from harness_kernel.function_contracts import ContractQueue, ContractQueuePlan, DealExample, FunctionContract
 from prompt.budget import budget_prompt
+from prompt.summarizer import DefaultPromptSummarizer
 from validation.import_graph import analyze_import_graph, validate_imported_symbols
 
 
@@ -1130,6 +1131,7 @@ def run_spec(
     prompt_summarizer: Callable[[str], str] | None = None,
 ) -> int:
     config = load_config(config_path)
+    active_prompt_summarizer = prompt_summarizer or DefaultPromptSummarizer()
     spec_text = spec_path.read_text(encoding="utf-8")
     plan_mode = PlanModeAgent()
     plan = plan_mode.plan(spec_text)
@@ -1244,7 +1246,7 @@ def run_spec(
         crosshair_enabled=config.engines.formal.crosshair_enabled,
         crosshair_timeout_seconds=config.engines.formal.crosshair_timeout_seconds,
         repair_strategy=RepairStrategyAgent(),
-        prompt_summarizer=prompt_summarizer,
+        prompt_summarizer=active_prompt_summarizer,
     )
     contract_execution_results: list[ContractExecutionResult] = []
     if queue.contracts:
@@ -1256,7 +1258,7 @@ def run_spec(
             architect_repair_draft=architect_supplier,
             small_retries_per_contract=max_retries,
             architect_retries_per_contract=1 if architect_supplier is not None else 0,
-            prompt_summarizer=prompt_summarizer,
+            prompt_summarizer=active_prompt_summarizer,
         )
         if not accepted_sources:
             session = {
@@ -1289,7 +1291,7 @@ def run_spec(
                 plan_packet,
                 accepted_sources,
                 contract_execution_results,
-                prompt_summarizer=prompt_summarizer,
+                prompt_summarizer=active_prompt_summarizer,
             )
             print("[contract-queue] all contracts accepted; sending accepted functions to architect integrator", flush=True)
             try:

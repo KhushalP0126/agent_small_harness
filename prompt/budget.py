@@ -38,6 +38,19 @@ def budget_prompt(
             truncated=False,
         )
     if summarizer is not None:
+        summarized_history = _summarize_prior_attempt_history(
+            text,
+            max_chars,
+            summarizer,
+        )
+        if summarized_history is not None:
+            return PromptBudgetResult(
+                text=summarized_history,
+                original_chars=original_chars,
+                final_chars=len(summarized_history),
+                truncated=True,
+                strategy="summarize_prior_attempts_preserve_diagnostics",
+            )
         summarized = _summarize_older_context(text, max_chars, summarizer)
         if summarized is not None:
             return PromptBudgetResult(
@@ -69,6 +82,45 @@ def budget_prompt(
         truncated=True,
         strategy="tail_preserve_latest_context",
     )
+
+
+def _summarize_prior_attempt_history(
+    text: str,
+    max_chars: int,
+    summarizer: PromptSummarizer,
+) -> str | None:
+    header = "PRIOR FAILED ATTEMPTS:"
+    start = text.find(header)
+    if start < 0:
+        return None
+    body_start = start + len(header)
+    end_markers = (
+        "\n\nDIAGNOSTIC DELTAS:",
+        "\n\nARCHITECT MODE:",
+        "\n\nTARGETED REPAIR INSTRUCTIONS:",
+        "\n\nDEBUGGER OBSERVATIONS",
+    )
+    ends = [
+        position
+        for marker in end_markers
+        if (position := text.find(marker, body_start)) >= 0
+    ]
+    body_end = min(ends, default=len(text))
+    try:
+        summary = summarizer(text[body_start:body_end]).strip()
+    except Exception:
+        return None
+    if not summary:
+        return None
+    candidate = (
+        text[:body_start]
+        + "\n"
+        + summary
+        + text[body_end:]
+    )
+    if len(candidate) > max_chars:
+        return None
+    return candidate
 
 
 def _summarize_older_context(

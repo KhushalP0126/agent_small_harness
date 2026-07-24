@@ -16,6 +16,7 @@ from prompt.architect_builder import build_state_machine_architect_prompt
 from prompt.backend_failure_builder import build_backend_failure_architect_prompt
 from prompt.budget import PromptSummarizer, budget_prompt
 from prompt.retry_builder import build_retry_prompt, build_small_worker_retry_prompt
+from prompt.summarizer import DefaultPromptSummarizer
 from validation.behavior import (
     FunctionBehaviorSpec,
     behavior_result_from_trace,
@@ -154,7 +155,7 @@ class GenerationController(BaseAgent):
         self.debugger_type_contracts = list(debugger_type_contracts or [])
         self.allow_architect_repair_retry = allow_architect_repair_retry
         self.checkpoint_writer = checkpoint_writer
-        self.prompt_summarizer = prompt_summarizer
+        self.prompt_summarizer = prompt_summarizer or DefaultPromptSummarizer()
         self.execution_agent = execution_agent or (
             ExecutionAgent() if (enable_execution_trace or enable_debugger_hints) else None
         )

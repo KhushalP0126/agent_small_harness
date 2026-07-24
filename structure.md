@@ -139,6 +139,7 @@ Prompt builders convert structured context and findings into model-facing text.
 
 - `prompt/constraint_types.py` - Constraint-block dataclasses.
 - `prompt/budget.py` - Estimates prompt size, optionally summarizes older context while preserving the latest diagnostics verbatim, and falls back to deterministic tail truncation.
+- `prompt/summarizer.py` - Default deterministic extractive compressor for older failed-attempt history; it never rewrites the current diagnostic section.
 - `prompt/builder.py` - Initial structured prompt builder.
 - `prompt/backend_failure_builder.py` - Converts model/backend exceptions into bounded, structured manual-review responses.
 - `prompt/retry_builder.py` - Low-noise small-worker and richer retry-prompt builder.
@@ -222,6 +223,7 @@ Unit and integration coverage.
 
 - `tests/test_benchmarker.py` - Controller, prompt, behavior, supplier, and benchmark tests.
 - `tests/test_checkpoint_resume.py` - Atomic checkpoint persistence and interrupted controller-resume regressions.
+- `tests/test_prompt_summarizer.py` - Default retry-history compression and verbatim live-diagnostic preservation tests.
 - `tests/test_tool_registry.py` - Typed tool dispatch, backend failure containment, and default-handler tests.
 - `tests/test_api.py` - Synchronous and asynchronous FastAPI boundary and job-store tests.
 - `tests/test_agents_pipeline.py` - Agent, registry, repair, historian, library, and controller integration tests.
