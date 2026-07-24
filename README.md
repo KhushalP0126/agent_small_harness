@@ -391,6 +391,7 @@ Run model capability experiments:
 make test-worker-limit MODEL=qwen2.5-coder:3b SAVE_ARTIFACTS=1
 make test-worker-limit-auto SAVE_ARTIFACTS=1
 make test-raw-vs-harness MODEL=qwen2.5-coder:3b
+make test-raw-vs-harness-architect MODEL=qwen2.5-coder:3b
 ```
 
 Run focused Python ladders:

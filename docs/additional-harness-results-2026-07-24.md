@@ -37,6 +37,39 @@ generations were stopped at `manual_review_required` with concrete static or
 behavior evidence instead of being reported as completed. Because every row
 used one attempt, this command did not exercise repair or architect recovery.
 
+### Raw model versus repair and architect recovery
+
+The follow-up added a separate comparison target so the baseline command keeps
+its original behavior:
+
+```sh
+make test-raw-vs-harness-architect MODEL=qwen2.5-coder:1.5b
+```
+
+| Difficulty | Task | Raw behavior | Harness result | Attempts | Architect calls |
+| ---: | --- | --- | --- | ---: | ---: |
+| 1 | `sum_even_numbers` | Pass | Completed | 1 | 0 |
+| 2 | `dedupe_by_key` | Pass | Completed | 1 | 0 |
+| 3 | `parse_int_list` | Fail | Completed | 3 | 1 |
+| 4 | `compact_ranges` | Fail | Completed | 2 | 1 |
+| 5 | `merge_inventory_events` | Pass | Completed | 1 | 0 |
+| 6 | `parse_sectioned_config` | Fail | Completed | 3 | 1 |
+| 7 | `resolve_dependency_order` | Fail | Manual review | 2 | 1 |
+
+Raw behavior pass rate: **3/7**
+
+Repair-enabled harness completion rate: **6/7**
+
+The harness recovered three incorrect raw drafts: `parse_int_list`,
+`compact_ranges`, and `parse_sectioned_config`. Each recovery used one
+architect call after bounded local repair. `resolve_dependency_order` remained
+blocked with one static and two behavior failures, so the run preserved a real
+negative result rather than inflating the completion score.
+
+This is a separate stochastic sample from the one-attempt comparison above.
+The raw pass-rate change from 4/7 to 3/7 is model sampling variance; the useful
+within-run comparison is 3/7 raw versus 6/7 after the harness.
+
 ### Stateful ladder with architect recovery
 
 Command:
@@ -106,8 +139,8 @@ contract-bearing sample.
 
 ## Follow-Up Signal
 
-The next non-duplicate comparison should enable bounded repair and architect
-recovery on the same raw-versus-harness task set. The current command proves
-that the harness detects and blocks bad drafts, but its single-attempt setup
-cannot measure whether the repair loop converts those failures into correct
-programs.
+The repair-enabled comparison now demonstrates both sides of the central
+claim: the harness blocks bad drafts and can convert some of them into correct
+programs. The next stronger experiment is repeated paired samples with saved
+raw drafts, fixed retry budgets, and confidence intervals so stochastic model
+variation is separated from harness effect.

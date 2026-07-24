@@ -13,6 +13,7 @@ if str(ROOT) not in sys.path:
 from agents.config_loader import DEFAULT_CONFIG_PATH, HarnessConfig, load_config
 from agents.generation_controller import GenerationController
 from agents.repair_strategy import RepairStrategyAgent
+from backends.architect_client import ArchitectModelSupplier
 from backends.ollama_client import DEFAULT_OLLAMA_MODEL, OllamaModelSupplier
 from scripts.run_coding_capability import _behavior_spec, _build_prompt, _final_behavior_issues, _final_static_violations
 from validation.behavior import serialize_behavior_result, validate_function_behavior
@@ -34,6 +35,7 @@ def _table(rows: list[dict[str, Any]]) -> str:
         "harness_static",
         "harness_behavior",
         "attempts",
+        "architect_calls",
     ]
     lines = [
         "| " + " | ".join(headers) + " |",
@@ -51,6 +53,7 @@ def _table(rows: list[dict[str, Any]]) -> str:
                     str(row["harness_static"]),
                     str(row["harness_behavior"]),
                     str(row["attempts"]),
+                    str(row["architect_calls"]),
                 ]
             )
             + " |"
@@ -64,6 +67,7 @@ def run_raw_vs_harness(
     config: HarnessConfig | None = None,
     max_retries: int | None = None,
     limit: int | None = None,
+    architect_after_repair_attempts: int | None = None,
 ) -> int:
     config = config or HarnessConfig()
     supplier = OllamaModelSupplier(model=model)
@@ -88,6 +92,12 @@ def run_raw_vs_harness(
             max_retries=max_retries if max_retries is not None else config.execution.gates.max_retries,
             draft_supplier=lambda _prompt, draft=raw_draft: draft,
             repair_supplier=supplier.repair_draft,
+            architect_supplier=(
+                ArchitectModelSupplier().repair_draft
+                if architect_after_repair_attempts is not None
+                else None
+            ),
+            architect_after_repair_attempts=architect_after_repair_attempts,
             policy=policy,
             behavior_spec=spec,
             behavior_timeout_seconds=config.engines.behavior.timeout_seconds,
@@ -96,9 +106,11 @@ def run_raw_vs_harness(
             repair_strategy=RepairStrategyAgent(),
             enable_execution_trace=config.engines.behavior.execution_trace,
             enable_debugger_hints=config.engines.behavior.debugger_hints,
+            allow_architect_repair_retry=config.execution.routing.allow_architect_repair_retry,
         )
         result = controller.run(target=task["prompt"], initial_prompt=prompt)
         session = result.payload
+        attempts = session.get("attempts", [])
         row = {
             "difficulty": task.get("difficulty", ""),
             "task": task["name"],
@@ -106,7 +118,11 @@ def run_raw_vs_harness(
             "harness_status": session.get("final_status", ""),
             "harness_static": len(_final_static_violations(session)),
             "harness_behavior": len(_final_behavior_issues(session)),
-            "attempts": len(session.get("attempts", [])),
+            "attempts": len(attempts),
+            "architect_calls": sum(
+                attempt.get("draft_source_worker") == "architect_llm"
+                for attempt in attempts
+            ),
         }
         rows.append(row)
         print(_table(rows), flush=True)
@@ -128,6 +144,7 @@ def main() -> int:
     parser.add_argument("--model", default=DEFAULT_OLLAMA_MODEL)
     parser.add_argument("--max-retries", type=int, default=None)
     parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--architect-after-repair-attempts", type=int, default=None)
     args = parser.parse_args()
     config = load_config(args.config)
     return run_raw_vs_harness(
@@ -136,6 +153,7 @@ def main() -> int:
         config=config,
         max_retries=args.max_retries,
         limit=args.limit,
+        architect_after_repair_attempts=args.architect_after_repair_attempts,
     )
 
 

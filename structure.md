@@ -210,7 +210,7 @@ Runnable experiments and operator tooling.
 - `scripts/run_coding_capability.py` - Runs codegen tasks through engines, behavior checks, and optional architect escalation; `--resume-run` reloads a saved matching task checkpoint.
 - `scripts/run_worker_limit.py` - Harder-and-harder worker ladder with checkpoint resume through `--resume-run`.
 - `scripts/run_plan_mode_ladder.py` - Deterministic Plan Mode extraction ladder.
-- `scripts/run_raw_vs_harness.py` - Raw model versus harness comparison.
+- `scripts/run_raw_vs_harness.py` - Raw model versus harness comparison, with an optional bounded repair and architect-escalation mode.
 - `scripts/run_formal_experiment.py` - Optional CrossHair smoke experiment.
 - `scripts/review_run.py` - Human-readable artifact-run summary.
 - `scripts/run_live_repair.py` - Live repair loop against a fixture.
@@ -225,6 +225,7 @@ Unit and integration coverage.
 - `tests/test_checkpoint_resume.py` - Atomic checkpoint persistence and interrupted controller-resume regressions.
 - `tests/test_prompt_summarizer.py` - Default retry-history compression and verbatim live-diagnostic preservation tests.
 - `tests/test_tool_registry.py` - Typed tool dispatch, backend failure containment, and default-handler tests.
+- `tests/test_raw_vs_harness.py` - Repair-enabled raw comparison wiring and architect metric coverage.
 - `tests/test_api.py` - Synchronous and asynchronous FastAPI boundary and job-store tests.
 - `tests/test_agents_pipeline.py` - Agent, registry, repair, historian, library, and controller integration tests.
 - `tests/test_behavior.py` - Behavior validator parity, isolation, timeout, trace, output-capture, exception, and runtime-backed issue tests.

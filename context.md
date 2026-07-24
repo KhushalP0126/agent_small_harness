@@ -456,6 +456,7 @@ make test-python-ladder-algorithmic MODEL=qwen2.5-coder:3b
 make test-python-ladder-stateful MODEL=qwen2.5-coder:3b
 make test-python-ladder-stateful-architect MODEL=qwen2.5-coder:3b SAVE_ARTIFACTS=1
 make test-raw-vs-harness MODEL=qwen2.5-coder:3b
+make test-raw-vs-harness-architect MODEL=qwen2.5-coder:3b
 make discover-library LIB=clang.cindex
 make api-dev
 make review-run RUN=<artifact-run-id-or-path>
