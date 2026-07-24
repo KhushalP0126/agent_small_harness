@@ -10,11 +10,11 @@ from agents.execution_agent import ExecutionAgent
 from agents.parse_contract import ParseContractAgent, ParseFailure
 from agents.repair_strategy import MANUAL_REVIEW, RepairStrategyAgent
 from engines.base import EngineFinding
-from harness_kernel.tool_handlers import ExecutionRequest
+from harness_kernel.tool_handlers import ExecutionRequest, build_default_tool_registry
 from harness_kernel.tool_registry import ToolRegistry
 from prompt.architect_builder import build_state_machine_architect_prompt
 from prompt.backend_failure_builder import build_backend_failure_architect_prompt
-from prompt.budget import budget_prompt
+from prompt.budget import PromptSummarizer, budget_prompt
 from prompt.retry_builder import build_retry_prompt, build_small_worker_retry_prompt
 from validation.behavior import (
     FunctionBehaviorSpec,
@@ -34,6 +34,7 @@ from validation.types import ValidationResult, Violation
 
 DraftSupplier = Callable[[str], str]
 RepairSupplier = Callable[[str, str], str]
+CheckpointWriter = Callable[[dict], None]
 
 SEVERITY_RANK = {
     "info": 0,
@@ -131,6 +132,8 @@ class GenerationController(BaseAgent):
         debugger_type_contracts: list[str] | None = None,
         allow_architect_repair_retry: bool = False,
         tool_registry: ToolRegistry | None = None,
+        checkpoint_writer: CheckpointWriter | None = None,
+        prompt_summarizer: PromptSummarizer | None = None,
     ) -> None:
         self.max_retries = max_retries
         self.draft_supplier = draft_supplier or (lambda prompt: prompt)
@@ -143,7 +146,6 @@ class GenerationController(BaseAgent):
         self.crosshair_enabled = crosshair_enabled
         self.crosshair_timeout_seconds = crosshair_timeout_seconds
         self.debug = debug
-        self.engine_registry = engine_registry or EngineRegistry.default()
         self.parse_contract = parse_contract or ParseContractAgent()
         self.repair_strategy = repair_strategy
         self.language = language
@@ -151,9 +153,16 @@ class GenerationController(BaseAgent):
         self.enable_debugger_hints = enable_debugger_hints
         self.debugger_type_contracts = list(debugger_type_contracts or [])
         self.allow_architect_repair_retry = allow_architect_repair_retry
-        self.tool_registry = tool_registry
+        self.checkpoint_writer = checkpoint_writer
+        self.prompt_summarizer = prompt_summarizer
         self.execution_agent = execution_agent or (
             ExecutionAgent() if (enable_execution_trace or enable_debugger_hints) else None
+        )
+        self.tool_registry = tool_registry or build_default_tool_registry(
+            execution_agent=self.execution_agent
+        )
+        self.engine_registry = engine_registry or EngineRegistry.default(
+            tool_registry=self.tool_registry
         )
 
     def _scan(self, source: str) -> list[EngineFinding]:
@@ -602,8 +611,46 @@ class GenerationController(BaseAgent):
                 "- Consider the full finding set together.\n"
                 "- Produce a coherent structural repair that satisfies every listed static and behavioral gate."
             )
-        retry_prompt = budget_prompt(retry_prompt).text
+        retry_prompt = budget_prompt(
+            retry_prompt,
+            summarizer=self.prompt_summarizer,
+        ).text
         return retry_prompt, scoped_directives, scoped_violations
+
+    def _write_checkpoint(
+        self,
+        session: GenerationSession,
+        *,
+        draft: str,
+        previous_draft: str,
+        draft_source_worker: str,
+        next_attempt: int,
+        architect_repair_retry_used: bool,
+        phase: str,
+    ) -> None:
+        if self.checkpoint_writer is None:
+            return
+        self.checkpoint_writer(
+            {
+                "version": 1,
+                "session": asdict(session),
+                "runtime": {
+                    "phase": phase,
+                    "draft": draft,
+                    "previous_draft": previous_draft,
+                    "draft_source_worker": draft_source_worker,
+                    "next_attempt": next_attempt,
+                    "architect_repair_retry_used": architect_repair_retry_used,
+                },
+            }
+        )
+
+    @staticmethod
+    def _attempt_from_checkpoint(payload: dict) -> GenerationAttempt:
+        allowed = GenerationAttempt.__dataclass_fields__
+        return GenerationAttempt(
+            **{name: payload[name] for name in allowed if name in payload}
+        )
 
     def _suggest_human_decision(self, reason: str) -> str:
         suggestions = {
@@ -814,25 +861,75 @@ class GenerationController(BaseAgent):
         draft_override: str | None = None,
         draft_source_override: str = "draft_supplier",
         pre_attempts: list[GenerationAttempt] | None = None,
+        resume_from: dict | None = None,
     ) -> AgentResult:
-        if draft_override is None:
+        if resume_from is not None:
+            session_payload = resume_from.get("session", resume_from)
+            runtime = resume_from.get("runtime", {})
+            if runtime.get("phase") == "terminal":
+                return AgentResult(agent=self.name, payload=session_payload)
+            restored_attempts = [
+                self._attempt_from_checkpoint(attempt)
+                for attempt in session_payload.get("attempts", [])
+            ]
+            session = GenerationSession(
+                target=session_payload.get("target", target),
+                route=session_payload.get("route", "repair_loop"),
+                max_retries=int(session_payload.get("max_retries", self.max_retries)),
+                attempts=restored_attempts,
+            )
+            failed_attempts = list(restored_attempts)
+            previous_draft = runtime.get("previous_draft", "")
+            draft_source_worker = runtime.get("draft_source_worker", "draft_supplier")
+            architect_repair_retry_used = bool(
+                runtime.get("architect_repair_retry_used", False)
+            )
+            start_attempt = int(runtime.get("next_attempt", len(restored_attempts)))
+            draft = runtime.get("draft", "")
+            if runtime.get("phase") == "attempt_recorded" and restored_attempts:
+                last_attempt = restored_attempts[-1]
+                worker_name = last_attempt.repair_worker
+                supplier = (
+                    self.architect_supplier
+                    if "architect_llm" in worker_name and self.architect_supplier is not None
+                    else self.repair_supplier
+                )
+                draft = supplier(last_attempt.draft, last_attempt.retry_prompt)
+                previous_draft = last_attempt.draft
+                draft_source_worker = (
+                    "architect_llm" if "architect_llm" in worker_name else "small_worker"
+                )
+            if not draft:
+                raise ValueError("Checkpoint does not contain a draft to resume")
+        elif draft_override is None:
             try:
                 initial_draft = self.draft_supplier(initial_prompt)
             except Exception as exc:
                 return self._handle_initial_backend_failure(target, initial_prompt, exc)
+            initial_findings = self._scan(initial_draft)
+            route = self._route(initial_findings)
+            session = GenerationSession(target=target, route=route, max_retries=self.max_retries)
+            failed_attempts = list(pre_attempts or [])
+            session.attempts.extend(failed_attempts)
+            draft = initial_draft
+            draft_source_worker = "draft_supplier"
+            previous_draft = ""
+            architect_repair_retry_used = False
+            start_attempt = len(failed_attempts)
         else:
             initial_draft = draft_override
-        initial_findings = self._scan(initial_draft)
-        route = self._route(initial_findings)
-        session = GenerationSession(target=target, route=route, max_retries=self.max_retries)
-        failed_attempts: list[GenerationAttempt] = list(pre_attempts or [])
-        session.attempts.extend(failed_attempts)
+            initial_findings = self._scan(initial_draft)
+            route = self._route(initial_findings)
+            session = GenerationSession(target=target, route=route, max_retries=self.max_retries)
+            failed_attempts = list(pre_attempts or [])
+            session.attempts.extend(failed_attempts)
+            draft = initial_draft
+            draft_source_worker = draft_source_override
+            previous_draft = ""
+            architect_repair_retry_used = False
+            start_attempt = len(failed_attempts)
 
-        draft = initial_draft
-        draft_source_worker = draft_source_override if draft_override is not None else "draft_supplier"
-        previous_draft = ""
-        architect_repair_retry_used = False
-        for attempt_index in range(len(failed_attempts), self.max_retries + 1):
+        for attempt_index in range(start_attempt, self.max_retries + 1):
             findings = self._scan(draft)
             validation_result: ValidationResult = validate_findings(findings, policy=self.policy)
             execution_trace_payload: dict = {}
@@ -1050,7 +1147,10 @@ class GenerationController(BaseAgent):
                             "TARGETED REPAIR INSTRUCTIONS:\n"
                             + "\n".join(f"- {instruction}" for instruction in decision.repair_instructions)
                         )
-                        retry_prompt = budget_prompt(retry_prompt).text
+                        retry_prompt = budget_prompt(
+                            retry_prompt,
+                            summarizer=self.prompt_summarizer,
+                        ).text
                 if self.enable_debugger_hints and execution_trace_obj is not None:
                     debugger_hints = build_debugger_hints(
                         execution_trace_obj,
@@ -1062,7 +1162,10 @@ class GenerationController(BaseAgent):
                             "DEBUGGER OBSERVATIONS (from an actual run):\n"
                             + "\n".join(f"- {hint}" for hint in debugger_hints)
                         )
-                        retry_prompt = budget_prompt(retry_prompt).text
+                        retry_prompt = budget_prompt(
+                            retry_prompt,
+                            summarizer=self.prompt_summarizer,
+                        ).text
                 self._debug_print(f"Sending repair prompt to {repair_worker}.")
             attempt = GenerationAttempt(
                 attempt=attempt_index,
@@ -1083,8 +1186,26 @@ class GenerationController(BaseAgent):
             )
             attempt.branch_state_signature = build_branch_state_signature(target, attempt).to_dict()
             session.attempts.append(attempt)
+            self._write_checkpoint(
+                session,
+                draft=draft,
+                previous_draft=previous_draft,
+                draft_source_worker=draft_source_worker,
+                next_attempt=attempt_index + 1,
+                architect_repair_retry_used=architect_repair_retry_used,
+                phase="attempt_recorded",
+            )
             if is_complete:
                 session.final_status = "completed"
+                self._write_checkpoint(
+                    session,
+                    draft=draft,
+                    previous_draft=previous_draft,
+                    draft_source_worker=draft_source_worker,
+                    next_attempt=attempt_index + 1,
+                    architect_repair_retry_used=architect_repair_retry_used,
+                    phase="terminal",
+                )
                 break
             if not force_manual_review:
                 branch_loop = detect_branching_loop(session.attempts)
@@ -1159,6 +1280,15 @@ class GenerationController(BaseAgent):
                                 previous_draft = draft
                                 draft = next_draft
                                 draft_source_worker = "architect_llm"
+                                self._write_checkpoint(
+                                    session,
+                                    draft=draft,
+                                    previous_draft=previous_draft,
+                                    draft_source_worker=draft_source_worker,
+                                    next_attempt=attempt_index + 1,
+                                    architect_repair_retry_used=architect_repair_retry_used,
+                                    phase="ready_to_validate",
+                                )
                                 continue
                     stagnation_reason = (
                         "architect_stagnant_after_escalation"
@@ -1173,6 +1303,15 @@ class GenerationController(BaseAgent):
                 previous_draft = draft
                 draft = next_draft
                 draft_source_worker = worker_name
+                self._write_checkpoint(
+                    session,
+                    draft=draft,
+                    previous_draft=previous_draft,
+                    draft_source_worker=draft_source_worker,
+                    next_attempt=attempt_index + 1,
+                    architect_repair_retry_used=architect_repair_retry_used,
+                    phase="ready_to_validate",
+                )
         else:
             session.final_status = "manual_review_required"
 
@@ -1180,6 +1319,16 @@ class GenerationController(BaseAgent):
             session.final_status = "manual_review_required"
             if session.human_review is None and session.attempts:
                 session.human_review = self._human_review_payload("max_retries_exhausted", session.attempts[-1])
+
+        self._write_checkpoint(
+            session,
+            draft=draft,
+            previous_draft=previous_draft,
+            draft_source_worker=draft_source_worker,
+            next_attempt=len(session.attempts),
+            architect_repair_retry_used=architect_repair_retry_used,
+            phase="terminal",
+        )
 
         return AgentResult(agent=self.name, payload=asdict(session))
 

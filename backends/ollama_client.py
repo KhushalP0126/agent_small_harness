@@ -4,9 +4,12 @@ import json
 import os
 import re
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+
+if TYPE_CHECKING:
+    from harness_kernel.tool_registry import ToolRegistry
 
 
 DEFAULT_OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434")
@@ -74,6 +77,7 @@ class OllamaModelSupplier:
         client: OllamaClient | None = None,
         model: str = DEFAULT_OLLAMA_MODEL,
         config: OllamaGenerationConfig | None = None,
+        tool_registry: ToolRegistry | None = None,
         system_prompt: str = (
             "You are a code repair backend. Return code only. "
             "Keep behavior intact while satisfying the stated constraints."
@@ -83,9 +87,14 @@ class OllamaModelSupplier:
         self.model = model
         self.config = config or OllamaGenerationConfig()
         self.system_prompt = system_prompt
+        if tool_registry is None:
+            from harness_kernel.tool_handlers import build_default_tool_registry
+
+            tool_registry = build_default_tool_registry(ollama_client=self.client)
+        self.tool_registry = tool_registry
 
     def generate_draft(self, prompt: str) -> str:
-        response = self.client.generate(
+        response = self._generate(
             prompt=prompt,
             model=self.model,
             config=self._config_for_prompt(prompt),
@@ -98,13 +107,42 @@ class OllamaModelSupplier:
             "Refactor the current draft to satisfy the repair request.\n\n"
             f"{retry_prompt}\n"
         )
-        response = self.client.generate(
+        response = self._generate(
             prompt=prompt,
             model=self.model,
             config=self._config_for_prompt(prompt),
             system=self.system_prompt,
         )
         return self._extract_code(response)
+
+    def _generate(
+        self,
+        *,
+        prompt: str,
+        model: str,
+        config: OllamaGenerationConfig,
+        system: str | None,
+    ) -> str:
+        from harness_kernel.tool_handlers import (
+            GenerateResponse,
+            OllamaGenerateRequest,
+        )
+
+        result = self.tool_registry.dispatch(
+            "ollama_generate",
+            OllamaGenerateRequest(
+                prompt=prompt,
+                model=model,
+                config=config,
+                system=system,
+            ),
+        )
+        if not result.ok or not isinstance(result.value, GenerateResponse):
+            raise RuntimeError(
+                f"Ollama tool failed ({result.error_kind or 'tool_error'}): "
+                f"{result.error or 'no response'}"
+            )
+        return result.value.text
 
     def _config_for_prompt(self, prompt: str) -> OllamaGenerationConfig:
         target_predict = self.config.num_predict

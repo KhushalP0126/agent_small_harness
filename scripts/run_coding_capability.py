@@ -391,6 +391,11 @@ def run_tasks(
             model=model,
             supplier_mode=supplier_mode,
         )
+        paths = (
+            artifact_manager.create_run(prefix=task["name"])
+            if save_artifacts
+            else None
+        )
         controller = GenerationController(
             max_retries=max_retries,
             draft_supplier=draft_supplier,
@@ -408,6 +413,11 @@ def run_tasks(
             enable_execution_trace=config.engines.behavior.execution_trace,
             enable_debugger_hints=config.engines.behavior.debugger_hints,
             allow_architect_repair_retry=config.execution.routing.allow_architect_repair_retry,
+            checkpoint_writer=(
+                (lambda payload, active_paths=paths: artifact_manager.checkpoint(payload, active_paths))
+                if paths is not None
+                else None
+            ),
         )
         result = controller.run(target=task["prompt"], initial_prompt=prompt)
         session = result.payload
@@ -428,8 +438,7 @@ def run_tasks(
         contribution = _worker_contribution(session)
         artifact_path = ""
         run_id = ""
-        if save_artifacts:
-            paths = artifact_manager.create_run(prefix=task["name"])
+        if paths is not None:
             run_id = paths.run_id
             artifact_path = str(paths.run_dir)
             artifact_manager.save_session(

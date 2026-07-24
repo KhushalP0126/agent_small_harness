@@ -11,6 +11,8 @@ from engines.lint_engine import LintEngine
 from engines.math_engine import MathEngine
 from engines.state_flow_engine import StateFlowEngine
 from engines.decomposition_engine import DecompositionEngine, StructuralIR
+from harness_kernel.tool_handlers import LintRequest, LintResult
+from harness_kernel.tool_registry import ToolRegistry
 
 
 EngineFactory = Callable[[], BaseEngine]
@@ -29,12 +31,13 @@ class EngineRegistry:
     their engine factories here without touching the controller.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, tool_registry: ToolRegistry | None = None) -> None:
         self._factories: dict[str, list[EngineFactory]] = {}
+        self.tool_registry = tool_registry
 
     @classmethod
-    def default(cls) -> "EngineRegistry":
-        registry = cls()
+    def default(cls, tool_registry: ToolRegistry | None = None) -> "EngineRegistry":
+        registry = cls(tool_registry=tool_registry)
         registry.register("python", python_engine_factories())
         # C/C++ are registered only when tree-sitter and its grammars are importable.
         # Otherwise they stay unregistered and the parse contract gates them.
@@ -84,6 +87,25 @@ class EngineRegistry:
             ]
         for engine in self.engines_for(language):
             try:
+                if isinstance(engine, LintEngine) and self.tool_registry is not None:
+                    result = self.tool_registry.dispatch("lint", LintRequest(source))
+                    if result.ok and isinstance(result.value, LintResult):
+                        findings.extend(result.value.findings)
+                    else:
+                        findings.append(
+                            EngineFinding(
+                                engine="engine-lint",
+                                severity="Low",
+                                summary="Lint tool dispatch failed",
+                                details=result.error or "Lint tool returned no result.",
+                                metrics={
+                                    "lint_skipped": True,
+                                    "lint_status": "tool_dispatch_failed",
+                                    "error_kind": result.error_kind or "tool_error",
+                                },
+                            )
+                        )
+                    continue
                 if ir is not None and isinstance(
                     engine,
                     (MathEngine, HazardsEngine, BranchingEngine, CostEngine, BoundsEngine, StateFlowEngine),

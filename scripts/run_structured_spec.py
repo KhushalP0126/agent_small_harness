@@ -537,6 +537,7 @@ def _contract_repair_prompt(
     dependencies: list[str],
     worker_name: str,
     accepted_type_context: list[str] | None = None,
+    prompt_summarizer: Callable[[str], str] | None = None,
 ) -> str:
     sections = [
         "FUNCTION CONTRACT REPAIR",
@@ -586,7 +587,10 @@ def _contract_repair_prompt(
             "- If the source is truncated, return a complete replacement for this contract.",
         ]
     )
-    return "\n".join(sections)
+    return budget_prompt(
+        "\n".join(sections),
+        summarizer=prompt_summarizer,
+    ).text
 
 
 def _contract_dependencies(contract: FunctionContract, known_names: set[str]) -> list[str]:
@@ -696,6 +700,7 @@ def _run_contract_queue_sequentially(
     architect_repair_draft: Callable[[str, str], str] | None = None,
     small_retries_per_contract: int = 1,
     architect_retries_per_contract: int = 1,
+    prompt_summarizer: Callable[[str], str] | None = None,
 ) -> tuple[list[str], list[ContractExecutionResult]]:
     accepted_sources: list[str] = []
     accepted_source_by_name: dict[str, str] = {}
@@ -810,6 +815,7 @@ def _run_contract_queue_sequentially(
                 dependencies,
                 worker_name="small_worker",
                 accepted_type_context=accepted_type_context,
+                prompt_summarizer=prompt_summarizer,
             )
             print(
                 f"[contract-queue] {generated_count}/{total} {contract.name}: retry {retry_index + 1} with small worker",
@@ -860,6 +866,7 @@ def _run_contract_queue_sequentially(
                 dependencies,
                 worker_name="architect_llm",
                 accepted_type_context=accepted_type_context,
+                prompt_summarizer=prompt_summarizer,
             )
             print(
                 f"[contract-queue] {generated_count}/{total} {contract.name}: escalating contract to architect",
@@ -929,7 +936,12 @@ def _run_contract_queue_sequentially(
     return accepted_sources, results
 
 
-def _integration_prompt(plan_packet: str, accepted_sources: list[str], results: list[ContractExecutionResult]) -> str:
+def _integration_prompt(
+    plan_packet: str,
+    accepted_sources: list[str],
+    results: list[ContractExecutionResult],
+    prompt_summarizer: Callable[[str], str] | None = None,
+) -> str:
     return budget_prompt("\n".join(
         [
             "FUNCTIONWISE CONTRACT INTEGRATION",
@@ -956,7 +968,7 @@ def _integration_prompt(plan_packet: str, accepted_sources: list[str], results: 
             "- Keep the main loop guarded by if __name__ == \"__main__\" when an app entrypoint is required.",
             "- The final code will be scanned by all engines and formal/Deal gates.",
         ]
-    )).text
+    ), summarizer=prompt_summarizer).text
 
 
 def _normalize_symbol(text: str) -> str:
@@ -1115,6 +1127,7 @@ def run_spec(
     use_architect_contracts: bool,
     config_path: Path,
     plan_only: bool = False,
+    prompt_summarizer: Callable[[str], str] | None = None,
 ) -> int:
     config = load_config(config_path)
     spec_text = spec_path.read_text(encoding="utf-8")
@@ -1231,6 +1244,7 @@ def run_spec(
         crosshair_enabled=config.engines.formal.crosshair_enabled,
         crosshair_timeout_seconds=config.engines.formal.crosshair_timeout_seconds,
         repair_strategy=RepairStrategyAgent(),
+        prompt_summarizer=prompt_summarizer,
     )
     contract_execution_results: list[ContractExecutionResult] = []
     if queue.contracts:
@@ -1242,6 +1256,7 @@ def run_spec(
             architect_repair_draft=architect_supplier,
             small_retries_per_contract=max_retries,
             architect_retries_per_contract=1 if architect_supplier is not None else 0,
+            prompt_summarizer=prompt_summarizer,
         )
         if not accepted_sources:
             session = {
@@ -1270,7 +1285,12 @@ def run_spec(
                 },
             }
         else:
-            integration_prompt = _integration_prompt(plan_packet, accepted_sources, contract_execution_results)
+            integration_prompt = _integration_prompt(
+                plan_packet,
+                accepted_sources,
+                contract_execution_results,
+                prompt_summarizer=prompt_summarizer,
+            )
             print("[contract-queue] all contracts accepted; sending accepted functions to architect integrator", flush=True)
             try:
                 integrated_source = architect_model_supplier.repair_draft("", integration_prompt)

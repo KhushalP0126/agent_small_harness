@@ -58,7 +58,7 @@ Function-contract generation and final integration use complementary gates:
 
 These gates are task-agnostic. Snake and Pong remain external stress fixtures;
 their failures motivated the checks but do not create game-specific controller
-or validator logic. The implementation baseline is covered by 286 passing unit
+or validator logic. The implementation baseline is covered by 304 passing unit
 tests, including regression cases for hallucinated imports, immutable
 cross-contract state, method-call arity, skipped lint, and integrated runtime
 crashes.
@@ -98,9 +98,10 @@ artifact IDs, and outcomes are recorded in
 The current pipeline manages context within one generated program:
 
 - `prompt/budget.py` estimates tokens and applies a 24,000-character retry
-  prompt budget. When older context must be removed, the prompt explicitly says
-  that it was truncated and preserves the current draft, newest failures, and
-  final rules.
+  prompt budget. Callers may supply a summarizer for older failed-attempt
+  context while the current draft and newest diagnostics remain verbatim.
+  Deterministic tail truncation remains the fallback when no summarizer is
+  configured or summarization fails.
 - Both small-worker and architect retry prompts pass through that budget gate.
 - The architect client detects likely truncated responses and requests a
   continuation from the response tail instead of restarting blindly.
@@ -110,11 +111,24 @@ The current pipeline manages context within one generated program:
   forward from earlier contracts to later contracts in the same queue.
 
 This is bounded prompt and interface-context management, not persistent semantic
-memory. The harness does not retain a conversation across separate invocations,
-retrieve prior sessions on demand, or yet coordinate type contracts across
-multiple generated source files. Structured-spec integration currently emits
-one assembled Python source file per run; run metadata, prompts, findings, and
-attempts are saved as separate artifact files when artifact capture is enabled.
+memory. Structured-spec integration currently emits one assembled Python source
+file per run. When artifact capture is enabled, the controller also atomically
+overwrites `checkpoint.json` after recorded attempts and after the next draft is
+ready. `ArtifactManager.load_checkpoint(run_id)` and
+`GenerationController.run(..., resume_from=checkpoint)` restore the next attempt,
+prior diagnostics, draft lineage, and architect-retry state without rerunning
+completed attempts. Final metadata, prompts, findings, and timelines remain
+separate artifact files.
+
+## Typed Tool Dispatch
+
+`harness_kernel/tool_registry.py` is the uniform boundary for operations that
+can fail outside deterministic Python logic. The default handlers wrap Pylint,
+the behavior execution sandbox, Ollama generation, and architect generation.
+`EngineRegistry` routes lint through this boundary, model suppliers dispatch
+generation through it, and the controller uses it for execution traces. Handler
+exceptions become typed failed results; existing policy and backend fallback
+paths decide whether to retry, degrade to manual review, or emit `lint_skipped`.
 
 ## Repo Mapping And Post-Contract Execution
 
@@ -147,7 +161,8 @@ Two task-agnostic capabilities sit alongside the existing loop:
   protocol is a follow-up that builds on the same trace.
 
 Behavior examples continue to execute whenever the existing behavior gate is
-enabled. Rich trace retention and debugger injection are opt-in and default off:
+enabled. Rich trace retention and debugger injection are enabled in the default
+configuration and can be explicitly disabled:
 `engines.behavior.execution_trace` retains the post-parse trace, while
 `engines.behavior.debugger_hints` enables bounded trace-to-spec notes. The
 controller accepts `execution_agent`, `enable_execution_trace`,

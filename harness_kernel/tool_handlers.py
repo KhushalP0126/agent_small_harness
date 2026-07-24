@@ -5,6 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from agents.execution_agent import ExecutionAgent
+from backends.architect_client import ArchitectApiClient, ArchitectProfile
+from backends.ollama_client import (
+    DEFAULT_OLLAMA_MODEL,
+    OllamaClient,
+    OllamaGenerationConfig,
+)
 from engines.base import EngineFinding
 from engines.lint_engine import LintEngine
 from harness_kernel.tool_registry import ToolHandler, ToolRegistry
@@ -36,6 +42,26 @@ class ExecutionRequest:
     source: str
     spec: FunctionBehaviorSpec
     timeout_seconds: float | None = None
+
+
+@dataclass(frozen=True)
+class OllamaGenerateRequest:
+    prompt: str
+    model: str = DEFAULT_OLLAMA_MODEL
+    config: OllamaGenerationConfig | None = None
+    system: str | None = None
+
+
+@dataclass(frozen=True)
+class ArchitectGenerateRequest:
+    prompt: str
+    system: str
+    profile: ArchitectProfile | None = None
+
+
+@dataclass(frozen=True)
+class GenerateResponse:
+    text: str
 
 
 def _make_lint_handler(
@@ -78,11 +104,61 @@ def _make_execution_sandbox_handler(
     )
 
 
+def _make_ollama_generate_handler(
+    client: OllamaClient | None = None,
+) -> ToolHandler[OllamaGenerateRequest, GenerateResponse]:
+    client = client or OllamaClient()
+
+    def invoke(request: OllamaGenerateRequest) -> GenerateResponse:
+        return GenerateResponse(
+            client.generate(
+                prompt=request.prompt,
+                model=request.model,
+                config=request.config,
+                system=request.system,
+            )
+        )
+
+    return ToolHandler(
+        name="ollama_generate",
+        request_type=OllamaGenerateRequest,
+        response_type=GenerateResponse,
+        invoke=invoke,
+        description="Generate text through the configured local Ollama backend.",
+    )
+
+
+def _make_architect_generate_handler(
+    client: ArchitectApiClient | None = None,
+) -> ToolHandler[ArchitectGenerateRequest, GenerateResponse]:
+    client = client or ArchitectApiClient()
+
+    def invoke(request: ArchitectGenerateRequest) -> GenerateResponse:
+        return GenerateResponse(
+            client.generate(
+                prompt=request.prompt,
+                system=request.system,
+                profile=request.profile,
+            )
+        )
+
+    return ToolHandler(
+        name="architect_generate",
+        request_type=ArchitectGenerateRequest,
+        response_type=GenerateResponse,
+        invoke=invoke,
+        description="Generate text through the configured architect backend.",
+    )
+
 def build_default_tool_registry(
     lint_engine: LintEngine | None = None,
     execution_agent: ExecutionAgent | None = None,
+    ollama_client: OllamaClient | None = None,
+    architect_client: ArchitectApiClient | None = None,
 ) -> ToolRegistry:
     registry = ToolRegistry()
     registry.register(_make_lint_handler(lint_engine))
     registry.register(_make_execution_sandbox_handler(execution_agent))
+    registry.register(_make_ollama_generate_handler(ollama_client))
+    registry.register(_make_architect_generate_handler(architect_client))
     return registry

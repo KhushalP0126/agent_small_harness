@@ -22,12 +22,7 @@ def new_run_id(prefix: str = "run") -> str:
 
 
 class ArtifactManager:
-    """Writes per-attempt artifacts for post-run inspection.
-
-    The controller keeps the loop state in memory. This manager turns that state
-    into a file trail after a run completes, so live model behavior can be audited
-    without rerunning the model.
-    """
+    """Writes final artifacts and resumable in-progress checkpoints."""
 
     def __init__(self, root: Path | str = "artifacts/runs") -> None:
         self.root = Path(root)
@@ -78,6 +73,29 @@ class ArtifactManager:
                 },
             )
             self._write_json(paths.run_dir / f"attempt_{attempt_index}_findings.json", attempt.get("findings", []))
+
+    def checkpoint(self, session: dict[str, Any], paths: ArtifactPaths) -> Path:
+        """Atomically persist the controller's resumable state."""
+
+        checkpoint_path = paths.run_dir / "checkpoint.json"
+        temporary_path = paths.run_dir / ".checkpoint.json.tmp"
+        temporary_path.write_text(
+            json.dumps(session, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        temporary_path.replace(checkpoint_path)
+        return checkpoint_path
+
+    def load_checkpoint(self, run_id: str) -> dict[str, Any] | None:
+        """Load a run checkpoint, returning ``None`` when it does not exist."""
+
+        checkpoint_path = self.root / run_id / "checkpoint.json"
+        if not checkpoint_path.is_file():
+            return None
+        payload = json.loads(checkpoint_path.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict):
+            raise ValueError(f"Checkpoint for '{run_id}' must contain a JSON object")
+        return payload
 
     def _session_summary(self, session: dict[str, Any]) -> dict[str, Any]:
         attempts = session.get("attempts", [])

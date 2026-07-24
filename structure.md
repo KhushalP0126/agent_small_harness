@@ -13,6 +13,7 @@ raw prompt
   -> parse contract
   -> static engines
   -> policy, behavior, and optional formal validation
+  -> checkpoint current attempt and next-draft state
   -> repair, completion, or manual review
 ```
 
@@ -51,7 +52,7 @@ Deterministic orchestration components. These are not free-running autonomous
 agents; they prepare, route, validate, and record work.
 
 - `agents/base.py` - Shared `AgentResult` and `BaseAgent` types.
-- `agents/artifact_manager.py` - Creates per-run artifact directories and records prompts, attempts, findings, diffs, token estimates, and timelines.
+- `agents/artifact_manager.py` - Creates per-run artifact directories, atomically checkpoints resumable controller state, reloads checkpoints by run ID, and records final prompts, attempts, findings, diffs, token estimates, and timelines.
 - `agents/config_loader.py` - Strict dataclass-backed `config.yaml` loader.
 - `agents/preprocessor.py` - Loads context and convention files before generation.
 - `agents/prompt_normalizer.py` - Removes conversational filler from raw prompts.
@@ -62,8 +63,8 @@ agents; they prepare, route, validate, and record work.
 - `agents/routing_policy.py` - Chooses worker, template-assisted worker, architect escalation, or manual review.
 - `agents/coder.py` - Builds initial model prompts from context and behavior specs.
 - `agents/parse_contract.py` - Language detection and parser gate.
-- `agents/engine_registry.py` - Routes parseable source to the registered engine set.
-- `agents/generation_controller.py` - Main loop for drafting, validation, repair, branch-loop detection, architect fallback, and final status. Optionally runs the execution agent after the contract parses and records the trace on each attempt.
+- `agents/engine_registry.py` - Routes parseable source to the registered engine set and dispatches lint through the typed tool registry when one is configured.
+- `agents/generation_controller.py` - Main loop for drafting, validation, repair, branch-loop detection, architect fallback, resumable checkpoint state, prompt summarization, and final status. It runs the execution agent after the contract parses and records the trace on each attempt.
 - `agents/execution_agent.py` - Runs a parsed draft against its behavior examples in the isolated sandbox and returns an `ExecutionTrace` for the behavior gate and debugger hook.
 - `agents/repair_strategy.py` - Turns validation failures into targeted repair directives.
 - `agents/behavior_spec.py` - Loads behavior specs from `data/behavior_cases.json`.
@@ -93,6 +94,8 @@ instead of replacing it.
 - `harness_kernel/task_ir.py` - `TaskIR`, `TemplateRoute`, and `ValidationPlan` dataclasses.
 - `harness_kernel/function_contracts.py` - Function contract queue, Deal examples, scaffold rendering, and worker packets.
 - `harness_kernel/execution_kernel.py` - Thin wrapper that delegates `TaskIR` execution to `GenerationController`.
+- `harness_kernel/tool_registry.py` - Typed named-tool dispatch boundary with uniform success and failure results.
+- `harness_kernel/tool_handlers.py` - Typed lint, execution-sandbox, Ollama-generation, and architect-generation handlers wrapping the existing implementations.
 - `harness_kernel/__init__.py` - Public harness-kernel exports; the name avoids collision with the Kernel browser SDK.
 
 ## `engines/`
@@ -135,7 +138,7 @@ Validation turns findings and runtime checks into pass/fail decisions.
 Prompt builders convert structured context and findings into model-facing text.
 
 - `prompt/constraint_types.py` - Constraint-block dataclasses.
-- `prompt/budget.py` - Estimates prompt size and truncates older context while preserving current failures, drafts, and final rules.
+- `prompt/budget.py` - Estimates prompt size, optionally summarizes older context while preserving the latest diagnostics verbatim, and falls back to deterministic tail truncation.
 - `prompt/builder.py` - Initial structured prompt builder.
 - `prompt/backend_failure_builder.py` - Converts model/backend exceptions into bounded, structured manual-review responses.
 - `prompt/retry_builder.py` - Low-noise small-worker and richer retry-prompt builder.
@@ -147,8 +150,8 @@ Prompt builders convert structured context and findings into model-facing text.
 
 Model integrations.
 
-- `backends/ollama_client.py` - Local Ollama supplier and code extraction.
-- `backends/architect_client.py` - API-backed architect client, split contract/repair profiles, contract queue supplier, `.env` loading, response cleanup, and formalization prompt helpers.
+- `backends/ollama_client.py` - Local Ollama supplier, typed tool dispatch, and code extraction.
+- `backends/architect_client.py` - API-backed architect client, typed tool dispatch, split contract/repair profiles, contract queue supplier, `.env` loading, response cleanup, and formalization prompt helpers.
 - `backends/__init__.py` - Package marker.
 
 ## `data/`
@@ -218,6 +221,8 @@ Runnable experiments and operator tooling.
 Unit and integration coverage.
 
 - `tests/test_benchmarker.py` - Controller, prompt, behavior, supplier, and benchmark tests.
+- `tests/test_checkpoint_resume.py` - Atomic checkpoint persistence and interrupted controller-resume regressions.
+- `tests/test_tool_registry.py` - Typed tool dispatch, backend failure containment, and default-handler tests.
 - `tests/test_api.py` - Synchronous and asynchronous FastAPI boundary and job-store tests.
 - `tests/test_agents_pipeline.py` - Agent, registry, repair, historian, library, and controller integration tests.
 - `tests/test_behavior.py` - Behavior validator parity, isolation, timeout, trace, output-capture, exception, and runtime-backed issue tests.

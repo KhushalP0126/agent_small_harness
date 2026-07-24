@@ -166,6 +166,13 @@ def run_ladder(
             f"model={active_model} mode={mode} architect_after={architect_after_repair_attempts}",
             flush=True,
         )
+        paths = (
+            artifact_manager.create_run(
+                prefix=f"worker_limit_{task['difficulty']}_{task['name']}"
+            )
+            if save_artifacts
+            else None
+        )
         controller = GenerationController(
             max_retries=max_retries,
             draft_supplier=supplier.generate_draft,
@@ -183,6 +190,11 @@ def run_ladder(
             debug=debug_controller,
             enable_execution_trace=config.engines.behavior.execution_trace,
             enable_debugger_hints=config.engines.behavior.debugger_hints,
+            checkpoint_writer=(
+                (lambda payload, active_paths=paths: artifact_manager.checkpoint(payload, active_paths))
+                if paths is not None
+                else None
+            ),
         )
         result = controller.run(target=task["prompt"], initial_prompt=prompt)
         session = result.payload
@@ -192,8 +204,7 @@ def run_ladder(
         all_static = _all_static_violations(session)
         all_behavior = _all_behavior_issues(session)
         artifact_path = ""
-        if save_artifacts:
-            paths = artifact_manager.create_run(prefix=f"worker_limit_{task['difficulty']}_{task['name']}")
+        if paths is not None:
             artifact_path = str(paths.run_dir)
             artifact_manager.save_session(
                 session,

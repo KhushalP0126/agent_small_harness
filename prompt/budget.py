@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Callable
 
 
 DEFAULT_PROMPT_CHAR_BUDGET = 24000
 CONTINUATION_TAIL_CHARS = 6000
+PromptSummarizer = Callable[[str], str]
 
 
 @dataclass(frozen=True)
@@ -22,7 +24,11 @@ def estimate_tokens(text: str) -> int:
     return max(1, (len(text) + 3) // 4) if text else 0
 
 
-def budget_prompt(text: str, max_chars: int = DEFAULT_PROMPT_CHAR_BUDGET) -> PromptBudgetResult:
+def budget_prompt(
+    text: str,
+    max_chars: int = DEFAULT_PROMPT_CHAR_BUDGET,
+    summarizer: PromptSummarizer | None = None,
+) -> PromptBudgetResult:
     original_chars = len(text)
     if max_chars <= 0 or original_chars <= max_chars:
         return PromptBudgetResult(
@@ -31,6 +37,16 @@ def budget_prompt(text: str, max_chars: int = DEFAULT_PROMPT_CHAR_BUDGET) -> Pro
             final_chars=original_chars,
             truncated=False,
         )
+    if summarizer is not None:
+        summarized = _summarize_older_context(text, max_chars, summarizer)
+        if summarized is not None:
+            return PromptBudgetResult(
+                text=summarized,
+                original_chars=original_chars,
+                final_chars=len(summarized),
+                truncated=True,
+                strategy="summarize_older_preserve_latest",
+            )
     marker = (
         "PROMPT BUDGET APPLIED: older context was removed; preserve the current draft, "
         "latest failures, and final rules.\n\n"
@@ -53,6 +69,38 @@ def budget_prompt(text: str, max_chars: int = DEFAULT_PROMPT_CHAR_BUDGET) -> Pro
         truncated=True,
         strategy="tail_preserve_latest_context",
     )
+
+
+def _summarize_older_context(
+    text: str,
+    max_chars: int,
+    summarizer: PromptSummarizer,
+) -> str | None:
+    marker = "PROMPT BUDGET APPLIED: older context was summarized.\n\n"
+    summary_header = "OLDER CONTEXT SUMMARY:\n"
+    latest_header = "\n\nLATEST CONTEXT (verbatim):\n"
+    fixed_chars = len(marker) + len(summary_header) + len(latest_header)
+    if max_chars <= fixed_chars + 2:
+        return None
+
+    content_budget = max_chars - fixed_chars
+    latest_budget = max(1, content_budget // 2)
+    older = text[:-latest_budget]
+    latest = text[-latest_budget:]
+    if not older:
+        return None
+    try:
+        summary = summarizer(older).strip()
+    except Exception:
+        return None
+    if not summary:
+        return None
+
+    summary_budget = max(1, content_budget - len(latest))
+    if len(summary) > summary_budget:
+        summary = summary[:summary_budget]
+    result = f"{marker}{summary_header}{summary}{latest_header}{latest}"
+    return result[:max_chars]
 
 
 def continuation_prompt(partial_response: str, tail_chars: int = CONTINUATION_TAIL_CHARS) -> str:

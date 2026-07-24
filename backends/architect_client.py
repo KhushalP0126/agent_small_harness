@@ -6,7 +6,7 @@ import socket
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -14,6 +14,9 @@ from backends.ollama_client import FENCED_CODE_RE, LANGUAGE_TAG_LINE_RE
 from harness_kernel.function_contracts import ContractQueue, ContractQueuePlan, parse_contract_queue_json, parse_contract_queue_plan_json
 from prompt.budget import continuation_prompt, estimate_tokens, looks_truncated_text
 from prompt.contract_builder import build_contract_queue_planner_prompt, build_deal_contract_architect_prompt
+
+if TYPE_CHECKING:
+    from harness_kernel.tool_registry import ToolRegistry
 
 
 DEFAULT_ARCHITECT_API_KEY_ENV = "ARCHITECT_API_KEY"
@@ -331,6 +334,7 @@ class ArchitectModelSupplier:
         self,
         config: ArchitectConfig | None = None,
         client: ArchitectApiClient | None = None,
+        tool_registry: ToolRegistry | None = None,
         system_prompt: str = (
             "You are the architect repair tier in a verified code harness. "
             "Return code only. Preserve behavior while satisfying all engine constraints."
@@ -341,6 +345,11 @@ class ArchitectModelSupplier:
         self.profile = self.config.repair_profile_from_env
         self.system_prompt = system_prompt
         self.telemetry: list[dict[str, Any]] = []
+        if tool_registry is None:
+            from harness_kernel.tool_handlers import build_default_tool_registry
+
+            tool_registry = build_default_tool_registry(architect_client=self.client)
+        self.tool_registry = tool_registry
 
     def repair_draft(self, draft: str, retry_prompt: str) -> str:
         prompt = "\n".join(
@@ -356,14 +365,14 @@ class ArchitectModelSupplier:
                 retry_prompt,
             ]
         )
-        response = self.client.generate(prompt=prompt, system=self.system_prompt, profile=self.profile)
+        response = self._generate(prompt, self.system_prompt, self.profile)
         self._record_usage("repair", prompt)
         code = self._extract_code(response)
         if looks_truncated_text(code):
-            continuation = self.client.generate(
-                prompt=continuation_prompt(code),
-                system=self.system_prompt,
-                profile=self.profile,
+            continuation = self._generate(
+                continuation_prompt(code),
+                self.system_prompt,
+                self.profile,
             )
             self._record_usage("repair_continuation", continuation_prompt(code))
             code = f"{code}\n{self._extract_code(continuation)}".strip()
@@ -400,16 +409,42 @@ class ArchitectModelSupplier:
                 "Return only the full formalization candidate source code.",
             ]
         )
-        response = self.client.generate(
-            prompt=prompt,
-            system=(
+        response = self._generate(
+            prompt,
+            (
                 "You are the architect formal verification tier in a verified code harness. "
                 "Return Nagini-oriented Python code only; do not include prose."
             ),
-            profile=self.profile,
+            self.profile,
         )
         self._record_usage("formalize", prompt)
         return self._extract_code(response)
+
+    def _generate(
+        self,
+        prompt: str,
+        system: str,
+        profile: ArchitectProfile,
+    ) -> str:
+        from harness_kernel.tool_handlers import (
+            ArchitectGenerateRequest,
+            GenerateResponse,
+        )
+
+        result = self.tool_registry.dispatch(
+            "architect_generate",
+            ArchitectGenerateRequest(
+                prompt=prompt,
+                system=system,
+                profile=profile,
+            ),
+        )
+        if not result.ok or not isinstance(result.value, GenerateResponse):
+            raise RuntimeError(
+                f"Architect tool failed ({result.error_kind or 'tool_error'}): "
+                f"{result.error or 'no response'}"
+            )
+        return result.value.text
 
     def _record_usage(self, stage: str, prompt: str) -> None:
         usage = getattr(self.client, "last_usage", None)

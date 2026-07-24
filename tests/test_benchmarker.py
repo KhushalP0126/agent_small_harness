@@ -117,6 +117,31 @@ class BenchmarkerTests(unittest.TestCase):
         self.assertLessEqual(result.final_chars, 80)
         self.assertIn("PROMPT BUDGET APPLIED", result.text)
 
+    def test_prompt_budget_summarizes_older_context_when_requested(self) -> None:
+        calls = []
+        text = ("old failure\n" * 50) + "LATEST_DIAGNOSTIC"
+
+        def summarize(older: str) -> str:
+            calls.append(older)
+            return "Earlier attempts repeatedly failed the same static gate."
+
+        result = budget_prompt(text, max_chars=180, summarizer=summarize)
+
+        self.assertTrue(result.truncated)
+        self.assertEqual(result.strategy, "summarize_older_preserve_latest")
+        self.assertEqual(len(calls), 1)
+        self.assertIn("Earlier attempts repeatedly failed", result.text)
+        self.assertIn("LATEST_DIAGNOSTIC", result.text)
+        self.assertLessEqual(result.final_chars, 180)
+
+    def test_prompt_budget_falls_back_when_summarizer_fails(self) -> None:
+        result = budget_prompt(
+            "old context\n" + ("x" * 200),
+            max_chars=140,
+            summarizer=lambda _older: (_ for _ in ()).throw(RuntimeError("offline")),
+        )
+        self.assertEqual(result.strategy, "tail_preserve_latest_context")
+
     def test_prompt_normalizer_removes_conversational_fluff(self) -> None:
         prompt = "Hey, can you please actually build a small task tracker, just no globals."
         result = PromptNormalizerAgent().normalize(prompt)

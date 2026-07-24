@@ -1,10 +1,15 @@
 import unittest
 from dataclasses import dataclass
 
+from agents.engine_registry import EngineRegistry
+from engines.base import EngineFinding
 from harness_kernel.tool_handlers import (
+    ArchitectGenerateRequest,
     ExecutionRequest,
+    GenerateResponse,
     LintRequest,
     LintResult,
+    OllamaGenerateRequest,
     build_default_tool_registry,
 )
 from harness_kernel.tool_registry import ToolError, ToolHandler, ToolRegistry
@@ -99,6 +104,73 @@ class ToolRegistryTests(unittest.TestCase):
         )
         self.assertTrue(execution.ok)
         self.assertTrue(execution.value.cases[0].matched)
+
+    def test_model_handlers_return_typed_responses(self) -> None:
+        class OllamaStub:
+            def generate(self, **_kwargs):
+                return "ollama-result"
+
+        class ArchitectStub:
+            def generate(self, **_kwargs):
+                return "architect-result"
+
+        registry = build_default_tool_registry(
+            ollama_client=OllamaStub(),
+            architect_client=ArchitectStub(),
+        )
+        ollama = registry.dispatch(
+            "ollama_generate",
+            OllamaGenerateRequest(prompt="generate"),
+        )
+        architect = registry.dispatch(
+            "architect_generate",
+            ArchitectGenerateRequest(prompt="repair", system="code only"),
+        )
+
+        self.assertEqual(ollama.value, GenerateResponse("ollama-result"))
+        self.assertEqual(architect.value, GenerateResponse("architect-result"))
+
+    def test_model_handler_failure_is_contained(self) -> None:
+        class BrokenOllama:
+            def generate(self, **_kwargs):
+                raise TimeoutError("timed out")
+
+        registry = build_default_tool_registry(ollama_client=BrokenOllama())
+        result = registry.dispatch(
+            "ollama_generate",
+            OllamaGenerateRequest(prompt="generate"),
+        )
+        self.assertFalse(result.ok)
+        self.assertEqual(result.error_kind, "handler_exception")
+        self.assertIn("timed out", result.error)
+
+    def test_engine_registry_routes_lint_through_tool_registry(self) -> None:
+        registry = ToolRegistry()
+        registry.register(
+            ToolHandler(
+                name="lint",
+                request_type=LintRequest,
+                response_type=LintResult,
+                invoke=lambda _request: LintResult(
+                    [
+                        EngineFinding(
+                            engine="engine-lint",
+                            severity="High",
+                            summary="dispatched lint finding",
+                            details="lint handler was invoked",
+                        )
+                    ]
+                ),
+            )
+        )
+
+        findings = EngineRegistry.default(tool_registry=registry).findings_for(
+            "def clean(value):\n    return value\n",
+            "python",
+        )
+        self.assertTrue(
+            any(finding.summary == "dispatched lint finding" for finding in findings)
+        )
 
 
 if __name__ == "__main__":
