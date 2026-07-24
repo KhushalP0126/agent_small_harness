@@ -11,7 +11,7 @@ from validation.behavior import FunctionBehaviorSpec, format_behavior_spec
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_CONTEXT_FILES = (ROOT / "context.md", ROOT / "design.md")
+DEFAULT_CONTEXT_FILES = (ROOT / "design.md",)
 
 
 class CoderAgent(BaseAgent):

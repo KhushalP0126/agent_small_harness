@@ -524,9 +524,8 @@ def analyze(value):
 
     def test_coder_repair_prompt_loads_context_files(self) -> None:
         prompt = CoderAgent().build_repair_prompt("def analyze(matrix):\n    return 0\n")
-        self.assertIn("Additional Context From context.md:", prompt)
         self.assertIn("Additional Context From design.md:", prompt)
-        self.assertIn("Feedback Injection Prompt", prompt)
+        self.assertNotIn("Additional Context From context.md:", prompt)
         self.assertIn("Visual & Architectural Design Constraints", prompt)
 
     def test_coder_repair_prompt_includes_template_when_provided(self) -> None:
@@ -1042,6 +1041,53 @@ def analyze(matrix):
         self.assertFalse(result.payload["attempts"][0]["behavior_validation"]["is_compliant"])
         self.assertIn("Failed behavioral output spec", result.payload["attempts"][0]["retry_prompt"])
         self.assertTrue(result.payload["attempts"][1]["behavior_validation"]["is_compliant"])
+
+    def test_runtime_only_architect_prompt_excludes_resolved_static_history(self) -> None:
+        initial_source = """
+def classify(value):
+    if value > 0:
+        return 0
+    return 0
+"""
+        static_clean_runtime_failure = "def classify(value):\n    return 0\n"
+        captured_architect_prompts: list[str] = []
+
+        def architect_supplier(_draft: str, retry_prompt: str) -> str:
+            captured_architect_prompts.append(retry_prompt)
+            return "def classify(value):\n    return 2\n"
+
+        controller = GenerationController(
+            max_retries=2,
+            draft_supplier=lambda _prompt: initial_source,
+            repair_supplier=lambda _draft, _prompt: static_clean_runtime_failure,
+            architect_supplier=architect_supplier,
+            architect_after_repair_attempts=1,
+            policy={"max_cyclomatic_complexity": 1},
+            behavior_spec=FunctionBehaviorSpec(
+                function_name="classify",
+                cases=[
+                    BehaviorCase(
+                        name="positive",
+                        args=(1,),
+                        kwargs={},
+                        expected=2,
+                    )
+                ],
+            ),
+        )
+
+        result = controller.run(target="runtime-only-repair", initial_prompt="generate")
+
+        self.assertEqual(result.payload["final_status"], "completed")
+        self.assertEqual(len(captured_architect_prompts), 1)
+        self.assertIn("Behavior failure:", captured_architect_prompts[0])
+        self.assertNotIn("Static failure:", captured_architect_prompts[0])
+        # Filtering affects only the prompt. The repaired draft still received
+        # the full static scan before the runtime-only retry was selected.
+        second_attempt = result.payload["attempts"][1]
+        self.assertTrue(second_attempt["validation"]["is_compliant"])
+        self.assertTrue(second_attempt["findings"])
+        self.assertFalse(second_attempt["behavior_validation"]["is_compliant"])
 
     def test_generation_controller_injects_prior_failure_feedback(self) -> None:
         broken_source = "def analyze(matrix):\n    return 0\n"

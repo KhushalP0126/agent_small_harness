@@ -24,3 +24,8 @@ data/jobs.jsonl
 
 # Keep tool-specific AI instruction files out of the repository.
 [Aa][Ii].md
+
+# Keep local planning notes and already-applied patch inputs out of Git.
+/context.md
+/TUI_plan.txt
+/control-and-tooling-fixes*.patch

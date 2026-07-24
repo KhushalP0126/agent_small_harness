@@ -44,7 +44,6 @@ described where relevant but are intentionally not tracked.
 - `requirements-formal.txt` - Optional Deal and CrossHair formal-validation dependency manifest.
 - `history.json` - Historian persistence file for run summaries and successful repair lessons.
 - `conventions.md` - Stable model-facing coding and harness rules.
-- `context.md` - Current project context, decisions, and experiment notes.
 - `design.md` - Architecture, safety, escalation, and validation design constraints.
 - `structure.md` - This file.
 

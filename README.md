@@ -263,7 +263,6 @@ Those outcomes are recorded in artifact metadata and the contract queue results.
 | `pyproject.toml` | Python package metadata and runtime dependencies |
 | `Dockerfile` | Container entrypoint for the synchronous API service |
 | `.github/workflows/ci.yml` | Push/PR workflow for tests and Docker image build |
-| `context.md` | Current project context and experiment notes |
 | `design.md` | Architectural constraints and safety principles |
 | `structure.md` | File-by-file repository map |
 

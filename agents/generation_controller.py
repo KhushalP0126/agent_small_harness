@@ -597,7 +597,22 @@ class GenerationController(BaseAgent):
                 )
             else:
                 retry_prompt = build_retry_prompt(source, scoped_violations, scoped_directives)
-            feedback_context = self._feedback_context(failed_attempts)
+            current_gate_kinds = {
+                (
+                    "behavior"
+                    if violation.kind == "behavior_mismatch"
+                    else "formal"
+                    if violation.kind == "formal_counterexample"
+                    else "static"
+                )
+                for violation in scoped_violations
+            }
+            feedback_context = self._feedback_context(
+                failed_attempts,
+                include_static="static" in current_gate_kinds,
+                include_behavior="behavior" in current_gate_kinds,
+                include_formal="formal" in current_gate_kinds,
+            )
             if initial_prompt.strip() and "STATE MACHINE ARCHITECT MODE" not in retry_prompt:
                 retry_prompt = f"{initial_prompt.strip()}\n\nENGINE FEEDBACK:\n{retry_prompt}"
             if feedback_context:
@@ -1333,23 +1348,54 @@ class GenerationController(BaseAgent):
 
         return AgentResult(agent=self.name, payload=asdict(session))
 
-    def _feedback_context(self, failed_attempts: list[GenerationAttempt]) -> str:
+    def _feedback_context(
+        self,
+        failed_attempts: list[GenerationAttempt],
+        *,
+        include_static: bool = True,
+        include_behavior: bool = True,
+        include_formal: bool = True,
+    ) -> str:
+        """Render only history relevant to the gates failing on the current draft.
+
+        Every draft is still rescanned before acceptance. This filtering only
+        prevents a runtime-only repair prompt from replaying stale static
+        failures that an earlier draft has already fixed.
+        """
+
         if not failed_attempts:
             return ""
         lines = ["PRIOR FAILED ATTEMPTS:"]
         for attempt in failed_attempts:
-            lines.append(f"- Attempt {attempt.attempt}:")
-            for violation in attempt.validation.get("violations", []):
-                lines.append(
+            attempt_lines: list[str] = []
+            for violation in (
+                attempt.validation.get("violations", [])
+                if include_static
+                else []
+            ):
+                attempt_lines.append(
                     f"  Static failure: {violation['kind']} had {violation['current_value']}; required {violation['allowed_value']}."
                 )
-            for issue in attempt.behavior_validation.get("issues", []):
-                lines.append(
+            for issue in (
+                attempt.behavior_validation.get("issues", [])
+                if include_behavior
+                else []
+            ):
+                attempt_lines.append(
                     f"  Behavior failure: {issue['case']} expected {issue['expected']} but got {issue['actual']} ({issue['details']})."
                 )
-            for issue in attempt.formal_validation.get("issues", []):
-                lines.append(
+            for issue in (
+                attempt.formal_validation.get("issues", [])
+                if include_formal
+                else []
+            ):
+                attempt_lines.append(
                     f"  Formal failure: {issue.get('summary', 'formal validation failed')} ({issue.get('details', '')})."
                 )
+            if attempt_lines:
+                lines.append(f"- Attempt {attempt.attempt}:")
+                lines.extend(attempt_lines)
+        if len(lines) == 1:
+            return ""
         lines.append("Do not repeat any prior failed pattern.")
         return "\n".join(lines)
