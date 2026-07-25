@@ -1402,7 +1402,10 @@ def analyze(matrix):
                 )
             ],
         )
-        with patch("agents.generation_controller.validate_with_crosshair", return_value=formal_result):
+        with patch(
+            "harness_kernel.tool_handlers.validate_with_crosshair",
+            return_value=formal_result,
+        ):
             controller = GenerationController(
                 max_retries=0,
                 draft_supplier=lambda _prompt: source,

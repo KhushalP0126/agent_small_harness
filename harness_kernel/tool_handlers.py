@@ -19,6 +19,11 @@ from validation.behavior import (
     ExecutionTrace,
     FunctionBehaviorSpec,
 )
+from validation.deal_contracts import (
+    serialize_deal_contract_result,
+    validate_deal_examples,
+)
+from validation.formal import serialize_formal_result, validate_with_crosshair
 
 
 @dataclass(frozen=True)
@@ -62,6 +67,18 @@ class ArchitectGenerateRequest:
 @dataclass(frozen=True)
 class GenerateResponse:
     text: str
+
+
+@dataclass(frozen=True)
+class FormalVerificationRequest:
+    source: str
+    crosshair_enabled: bool = False
+    timeout_seconds: float = 3.0
+
+
+@dataclass(frozen=True)
+class FormalVerificationResponse:
+    result: dict
 
 
 def _make_lint_handler(
@@ -150,6 +167,45 @@ def _make_architect_generate_handler(
         description="Generate text through the configured architect backend.",
     )
 
+
+def _make_formal_verification_handler(
+) -> ToolHandler[FormalVerificationRequest, FormalVerificationResponse]:
+    def invoke(request: FormalVerificationRequest) -> FormalVerificationResponse:
+        deal_result = validate_deal_examples(
+            request.source,
+            timeout_seconds=request.timeout_seconds,
+        )
+        if not deal_result.is_compliant or not deal_result.skipped:
+            result = serialize_deal_contract_result(deal_result)
+            result["tool"] = "deal"
+            return FormalVerificationResponse(result)
+        if request.crosshair_enabled:
+            return FormalVerificationResponse(
+                serialize_formal_result(
+                    validate_with_crosshair(
+                        request.source,
+                        timeout_seconds=request.timeout_seconds,
+                    )
+                )
+            )
+        return FormalVerificationResponse(
+            {
+                "is_compliant": True,
+                "skipped": True,
+                "tool": "formal",
+                "issues": [],
+            }
+        )
+
+    return ToolHandler(
+        name="formal_verification",
+        request_type=FormalVerificationRequest,
+        response_type=FormalVerificationResponse,
+        invoke=invoke,
+        description="Run Deal examples and optional CrossHair verification.",
+    )
+
+
 def build_default_tool_registry(
     lint_engine: LintEngine | None = None,
     execution_agent: ExecutionAgent | None = None,
@@ -161,4 +217,5 @@ def build_default_tool_registry(
     registry.register(_make_execution_sandbox_handler(execution_agent))
     registry.register(_make_ollama_generate_handler(ollama_client))
     registry.register(_make_architect_generate_handler(architect_client))
+    registry.register(_make_formal_verification_handler())
     return registry

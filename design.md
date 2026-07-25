@@ -35,6 +35,7 @@ Design principles:
 4. Treat model output as untrusted until it passes static policy, behavior validation, and any enabled formal validation.
 5. Prefer deterministic gates and explicit diagnostics over broad agent judgment.
 6. Treat the architect LLM as a repair worker, not as an authority. Architect output is accepted only after the same parse, engine, policy, and behavior gates pass.
+7. Treat retrieved run history as bounded advisory context only. Current parsing, runtime evidence, validation gates, and human review remain authoritative.
 
 ## Engine Pass Contract
 
@@ -74,11 +75,20 @@ Architect tier -> Nagini-oriented formalization candidates
 Rules:
 
 - Deal belongs in the Plan/architect layer and in controller validation. The architect can decompose a task into small function contracts, render them as `@deal.example` scaffolds, and the controller runs those Deal examples as an executable gate.
+- Controller formal validation is dispatched through the typed `formal_verification` tool handler so Deal and CrossHair share the same structured failure boundary as lint, model calls, and sandbox execution.
 - CrossHair belongs beside behavior validation. It is a semantic counterexample finder and may block completion only when enabled and available.
 - Nagini belongs behind the architect model. The big model may rewrite small critical helpers into typed, proof-friendly Python and add pre/postconditions, but that output is still rechecked by the harness.
 - The small worker should not be expected to invent formal contracts reliably. It should implement code against contracts supplied by Plan Mode or the architect.
 - Deal examples are not a full proof. They are concrete executable contracts that narrow the worker's target and catch known edge cases before code can complete.
-- Missing optional verifier dependencies must not break the default harness; they should skip or remain disabled unless explicitly enabled.
+- Missing optional verifier dependencies must not break the default harness; they should skip or remain disabled unless explicitly enabled. CI installs the `formal` extras so the formal test paths are exercised on every push and pull request.
+
+## Historical Context Design
+
+The historian may add a small set of lexically similar past attempts to the
+initial worker prompt. Retrieval is deterministic, bounded, dependency-free,
+and can be disabled per controller. It is a hint source for avoiding repeated
+mistakes, not a memory authority: retrieved text cannot override the current
+task, execution evidence, validation results, or a human review decision.
 
 ## Escalation Design
 

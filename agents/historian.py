@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -8,6 +9,27 @@ from statistics import median
 from typing import Any
 
 from agents.base import AgentResult, BaseAgent
+
+
+DEFAULT_HISTORY_PATH = Path(__file__).resolve().parents[1] / "history.json"
+_MATCH_STOPWORDS = {
+    "a",
+    "an",
+    "and",
+    "for",
+    "from",
+    "in",
+    "of",
+    "on",
+    "or",
+    "the",
+    "to",
+    "with",
+    "write",
+    "create",
+    "build",
+    "generate",
+}
 
 
 class HistorianAgent(BaseAgent):
@@ -108,6 +130,121 @@ class HistorianAgent(BaseAgent):
             if outcome.get("succeeded") and template:
                 counts[template] = counts.get(template, 0) + 1
         return counts
+
+    def similar_past_attempts(
+        self,
+        task_signature: str,
+        *,
+        limit: int = 3,
+        minimum_score: float = 0.25,
+    ) -> list[dict[str, Any]]:
+        """Return a bounded lexical match over durable local run history.
+
+        This is intentionally deterministic and dependency-free. Matches are
+        advisory prompt context; they do not alter validation or acceptance.
+        """
+
+        if limit <= 0:
+            return []
+        query_tokens = self._signature_tokens(task_signature)
+        if not query_tokens:
+            return []
+        history = self._load()
+        candidates: list[dict[str, Any]] = []
+        for outcome in history.get("repair_outcomes", []):
+            summary = outcome.get("summary") or {}
+            signature = str(summary.get("target") or outcome.get("prompt_label") or "")
+            candidates.append(
+                {
+                    "source": "repair_outcome",
+                    "signature": signature,
+                    "final_status": str(outcome.get("final_status", "")),
+                    "failure_kinds": sorted(
+                        {
+                            kind
+                            for attempt in summary.get("failed_attempts", [])
+                            for kind in attempt.get("static_violations", [])
+                            if kind
+                        }
+                    ),
+                    "lesson": (
+                        f"Template {outcome.get('template')} succeeded."
+                        if outcome.get("succeeded") and outcome.get("template")
+                        else ""
+                    ),
+                }
+            )
+        for generation in history.get("generations", []):
+            benchmark = generation.get("benchmark") or {}
+            candidates.append(
+                {
+                    "source": "generation",
+                    "signature": str(
+                        generation.get("goal") or generation.get("gen_id") or ""
+                    ),
+                    "final_status": str(generation.get("final_status", "")),
+                    "failure_kinds": sorted(
+                        {
+                            str(finding.get("engine", ""))
+                            for finding in generation.get("engine_findings", [])
+                            if finding.get("engine")
+                        }
+                    ),
+                    "lesson": str(benchmark.get("classification", "")),
+                }
+            )
+        for lesson in history.get("lessons_learned", []):
+            candidates.append(
+                {
+                    "source": "lesson",
+                    "signature": " ".join(
+                        [
+                            str(lesson.get("pattern", "")),
+                            " ".join(str(item) for item in lesson.get("applies_to", [])),
+                        ]
+                    ).strip(),
+                    "final_status": "learned",
+                    "failure_kinds": [],
+                    "lesson": str(lesson.get("lesson", "")),
+                }
+            )
+
+        matches: list[dict[str, Any]] = []
+        for candidate in candidates:
+            candidate_tokens = self._signature_tokens(candidate["signature"])
+            shared = query_tokens & candidate_tokens
+            if not shared:
+                continue
+            coverage = len(shared) / len(query_tokens)
+            union = query_tokens | candidate_tokens
+            score = 0.7 * coverage + 0.3 * (len(shared) / len(union))
+            if len(shared) < 2 and coverage < 0.75:
+                continue
+            if score < minimum_score:
+                continue
+            matches.append(
+                {
+                    **candidate,
+                    "score": round(score, 4),
+                    "matched_terms": sorted(shared),
+                }
+            )
+        matches.sort(
+            key=lambda item: (
+                -float(item["score"]),
+                item["source"],
+                item["signature"],
+            )
+        )
+        return matches[: min(limit, 5)]
+
+    @staticmethod
+    def _signature_tokens(value: str) -> set[str]:
+        return {
+            token
+            for token in re.findall(r"[a-z0-9_]+", value.lower())
+            if len(token) > 1 and token not in _MATCH_STOPWORDS
+        }
 
     def build_run_record(
         self,

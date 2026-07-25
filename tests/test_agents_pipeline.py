@@ -749,6 +749,112 @@ class HistorianLearningTests(unittest.TestCase):
         finally:
             path.unlink()
 
+    def test_similar_past_attempts_returns_only_relevant_bounded_matches(self) -> None:
+        path = self._temp_history()
+        try:
+            path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "lessons_learned": [],
+                        "generations": [],
+                        "repair_outcomes": [
+                            {
+                                "prompt_label": "csv-repair",
+                                "final_status": "completed",
+                                "succeeded": True,
+                                "template": "table_parser",
+                                "summary": {
+                                    "target": "parse CSV rows with validation",
+                                    "failed_attempts": [
+                                        {
+                                            "static_violations": ["parse_error"],
+                                            "behavior_issues": ["empty rows"],
+                                        }
+                                    ],
+                                },
+                            },
+                            {
+                                "prompt_label": "game",
+                                "final_status": "completed",
+                                "summary": {
+                                    "target": "render a moving sprite",
+                                    "failed_attempts": [],
+                                },
+                            },
+                        ],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            historian = HistorianAgent(path)
+            matches = historian.similar_past_attempts(
+                "parse and validate CSV rows",
+                limit=2,
+            )
+            self.assertEqual(len(matches), 1)
+            self.assertEqual(matches[0]["signature"], "parse CSV rows with validation")
+            self.assertEqual(matches[0]["failure_kinds"], ["parse_error"])
+            self.assertIn("csv", matches[0]["matched_terms"])
+        finally:
+            path.unlink()
+
+    def test_controller_injects_similar_history_as_advisory_context(self) -> None:
+        path = self._temp_history()
+        captured_prompts: list[str] = []
+        try:
+            path.write_text(
+                json.dumps(
+                    {
+                        "schema_version": 1,
+                        "lessons_learned": [
+                            {
+                                "pattern": "validated csv parser",
+                                "applies_to": ["csv", "parser"],
+                                "lesson": "Validate the header before consuming rows.",
+                            }
+                        ],
+                        "generations": [],
+                    }
+                ),
+                encoding="utf-8",
+            )
+            controller = GenerationController(
+                max_retries=0,
+                draft_supplier=lambda prompt: (
+                    captured_prompts.append(prompt)
+                    or "def parse_csv_rows(rows):\n    return rows\n"
+                ),
+                historian=HistorianAgent(path),
+            )
+            controller.run(
+                target="build a validated csv parser",
+                initial_prompt="Generate parse_csv_rows.",
+            )
+            self.assertIn(
+                "RELEVANT PAST ATTEMPTS (advisory only):",
+                captured_prompts[0],
+            )
+            self.assertIn("Validate the header", captured_prompts[0])
+
+            captured_prompts.clear()
+            disabled = GenerationController(
+                max_retries=0,
+                draft_supplier=lambda prompt: (
+                    captured_prompts.append(prompt)
+                    or "def parse_csv_rows(rows):\n    return rows\n"
+                ),
+                historian=HistorianAgent(path),
+                enable_history_context=False,
+            )
+            disabled.run(
+                target="build a validated csv parser",
+                initial_prompt="Generate parse_csv_rows.",
+            )
+            self.assertNotIn("RELEVANT PAST ATTEMPTS", captured_prompts[0])
+        finally:
+            path.unlink()
+
     def test_build_run_record_extracts_engine_and_task_labels(self) -> None:
         path = self._temp_history()
         try:

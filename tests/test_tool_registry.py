@@ -2,10 +2,13 @@ import unittest
 from dataclasses import dataclass
 
 from agents.engine_registry import EngineRegistry
+from agents.generation_controller import GenerationController
 from engines.base import EngineFinding
 from harness_kernel.tool_handlers import (
     ArchitectGenerateRequest,
     ExecutionRequest,
+    FormalVerificationRequest,
+    FormalVerificationResponse,
     GenerateResponse,
     LintRequest,
     LintResult,
@@ -104,6 +107,14 @@ class ToolRegistryTests(unittest.TestCase):
         )
         self.assertTrue(execution.ok)
         self.assertTrue(execution.value.cases[0].matched)
+        formal = registry.dispatch(
+            "formal_verification",
+            FormalVerificationRequest("def add(a, b):\n    return a + b\n"),
+        )
+        self.assertTrue(formal.ok)
+        self.assertIsInstance(formal.value, FormalVerificationResponse)
+        self.assertTrue(formal.value.result["is_compliant"])
+        self.assertTrue(formal.value.result["skipped"])
 
     def test_model_handlers_return_typed_responses(self) -> None:
         class OllamaStub:
@@ -129,6 +140,31 @@ class ToolRegistryTests(unittest.TestCase):
 
         self.assertEqual(ollama.value, GenerateResponse("ollama-result"))
         self.assertEqual(architect.value, GenerateResponse("architect-result"))
+
+    def test_controller_surfaces_registered_formal_handler_failure(self) -> None:
+        registry = ToolRegistry()
+
+        def fail(
+            _request: FormalVerificationRequest,
+        ) -> FormalVerificationResponse:
+            raise RuntimeError("verifier unavailable")
+
+        registry.register(
+            ToolHandler(
+                "formal_verification",
+                FormalVerificationRequest,
+                FormalVerificationResponse,
+                fail,
+            )
+        )
+        controller = GenerationController(max_retries=0, tool_registry=registry)
+
+        result = controller._validate_formal_contracts("def identity(value):\n    return value\n")
+
+        self.assertFalse(result["is_compliant"])
+        self.assertFalse(result["skipped"])
+        self.assertEqual(result["tool"], "formal_verification")
+        self.assertIn("verifier unavailable", result["issues"][0]["details"])
 
     def test_model_handler_failure_is_contained(self) -> None:
         class BrokenOllama:

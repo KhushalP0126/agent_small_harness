@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import asdict, dataclass, field
 from difflib import unified_diff
 from typing import Callable
@@ -7,10 +8,15 @@ from typing import Callable
 from agents.base import AgentResult, BaseAgent
 from agents.engine_registry import EngineRegistry
 from agents.execution_agent import ExecutionAgent
+from agents.historian import DEFAULT_HISTORY_PATH, HistorianAgent
 from agents.parse_contract import ParseContractAgent, ParseFailure
 from agents.repair_strategy import MANUAL_REVIEW, RepairStrategyAgent
 from engines.base import EngineFinding
-from harness_kernel.tool_handlers import ExecutionRequest, build_default_tool_registry
+from harness_kernel.tool_handlers import (
+    ExecutionRequest,
+    FormalVerificationRequest,
+    build_default_tool_registry,
+)
 from harness_kernel.tool_registry import ToolRegistry
 from prompt.architect_builder import build_state_machine_architect_prompt
 from prompt.backend_failure_builder import build_backend_failure_architect_prompt
@@ -135,6 +141,8 @@ class GenerationController(BaseAgent):
         tool_registry: ToolRegistry | None = None,
         checkpoint_writer: CheckpointWriter | None = None,
         prompt_summarizer: PromptSummarizer | None = None,
+        historian: HistorianAgent | None = None,
+        enable_history_context: bool = True,
     ) -> None:
         self.max_retries = max_retries
         self.draft_supplier = draft_supplier or (lambda prompt: prompt)
@@ -156,6 +164,8 @@ class GenerationController(BaseAgent):
         self.allow_architect_repair_retry = allow_architect_repair_retry
         self.checkpoint_writer = checkpoint_writer
         self.prompt_summarizer = prompt_summarizer or DefaultPromptSummarizer()
+        self.historian = historian or HistorianAgent(DEFAULT_HISTORY_PATH)
+        self.enable_history_context = enable_history_context
         self.execution_agent = execution_agent or (
             ExecutionAgent() if (enable_execution_trace or enable_debugger_hints) else None
         )
@@ -189,6 +199,39 @@ class GenerationController(BaseAgent):
                 )
             ]
         return self.engine_registry.findings_for(source, parse_result.language)
+
+    def _with_historical_context(self, target: str, prompt: str) -> str:
+        marker = "RELEVANT PAST ATTEMPTS (advisory only):"
+        if (
+            not self.enable_history_context
+            or marker in prompt
+        ):
+            return prompt
+        try:
+            matches = self.historian.similar_past_attempts(target)
+        except (OSError, ValueError, json.JSONDecodeError):
+            return prompt
+        if not matches:
+            return prompt
+        lines = [
+            marker,
+            "Use these as hints only. Current parsing, runtime evidence, and validation gates remain authoritative.",
+        ]
+        for match in matches:
+            details = [
+                f"similarity={match['score']:.2f}",
+                f"source={match['source']}",
+            ]
+            if match.get("final_status"):
+                details.append(f"outcome={match['final_status']}")
+            if match.get("failure_kinds"):
+                details.append(
+                    "prior_failures=" + ",".join(match["failure_kinds"][:4])
+                )
+            lines.append(f"- {match['signature']} ({'; '.join(details)})")
+            if match.get("lesson"):
+                lines.append(f"  Prior lesson: {match['lesson']}")
+        return f"{prompt.rstrip()}\n\n" + "\n".join(lines)
 
     def _can_execute_behavior(self, source: str) -> bool:
         parse_result = self.parse_contract.parse(source, language=self.language)
@@ -317,7 +360,36 @@ class GenerationController(BaseAgent):
         return violations
 
     def _validate_formal_contracts(self, source: str) -> dict:
-        deal_result = validate_deal_examples(source, timeout_seconds=self.crosshair_timeout_seconds)
+        dispatched = self.tool_registry.dispatch(
+            "formal_verification",
+            FormalVerificationRequest(
+                source=source,
+                crosshair_enabled=self.crosshair_enabled,
+                timeout_seconds=self.crosshair_timeout_seconds,
+            ),
+        )
+        if dispatched.ok and dispatched.value is not None:
+            return dispatched.value.result
+        if dispatched.error_kind != "unknown_tool":
+            return {
+                "is_compliant": False,
+                "skipped": False,
+                "tool": "formal_verification",
+                "issues": [
+                    {
+                        "summary": "Formal verification tool failed",
+                        "details": dispatched.error
+                        or "The registered formal verification handler failed.",
+                    }
+                ],
+            }
+        # Preserve compatibility for deliberately minimal injected registries.
+        # The normal/default controller path always uses the registered handler;
+        # only a custom registry that omits it reaches this compatibility path.
+        deal_result = validate_deal_examples(
+            source,
+            timeout_seconds=self.crosshair_timeout_seconds,
+        )
         if not deal_result.is_compliant:
             result = serialize_deal_contract_result(deal_result)
             result["tool"] = "deal"
@@ -879,6 +951,8 @@ class GenerationController(BaseAgent):
         pre_attempts: list[GenerationAttempt] | None = None,
         resume_from: dict | None = None,
     ) -> AgentResult:
+        if resume_from is None:
+            initial_prompt = self._with_historical_context(target, initial_prompt)
         if resume_from is not None:
             session_payload = resume_from.get("session", resume_from)
             runtime = resume_from.get("runtime", {})

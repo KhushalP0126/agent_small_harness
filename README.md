@@ -471,6 +471,13 @@ make approve-library LIB=clang.cindex
 - [x] Synchronous and asynchronous API endpoints with persisted job status.
 - [x] Artifact capture, history aggregation, capability ladders, and
   raw-versus-harness comparisons.
+- [x] Bounded lexical retrieval of similar past attempts as optional advisory
+  prompt context; current runtime evidence, validation gates, and human review
+  remain authoritative.
+- [x] Uniform typed dispatch for lint, sandbox execution, both model backends,
+  and Deal/CrossHair formal verification.
+- [x] Formal CI dependencies installed on every run so Deal/CrossHair coverage
+  does not silently remain skipped.
 - [x] Durable repeated paired comparisons that retain raw drafts, repaired
   attempts, per-sample ranges, variance, Wilson confidence intervals, and
   aggregate recovery lift.

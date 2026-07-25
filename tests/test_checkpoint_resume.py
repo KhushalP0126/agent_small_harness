@@ -162,6 +162,10 @@ class CheckpointResumeTests(unittest.TestCase):
         self.assertIn("resume-structured-spec:", makefile)
         self.assertIn('--resume-run "$(RESUME_RUN)"', makefile)
 
+    def test_ci_installs_formal_extras(self) -> None:
+        workflow = Path(".github/workflows/ci.yml").read_text(encoding="utf-8")
+        self.assertIn('python -m pip install -e ".[formal]"', workflow)
+
 
 if __name__ == "__main__":
     unittest.main()

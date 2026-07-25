@@ -65,11 +65,11 @@ agents; they prepare, route, validate, and record work.
 - `agents/coder.py` - Builds initial model prompts from context and behavior specs.
 - `agents/parse_contract.py` - Language detection and parser gate.
 - `agents/engine_registry.py` - Routes parseable source to the registered engine set and dispatches lint through the typed tool registry when one is configured.
-- `agents/generation_controller.py` - Main loop for drafting, validation, repair, branch-loop detection, architect fallback, resumable checkpoint state, prompt summarization, and final status. It runs the execution agent after the contract parses and records the trace on each attempt.
+- `agents/generation_controller.py` - Main loop for drafting, validation, repair, branch-loop detection, architect fallback, resumable checkpoint state, bounded advisory history injection, prompt summarization, and final status. It runs the execution agent after the contract parses, records the trace on each attempt, and dispatches formal checks through the typed tool registry.
 - `agents/execution_agent.py` - Runs a parsed draft against its behavior examples in the isolated sandbox and returns an `ExecutionTrace` for the behavior gate and debugger hook.
 - `agents/repair_strategy.py` - Turns validation failures into targeted repair directives.
 - `agents/behavior_spec.py` - Loads behavior specs from `data/behavior_cases.json`.
-- `agents/historian.py` - Records raw runs and aggregates route statistics.
+- `agents/historian.py` - Records raw runs, aggregates route statistics, and retrieves a bounded set of lexically similar past attempts for optional advisory prompt context.
 - `agents/job_store.py` - File-locked append-only JSONL store for async job/status orchestration.
 - `agents/library_discovery.py` - Generates reviewable library registry proposals.
 - `agents/library_doc_search.py` - Model-backed documentation search and Markdown syntax-guide generation for library proposals.
@@ -96,7 +96,7 @@ instead of replacing it.
 - `harness_kernel/function_contracts.py` - Function contract queue, Deal examples, scaffold rendering, and worker packets.
 - `harness_kernel/execution_kernel.py` - Thin wrapper that delegates `TaskIR` execution to `GenerationController`.
 - `harness_kernel/tool_registry.py` - Typed named-tool dispatch boundary with uniform success and failure results.
-- `harness_kernel/tool_handlers.py` - Typed lint, execution-sandbox, Ollama-generation, and architect-generation handlers wrapping the existing implementations.
+- `harness_kernel/tool_handlers.py` - Typed lint, execution-sandbox, Ollama-generation, architect-generation, and Deal/CrossHair formal-verification handlers wrapping the existing implementations.
 - `harness_kernel/__init__.py` - Public harness-kernel exports; the name avoids collision with the Kernel browser SDK.
 
 ## `engines/`
