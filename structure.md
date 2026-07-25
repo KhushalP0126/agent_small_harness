@@ -95,6 +95,7 @@ the controller.
 
 - `TUI/app.py` - Run launcher, live attempt/contract dashboard, architecture and changes modals, history screen, hotkeys, and exact runtime-repair safety copy.
 - `TUI/data_source.py` - Single JSON/subprocess boundary for run enumeration, checkpoint loading, CLI launch/resume, bounded history lookup, repo mapping, Mermaid SVG handoff, and unified attempt diffs.
+- `TUI/mermaid_renderer.py` - Human-scale layer/dependency summary plus a bounded parser/ASCII-tree renderer for the repo mapper's low-level Mermaid output.
 - `TUI/CODE_SPEC.md` - Grounded Phase 1/2 implementation specification and Phase 3 exclusions.
 - `TUI/__main__.py` - `python -m TUI` entrypoint.
 - `TUI/__init__.py` - Public data-source types.

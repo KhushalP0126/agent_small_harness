@@ -84,14 +84,17 @@ left to phrasing judgment.
 ### 1.3 `ArchitectureModal` (hotkey `M`)
 
 - Calls `RepoMapAgent().map_repo(root)` and then `.to_mermaid(graph)`.
-  Render the result as ASCII/text. Textual does not render Mermaid natively:
-  either shell out to a renderer or display the raw `.mmd` text with a
-  **View as text** fallback. Do not promise inline diagram rendering that does
-  not exist yet.
-- **Open SVG** action: write `.to_mermaid()` output to a temporary `.mmd` file
-  and shell out to whatever local Mermaid CLI/browser is available. This is a
-  real external dependency; confirm it exists in the development environment
-  before wiring the button.
+  The default display groups the mapper output into human-scale top-level
+  layers with module/function counts and cross-layer dependencies. A filter
+  drills into a package or module. **Raw node tree**, **LLM plan context**, and
+  **Full Mermaid source** remain explicit diagnostic views. Textual does not
+  render Mermaid natively; do not promise inline graphical rendering that does
+  not exist.
+- **Open Diagram** action: render the small layer-level graph with local
+  Mermaid CLI when available. Otherwise open a generated browser page that
+  loads Mermaid JS and renders the same graph. The browser fallback requires
+  network access to load Mermaid JS; the textual layer summary remains fully
+  offline.
 - Root defaults to the repository itself. When viewing a completed run, default
   to the generated-output directory instead. The repo mapper has already been
   confirmed against generated output.
@@ -184,6 +187,9 @@ Responsibilities:
 - `diff_attempts()` is the small Phase 2 unified-diff addition from §1.4.
 - `launch_run()` and `resume_run()` own subprocess construction so screens
   never assemble shell commands themselves.
+- A future conversational or TaskIR authoring action must write its compiled
+  input to a file and launch one of these existing CLI entrypoints. It must
+  never import or call `GenerationController.run()` inside the TUI process.
 
 ---
 

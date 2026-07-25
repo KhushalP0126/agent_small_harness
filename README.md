@@ -331,9 +331,12 @@ make tui
 The TUI is deliberately outside the control loop. It launches the existing CLI
 scripts as subprocesses and reads their JSON checkpoints. `Q` quits, `R`
 resumes the selected run, `M` opens the repository-map modal, `D` shows
-successive-attempt diffs, and `H` searches similar past attempts. Mermaid source
-always renders as text; **Open SVG** is enabled only when the external `mmdc`
-command is installed.
+successive-attempt diffs, and `H` searches similar past attempts. The
+architecture modal defaults to human-scale package layers with dependency
+summaries and module filtering. A raw node tree, LLM Plan context, and full
+Mermaid source remain available as diagnostic views. **Open Diagram** renders
+the small layer graph with local `mmdc` when installed, or opens a generated
+browser page using Mermaid JS as a fallback.
 
 The first service boundary is intentionally small:
 
