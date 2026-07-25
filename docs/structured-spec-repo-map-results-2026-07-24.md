@@ -22,6 +22,12 @@ Worker model: Ollama `qwen2.5-coder:1.5b`
 | Relative-import mapping | Pass | `module:backends` imports `module:backends.ollama_client` as a local edge |
 | Generated-output mapping | Pass | Snake artifact map found both `attempt_0.py` and `attempt_1.py` |
 
+The Pong rows above describe the original sample from this report. A later
+closure rerun on the current code completed cleanly: 20/20 contracts accepted,
+final static/spec/formal gates compliant, and the assembled program still
+running after the headless smoke window. That artifact is
+`structured_spec_pong_game_spec-20260725T021824Z-b34dda8e`.
+
 ## Commands
 
 ```sh

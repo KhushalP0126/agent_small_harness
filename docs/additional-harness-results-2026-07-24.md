@@ -132,10 +132,36 @@ or undefined pygame constants:
 artifacts/runs/structured_spec_pong_game_spec-20260724T184357Z-29e2d625
 ```
 
-Pong still ended at manual review for different issues: `handle_input`
+That sample still ended at manual review for different issues: `handle_input`
 cyclomatic complexity was 8 against a limit of 7, and the integrated module
 omitted required `check_wall_collision` and `check_paddle_collision` wrappers.
-The constants failure is closed; Pong as a whole is not yet a clean pass.
+The constants failure was closed, while that stochastic sample was not yet a
+clean Pong pass.
+
+### Final Pong closure rerun
+
+A fresh rerun on the current code closed the remaining live-validation question:
+
+```sh
+make structured-spec \
+  SPEC_PATH=examples/specs/pong_game_spec.md \
+  MODEL=qwen2.5-coder:1.5b \
+  SAVE_ARTIFACTS=1
+```
+
+```text
+artifacts/runs/structured_spec_pong_game_spec-20260725T021824Z-b34dda8e
+```
+
+All 20 contracts were accepted, including `check_wall_collision`,
+`check_paddle_collision`, `render`, and `main`. Final static validation,
+structured-spec conformance, and formal validation were compliant. The assembled
+program remained running through the headless smoke window, so integration smoke
+was compliant. Final status was `completed` after two final attempts.
+
+This confirms the pygame registry path is consulted correctly in the live
+pipeline. It does not erase the earlier stochastic failures; it records the
+first clean end-to-end Pong sample after those fixes.
 
 ### Stateful ladder with architect recovery
 
