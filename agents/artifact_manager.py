@@ -97,6 +97,22 @@ class ArtifactManager:
             raise ValueError(f"Checkpoint for '{run_id}' must contain a JSON object")
         return payload
 
+    def list_runs(self) -> list[str]:
+        """Return checkpointed run IDs ordered from most to least recent."""
+
+        if not self.root.is_dir():
+            return []
+        checkpoint_paths = [
+            path / "checkpoint.json"
+            for path in self.root.iterdir()
+            if path.is_dir() and (path / "checkpoint.json").is_file()
+        ]
+        checkpoint_paths.sort(
+            key=lambda path: (path.stat().st_mtime, path.parent.name),
+            reverse=True,
+        )
+        return [path.parent.name for path in checkpoint_paths]
+
     def _session_summary(self, session: dict[str, Any]) -> dict[str, Any]:
         attempts = session.get("attempts", [])
         return {

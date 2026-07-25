@@ -14,3 +14,6 @@ pylint>=3.0.0
 # Minimal synchronous HTTP service boundary.
 fastapi==0.116.1
 uvicorn==0.35.0
+
+# Terminal review and run-launch interface.
+textual>=8.2,<9

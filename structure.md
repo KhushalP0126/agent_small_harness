@@ -39,7 +39,7 @@ described where relevant but are intentionally not tracked.
 - `.github/workflows/ci.yml` - GitHub Actions workflow for package install, tests, and Docker image build.
 - `.env.example` - Safe template for local secrets such as architect API keys.
 - `benchmarker.py` - Benchmark entrypoint and helper factory for Ollama-backed controllers.
-- `requirements.txt` - Pip-compatible runtime dependency list, including tree-sitter, pygame, required Pylint, FastAPI, and Uvicorn.
+- `requirements.txt` - Pip-compatible runtime dependency list, including tree-sitter, pygame, required Pylint, FastAPI, Uvicorn, and Textual.
 - `requirements-kernel.txt` - Optional Kernel browser documentation dependency manifest.
 - `requirements-formal.txt` - Optional Deal and CrossHair formal-validation dependency manifest.
 - `history.json` - Historian persistence file for run summaries and successful repair lessons.
@@ -53,7 +53,7 @@ Deterministic orchestration components. These are not free-running autonomous
 agents; they prepare, route, validate, and record work.
 
 - `agents/base.py` - Shared `AgentResult` and `BaseAgent` types.
-- `agents/artifact_manager.py` - Creates per-run artifact directories, atomically checkpoints resumable controller state, reloads checkpoints by run ID, and records final prompts, attempts, findings, diffs, token estimates, and timelines.
+- `agents/artifact_manager.py` - Creates per-run artifact directories, atomically checkpoints resumable controller state, enumerates/reloads checkpoints by run ID, and records final prompts, attempts, findings, diffs, token estimates, and timelines.
 - `agents/config_loader.py` - Strict dataclass-backed `config.yaml` loader.
 - `agents/preprocessor.py` - Loads context and convention files before generation.
 - `agents/prompt_normalizer.py` - Removes conversational filler from raw prompts.
@@ -86,6 +86,18 @@ Minimal HTTP request boundary around the existing synchronous controller.
 
 - `api/app.py` - FastAPI app with sync generation, async job submission/status, and backend configuration wiring.
 - `api/__init__.py` - Package marker.
+
+## `TUI/`
+
+Separate Textual process for launching and reviewing harness work. It shells out
+to existing CLI entrypoints and consumes JSON artifacts rather than importing
+the controller.
+
+- `TUI/app.py` - Run launcher, live attempt/contract dashboard, architecture and changes modals, history screen, hotkeys, and exact runtime-repair safety copy.
+- `TUI/data_source.py` - Single JSON/subprocess boundary for run enumeration, checkpoint loading, CLI launch/resume, bounded history lookup, repo mapping, Mermaid SVG handoff, and unified attempt diffs.
+- `TUI/CODE_SPEC.md` - Grounded Phase 1/2 implementation specification and Phase 3 exclusions.
+- `TUI/__main__.py` - `python -m TUI` entrypoint.
+- `TUI/__init__.py` - Public data-source types.
 
 ## `harness_kernel/`
 
@@ -242,6 +254,7 @@ Unit and integration coverage.
 - `tests/test_structured_spec_runner.py` - Structured-spec parsing, contract validation, imported-symbol checks, accepted field/method context, artifact output, and smoke-execution regressions.
 - `tests/test_repo_map_agent.py` - Repo mapper record/node/edge extraction, call/import/mutation graphing, import classification, unparseable-file skip, renderings, and opt-in Plan Mode merge.
 - `tests/test_execution_agent.py` - Execution-trace capture, parse-success controller attachment, default-off behavior, and debugger type-contract hook tests.
+- `tests/test_tui.py` - Run enumeration, command allowlisting, resume inference, repo-map output, attempt/contract diffs, status-copy correctness, and headless Textual mount tests.
 - `tests/coding_capability/tasks.json` - Seven code-generation tasks with executable expected behaviors and edge cases.
 - `tests/worker_limit/tasks.json` - Graduated task set used to locate the local worker's capability boundary.
 - `tests/worker_limit/decompositions.json` - Decomposed versions of worker-limit tasks for testing whether smaller contracts improve completion.

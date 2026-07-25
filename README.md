@@ -56,6 +56,7 @@ definition of the product or controller behavior.
 | Bounded repair | Retry prompts preserve current failures and drafts under a prompt budget, detect stagnation/branch loops, and validate every worker or architect revision again. |
 | Structured-spec applications | Architect-ordered contract queues carry accepted field types and method arities forward, validate imports per contract, assemble one Python program, and run a bounded headless smoke test. |
 | Review evidence | Optional run artifacts preserve prompts, attempts, diffs, findings, execution traces, validation results, token estimates, and timelines. |
+| Human review TUI | A separate Textual process launches/resumes CLI runs, tails JSON checkpoints, displays contract queues and attempt diffs, renders live repo-map Mermaid text, and surfaces advisory history without making acceptance decisions. |
 | API boundary | FastAPI exposes synchronous runs, asynchronous submission, persisted job status, and health checks. |
 
 ## Engine Layer
@@ -127,6 +128,7 @@ flowchart TD
 
     gates -->|yes| completed[completed]
     completed --> artifacts[Artifacts and historian]
+    artifacts --> tui[Textual human-review console<br/>launch, resume, inspect, compare]
 
     gates -->|no| debug{Debugger hints enabled?}
     debug -->|yes| hints[Trace-to-spec repair hints]
@@ -256,6 +258,7 @@ Those outcomes are recorded in artifact metadata and the contract queue results.
 | `prompt/` | Initial, retry, architect, and contract-architect prompt builders |
 | `backends/` | Ollama worker and API architect clients |
 | `api/` | FastAPI boundary for synchronous runs, asynchronous jobs, status lookup, and health checks |
+| `TUI/` | Separate Textual review process, JSON/subprocess data source, live checkpoint screen, repo-map modal, attempt diffs, and history hints |
 | `scripts/run_repo_map.py` | Repository-map CLI for compact context, JSON, Mermaid, and optional artifacts |
 | `scripts/run_structured_spec.py` | Plan-only or full contract-queue generation, integration, validation, and smoke execution |
 | `scripts/` | Ladder runners, raw-vs-harness comparison, history aggregation, and review tools |
@@ -318,6 +321,19 @@ Run the API:
 ```bash
 make api-dev
 ```
+
+Launch the human-review TUI:
+
+```bash
+make tui
+```
+
+The TUI is deliberately outside the control loop. It launches the existing CLI
+scripts as subprocesses and reads their JSON checkpoints. `Q` quits, `R`
+resumes the selected run, `M` opens the repository-map modal, `D` shows
+successive-attempt diffs, and `H` searches similar past attempts. Mermaid source
+always renders as text; **Open SVG** is enabled only when the external `mmdc`
+command is installed.
 
 The first service boundary is intentionally small:
 
@@ -487,6 +503,9 @@ make approve-library LIB=clang.cindex
 - [x] Task-agnostic wildcard-import blocking with qualified-symbol repair
   guidance.
 - [x] Review-before-trust library discovery and registry approval workflow.
+- [x] Artifact-driven Textual review console with CLI launch/resume, live
+  attempt and contract-queue status, repo-map Mermaid text/SVG handoff,
+  unified attempt diffs, and advisory history search.
 
 ### Remaining Work
 
@@ -514,10 +533,11 @@ data until a human approves it into `data/library_registry.json`.
 ## Run-storage contract
 
 JSON artifacts remain the source of truth. Repeated comparisons write one batch
-summary plus per-sample, per-task raw drafts and attempt timelines. A future TUI
-should read that stable artifact schema first. If cross-run querying becomes a
-bottleneck, SQLite should be a rebuildable index over the JSON artifacts, not a
-second authoritative store.
+summary plus per-sample, per-task raw drafts and attempt timelines. The TUI
+reads that stable artifact schema through `HarnessDataSource`; screens never
+read artifact files directly. If cross-run querying becomes a bottleneck,
+SQLite should be a rebuildable index behind that data-source seam, not a second
+authoritative store.
 
 ## Safety Boundary
 

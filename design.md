@@ -36,6 +36,9 @@ Design principles:
 5. Prefer deterministic gates and explicit diagnostics over broad agent judgment.
 6. Treat the architect LLM as a repair worker, not as an authority. Architect output is accepted only after the same parse, engine, policy, and behavior gates pass.
 7. Treat retrieved run history as bounded advisory context only. Current parsing, runtime evidence, validation gates, and human review remain authoritative.
+8. Keep the TUI outside the controller process. It may launch existing CLI
+   entrypoints and organize persisted evidence, but it must not bypass gates or
+   turn advisory history into an automated acceptance decision.
 
 ## Engine Pass Contract
 

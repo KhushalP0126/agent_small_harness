@@ -17,6 +17,7 @@ dependencies = [
   "tree-sitter-cpp==0.23.4",
   "pygame==2.6.1",
   "pylint>=3.0.0",
+  "textual>=8.2,<9",
 ]
 
 [project.optional-dependencies]
@@ -37,4 +38,5 @@ packages = [
   "harness_kernel",
   "prompt",
   "validation",
+  "TUI",
 ]
