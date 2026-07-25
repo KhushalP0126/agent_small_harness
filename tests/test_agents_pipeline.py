@@ -143,6 +143,16 @@ class LibraryRegistryTests(unittest.TestCase):
         self.assertIn("key.get_pressed", pygame.allowed_calls)
         self.assertIn("K_SPACE", pygame.allowed_constants)
         self.assertIn("KEYUP", pygame.allowed_constants)
+        self.assertTrue(
+            {
+                "KEYDOWN",
+                "K_w",
+                "K_s",
+                "K_UP",
+                "K_DOWN",
+                "QUIT",
+            }.issubset(pygame.allowed_constants)
+        )
         self.assertTrue(registry.is_registered("pygame"))
 
 

@@ -395,6 +395,7 @@ make test-worker-limit-auto SAVE_ARTIFACTS=1
 make test-raw-vs-harness MODEL=qwen2.5-coder:3b
 make test-raw-vs-harness-architect MODEL=qwen2.5-coder:3b
 make test-raw-vs-harness-repeated MODEL=qwen2.5-coder:1.5b RAW_VS_HARNESS_SAMPLES=5
+make test-raw-vs-harness-ablation MODEL=qwen2.5-coder:1.5b RAW_VS_HARNESS_SAMPLES=5
 ```
 
 Run focused Python ladders:
@@ -471,7 +472,10 @@ make approve-library LIB=clang.cindex
 - [x] Artifact capture, history aggregation, capability ladders, and
   raw-versus-harness comparisons.
 - [x] Durable repeated paired comparisons that retain raw drafts, repaired
-  attempts, per-sample ranges, and aggregate recovery lift.
+  attempts, per-sample ranges, variance, Wilson confidence intervals, and
+  aggregate recovery lift.
+- [x] Opt-in naive-repair ablation comparing raw output, one behavior-only
+  repair call, and the full validation/repair/architect harness.
 - [x] Contract-boundary checkpoint/resume for structured-spec queues.
 - [x] Task-agnostic wildcard-import blocking with qualified-symbol repair
   guidance.

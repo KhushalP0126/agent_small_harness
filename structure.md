@@ -211,7 +211,7 @@ Runnable experiments and operator tooling.
 - `scripts/run_coding_capability.py` - Runs codegen tasks through engines, behavior checks, and optional architect escalation; `--resume-run` reloads a saved matching task checkpoint.
 - `scripts/run_worker_limit.py` - Harder-and-harder worker ladder with checkpoint resume through `--resume-run`.
 - `scripts/run_plan_mode_ladder.py` - Deterministic Plan Mode extraction ladder.
-- `scripts/run_raw_vs_harness.py` - Raw model versus harness comparison with bounded repair/architect mode, repeated paired samples, retained raw drafts, and aggregate recovery metrics.
+- `scripts/run_raw_vs_harness.py` - Raw model versus harness comparison with an opt-in one-repair naive ablation, bounded repair/architect mode, repeated paired samples, retained drafts, variance, Wilson intervals, and aggregate recovery metrics.
 - `scripts/run_formal_experiment.py` - Optional CrossHair smoke experiment.
 - `scripts/review_run.py` - Human-readable artifact-run summary.
 - `scripts/run_live_repair.py` - Live repair loop against a fixture.
@@ -226,7 +226,7 @@ Unit and integration coverage.
 - `tests/test_checkpoint_resume.py` - Atomic checkpoint persistence plus controller, CLI-runner, and structured-spec resume surface regressions.
 - `tests/test_prompt_summarizer.py` - Default retry-history compression and verbatim live-diagnostic preservation tests.
 - `tests/test_tool_registry.py` - Typed tool dispatch, backend failure containment, and default-handler tests.
-- `tests/test_raw_vs_harness.py` - Repair-enabled raw comparison wiring, repeated paired artifact retention, aggregation, and architect metric coverage.
+- `tests/test_raw_vs_harness.py` - Repair-enabled raw comparison wiring, naive-ablation isolation, repeated paired artifact retention, aggregate statistics, and architect metric coverage.
 - `tests/test_lint_engine.py` - Task-agnostic wildcard-import blocking and explicit-import acceptance.
 - `tests/test_api.py` - Synchronous and asynchronous FastAPI boundary and job-store tests.
 - `tests/test_agents_pipeline.py` - Agent, registry, repair, historian, library, and controller integration tests.
