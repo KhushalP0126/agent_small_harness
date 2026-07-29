@@ -11,8 +11,9 @@ raw prompt
   -> execution kernel
   -> worker or architect model
   -> parse contract
-  -> static engines
-  -> policy, behavior, and optional formal validation
+  -> static engines, including strict C/C++ compilation when applicable
+  -> policy and behavior validation
+  -> optional algorithmic profiling and formal validation
   -> checkpoint current attempt and next-draft state
   -> repair, evidence-backed completion recommendation, or manual review
   -> human acceptance / rejection outside the harness
@@ -30,7 +31,9 @@ described where relevant but are intentionally not tracked.
 ## Root Files
 
 - `README.md` - Professional project overview, architecture, setup, and command surface.
-- `Makefile` - Common setup, test, ladder, model, history, review, and smoke commands.
+- `SPEC.md` - Rust TUI and engine-expansion specification plus current implementation status and rollout constraints.
+- `Cargo.toml` - Pinned Rust TUI dependencies.
+- `Makefile` - Common setup, Rust/Textual TUI, test, ladder, model, history, review, Compute Shield, and smoke commands.
 - `config.yaml` - Declarative policy, retry, model, behavior, and routing settings.
 - `pyproject.toml` - Python package metadata and runtime dependencies.
 - `Dockerfile` - Container entrypoint for the synchronous API service.
@@ -53,7 +56,7 @@ Deterministic orchestration components. These are not free-running autonomous
 agents; they prepare, route, validate, and record work.
 
 - `agents/base.py` - Shared `AgentResult` and `BaseAgent` types.
-- `agents/artifact_manager.py` - Creates per-run artifact directories, atomically checkpoints resumable controller state, enumerates/reloads checkpoints by run ID, and records final prompts, attempts, findings, diffs, token estimates, and timelines.
+- `agents/artifact_manager.py` - Creates per-run artifact directories, atomically checkpoints resumable controller state, enumerates/reloads checkpoints by run ID, and records final prompts, attempts, execution traces, profiling evidence, findings, diffs, token estimates, and timelines.
 - `agents/config_loader.py` - Strict dataclass-backed `config.yaml` loader.
 - `agents/preprocessor.py` - Loads context and convention files before generation.
 - `agents/prompt_normalizer.py` - Removes conversational filler from raw prompts.
@@ -65,7 +68,7 @@ agents; they prepare, route, validate, and record work.
 - `agents/coder.py` - Builds initial model prompts from context and behavior specs.
 - `agents/parse_contract.py` - Language detection and parser gate.
 - `agents/engine_registry.py` - Routes parseable source to the registered engine set and dispatches lint through the typed tool registry when one is configured.
-- `agents/generation_controller.py` - Main loop for drafting, validation, repair, branch-loop detection, architect fallback, resumable checkpoint state, bounded advisory history injection, prompt summarization, and final status. It runs the execution agent after the contract parses, records the trace on each attempt, and dispatches formal checks through the typed tool registry.
+- `agents/generation_controller.py` - Main loop for drafting, validation, repair, branch-loop detection, architect fallback, resumable checkpoint state, bounded advisory history injection, prompt summarization, and final status. It runs behavior execution after parsing, emits compilation events, invokes an optional profiling runner, records trace/profile evidence per attempt, and dispatches formal checks through the typed tool registry.
 - `agents/execution_agent.py` - Runs a parsed draft against its behavior examples in the isolated sandbox and returns an `ExecutionTrace` for the behavior gate and debugger hook.
 - `agents/repair_strategy.py` - Turns validation failures into targeted repair directives.
 - `agents/behavior_spec.py` - Loads behavior specs from `data/behavior_cases.json`.
@@ -93,7 +96,7 @@ Separate Textual process for launching and reviewing harness work. It shells out
 to existing CLI entrypoints and consumes JSON artifacts rather than importing
 the controller.
 
-- `TUI/app.py` - Run launcher, live attempt/contract dashboard, architecture and changes modals, history screen, hotkeys, and exact runtime-repair safety copy.
+- `TUI/app.py` - Run launcher, live static/behavior/profiling/formal attempt dashboard, contract dashboard, architecture and changes modals, history screen, hotkeys, and exact runtime-repair safety copy.
 - `TUI/data_source.py` - Single JSON/subprocess boundary for run enumeration, checkpoint loading, CLI launch/resume, bounded history lookup, repo mapping, Mermaid SVG handoff, and unified attempt diffs.
 - `TUI/mermaid_renderer.py` - Human-scale layer/dependency summary plus a bounded parser/ASCII-tree renderer for the repo mapper's low-level Mermaid output.
 - `TUI/CODE_SPEC.md` - Grounded Phase 1/2 implementation specification and Phase 3 exclusions.
@@ -110,7 +113,33 @@ instead of replacing it.
 - `harness_kernel/execution_kernel.py` - Thin wrapper that delegates `TaskIR` execution to `GenerationController`.
 - `harness_kernel/tool_registry.py` - Typed named-tool dispatch boundary with uniform success and failure results.
 - `harness_kernel/tool_handlers.py` - Typed lint, execution-sandbox, Ollama-generation, architect-generation, and Deal/CrossHair formal-verification handlers wrapping the existing implementations.
+- `harness_kernel/tui_bridge.py` - Versioned JSON-lines subprocess bridge used by the Rust TUI; allowlists CLI launches and emits typed repo-map, compilation, profiling, and Compute Shield events.
+- `harness_kernel/event_stream.py` - Optional inherited file-descriptor event sink that keeps controller JSON events separate from human-readable CLI stdout.
+- `harness_kernel/profiling.py` - Opt-in repeated behavioral profiler with median/spread evidence, optional cache counters, a noise floor, and slower-selection findings.
+- `harness_kernel/compute_shield.py` - Exact per-task and aggregate baseline-versus-shielded token accounting; evaluation evidence rather than a validation gate.
 - `harness_kernel/__init__.py` - Public harness-kernel exports; the name avoids collision with the Kernel browser SDK.
+
+## Rust TUI
+
+- `Cargo.toml` - Pinned Rust application dependencies for Ratatui, Tokio, terminal image protocols, Mermaid SVG rendering, and rasterization.
+- `src/main.rs` - Async terminal application, Python bridge lifecycle, pure application-state reducer, input/event/redraw selection loop, and review dashboard.
+- `src/protocol.rs` - Serde command/event contract and resilient JSON-lines reader.
+- `src/mermaid_view.rs` - In-process Mermaid SVG rendering, PNG rasterization, terminal protocol selection, and modal widget.
+
+The Rust client is additive during rollout. Python remains the source of truth
+for engine logic and artifacts, and the Textual TUI remains available until
+terminal compatibility and feature parity are manually confirmed.
+
+## Additional engine
+
+- `engines/compilation_engine.py` - Strict, bounded Clang/GCC syntax and warning gate for C/C++; registered before optional tree-sitter structural engines.
+
+## New evaluation command
+
+- `scripts/run_compute_shield.py` - Reads paired `ArtifactManager` metadata,
+  verifies matching task names, aggregates exact recorded model-token totals,
+  and prints/saves the typed phase-three Compute Shield event without rerunning
+  a model.
 
 ## `engines/`
 

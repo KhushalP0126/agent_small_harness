@@ -41,10 +41,12 @@ def _attempt_lines(checkpoint: dict[str, Any]) -> list[str]:
     for attempt in session.get("attempts", []):
         validation = attempt.get("validation") or {}
         behavior = attempt.get("behavior_validation") or {}
+        profiling = attempt.get("profiling_validation") or {}
         formal = attempt.get("formal_validation") or {}
         static_count = len(validation.get("violations") or [])
         behavior_issues = behavior.get("issues") or []
         formal_issues = formal.get("issues") or []
+        profiling_issues = profiling.get("issues") or []
         worker = attempt.get("draft_source_worker") or attempt.get("repair_worker") or "unknown"
         behavior_label = (
             "compliant"
@@ -58,6 +60,13 @@ def _attempt_lines(checkpoint: dict[str, Any]) -> list[str]:
             if formal.get("is_compliant", True)
             else f"{len(formal_issues)} issues"
         )
+        profiling_label = (
+            "disabled"
+            if not profiling.get("enabled", False)
+            else "compliant"
+            if profiling.get("is_compliant", True)
+            else f"{len(profiling_issues)} issues"
+        )
         lines.extend(
             [
                 f"[attempt {attempt.get('attempt', '?')}] draft_source_worker={worker}",
@@ -67,6 +76,7 @@ def _attempt_lines(checkpoint: dict[str, Any]) -> list[str]:
                     else f"  static:   {static_count} violations"
                 ),
                 f"  behavior: {behavior_label}",
+                f"  profile:  {profiling_label}",
                 f"  formal:   {formal_label}",
                 "",
             ]

@@ -12,6 +12,7 @@ ARCHITECT_MAX_RETRIES ?= 2
 SPEC_PATH ?=
 REPO_ROOT ?= .
 REPO_MAP_FORMAT ?= context
+COMPUTE_SHIELD_ARGS ?=
 RAW_VS_HARNESS_SAMPLES ?= 5
 DOC_AGENT ?= deepseek
 DOC_MODEL ?=
@@ -20,7 +21,7 @@ IMAGE ?= agent-small-harness:local
 ARTIFACT_ARGS = $(if $(filter 1 true yes,$(SAVE_ARTIFACTS)),--save-artifacts --artifact-root "$(ARTIFACT_ROOT)",)
 DOC_ARGS = --doc-agent "$(DOC_AGENT)" $(if $(DOC_MODEL),--doc-model "$(DOC_MODEL)",) $(if $(DOC_OUTPUT),--doc-output "$(DOC_OUTPUT)",)
 
-.PHONY: help install install-formal install-kernel env-path init-env api-dev tui docker-build test test-claude-fixes test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-fixture resume-coding-capability test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-worker-limit-architect resume-worker-limit test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-python-ladder-stateful test-python-ladder-stateful-architect test-plan-mode-ladder test-raw-vs-harness test-raw-vs-harness-architect test-raw-vs-harness-repeated test-raw-vs-harness-ablation test-formal-experiment structured-spec structured-spec-plan resume-structured-spec repo-map review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library ollama-smoke inference-smoke live-repair day1 clean-history
+.PHONY: help install install-formal install-kernel env-path init-env api-dev tui rust-tui test-rust docker-build test test-engine-expansion compute-shield test-claude-fixes test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-fixture resume-coding-capability test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-worker-limit-architect resume-worker-limit test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-python-ladder-stateful test-python-ladder-stateful-architect test-plan-mode-ladder test-raw-vs-harness test-raw-vs-harness-architect test-raw-vs-harness-repeated test-raw-vs-harness-ablation test-formal-experiment structured-spec structured-spec-plan resume-structured-spec repo-map review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library ollama-smoke inference-smoke live-repair day1 clean-history
 
 help:
 	@printf "Agent Small Harness commands\n"
@@ -32,6 +33,8 @@ help:
 	@printf "  make init-env                        Create .env from .env.example if it does not already exist\n"
 	@printf "  make api-dev                         Run the synchronous FastAPI service locally\n"
 	@printf "  make tui                             Launch the artifact-driven human review TUI\n"
+	@printf "  make rust-tui                        Launch the Rust TUI and JSONL Python bridge\n"
+	@printf "  make test-rust                       Run Rust protocol, state, and Mermaid tests\n"
 	@printf "  make docker-build                    Build the local API container image\n"
 	@printf "\nDeterministic validation, no model calls:\n"
 	@printf "  make test                            Run the full unit test suite\n"
@@ -40,6 +43,8 @@ help:
 	@printf "  make test-engine-edge-cases          Run engine boundary and false-positive tests\n"
 	@printf "  make test-lint-engine                Run focused Pylint-engine tests\n"
 	@printf "  make test-treesitter                 Run optional C/C++ tree-sitter pipeline tests\n"
+	@printf "  make test-engine-expansion           Run compilation, profiling, shield, and bridge tests\n"
+	@printf "  make compute-shield COMPUTE_SHIELD_ARGS='--baseline-run task=path --shielded-run task=path' Compare paired artifact telemetry\n"
 	@printf "  make evaluate-engines                Score static engines against data/engine_cases.json\n"
 	@printf "  make repo-map                        Map a repo's functions/vars/loops/imports (context|json|mermaid)\n"
 	@printf "  make benchmark                       Run the Day 1 benchmark pipeline\n"
@@ -131,11 +136,23 @@ api-dev:
 tui:
 	$(PYTHON) -m TUI --artifact-root "$(ARTIFACT_ROOT)" --repo-root "$(REPO_ROOT)"
 
+rust-tui:
+	PYTHON="$(PYTHON)" cargo run -- "$(REPO_ROOT)"
+
+test-rust:
+	cargo test
+
 docker-build:
 	docker build -t "$(IMAGE)" .
 
 test:
 	$(PYTHON) -m unittest discover -s tests
+
+test-engine-expansion:
+	$(PYTHON) -m unittest tests.test_engine_expansion tests.test_tui_bridge
+
+compute-shield:
+	$(PYTHON) scripts/run_compute_shield.py $(COMPUTE_SHIELD_ARGS)
 
 test-claude-fixes:
 	$(PYTHON) -m unittest tests.test_agents_pipeline tests.test_behavior tests.test_benchmarker

@@ -32,13 +32,19 @@ Design principles:
 1. Parse first. No engine should analyze source that failed the parse contract.
 2. Run the complete engine set for every valid draft and every repaired draft.
 3. Keep engine outputs structured enough for both humans and `RepairStrategyAgent`.
-4. Treat model output as untrusted until it passes static policy, behavior validation, and any enabled formal validation.
+4. Treat model output as untrusted until it passes static policy, behavior
+   validation, and any enabled compilation, profiling, or formal validation.
 5. Prefer deterministic gates and explicit diagnostics over broad agent judgment.
 6. Treat the architect LLM as a repair worker, not as an authority. Architect output is accepted only after the same parse, engine, policy, and behavior gates pass.
 7. Treat retrieved run history as bounded advisory context only. Current parsing, runtime evidence, validation gates, and human review remain authoritative.
 8. Keep the TUI outside the controller process. It may launch existing CLI
    entrypoints and organize persisted evidence, but it must not bypass gates or
    turn advisory history into an automated acceptance decision.
+9. Keep performance validation opt-in and evidence-backed. A profiling caller
+   must supply behaviorally equivalent variants; the controller must not infer
+   performance from source shape.
+10. Keep evaluation metrics separate from acceptance. Compute Shield may compare
+    recorded model telemetry, but token savings never make a draft compliant.
 
 ## Engine Pass Contract
 
@@ -59,6 +65,17 @@ ParseContractAgent
 ```
 
 Every successful or failed attempt should preserve this audit trail. A repair is not accepted just because the model claims it fixed the code; it must be parsed and rescanned.
+
+For C/C++, `CompilationEngine` runs first in the registered engine list with
+strict warnings and syntax checking. Optional tree-sitter engines add
+structural findings after compilation. A compiler failure blocks before
+behavior execution.
+
+Algorithmic profiling is a behavioral extension after functional validation,
+not part of the Python AST fan-out. When a `profiling_runner` is supplied, its
+results participate in the existing repair/manual-review decision and are
+saved with the attempt. When absent, profiling remains disabled and cannot
+change completion.
 
 Bounds and state-flow have different policy defaults:
 
@@ -130,9 +147,26 @@ Rules:
 Artifact directories are part of the safety boundary.
 
 - Save the generated draft for each attempt.
-- Save validation reports, retry prompts, findings, and session summaries.
+- Save validation reports, execution traces, profiling results, retry prompts,
+  findings, and session summaries.
 - Save `attempt_timeline.json` for quick review and UI/dashboard consumption.
 - Human review tooling should read artifacts instead of re-running model calls.
+- Compute Shield should read exact recorded model-call telemetry from paired
+  artifacts with identical task names. Missing or mismatched task evidence is
+  an error, not a reason to estimate a favorable delta.
+
+## Review Client Process Design
+
+Both review clients stay outside the controller:
+
+- Textual launches existing CLI entrypoints and reads checkpoints/artifacts.
+- Rust owns its terminal and launches the Python JSONL bridge.
+- Commands use bridge stdin and bridge events use stdout. Controller-originated
+  typed events travel over a separate inherited file descriptor so arbitrary
+  CLI logs cannot corrupt the protocol.
+- Closing or crashing a review client must not fail an active harness run.
+- Neither client may import `GenerationController` or create a second
+  acceptance path.
 
 ## Secret Handling Design
 

@@ -36,8 +36,9 @@ No model output is trusted by default.
 
 The reliable target is Python.
 
-C and C++ tree-sitter support exists as an optional structural-analysis path, but
-the main development lane is Python code creation, repair, and validation.
+C and C++ have a strict compiler gate. Tree-sitter remains the optional
+structural-analysis layer, while the main development lane is Python code
+creation, repair, and validation.
 
 The harness is intentionally generalized. Example specs such as Snake and Pong
 are kept as external experiment inputs and smoke-test fixtures, not as the
@@ -56,7 +57,10 @@ definition of the product or controller behavior.
 | Bounded repair | Retry prompts preserve current failures and drafts under a prompt budget, detect stagnation/branch loops, and validate every worker or architect revision again. |
 | Structured-spec applications | Architect-ordered contract queues carry accepted field types and method arities forward, validate imports per contract, assemble one Python program, and run a bounded headless smoke test. |
 | Review evidence | Optional run artifacts preserve prompts, attempts, diffs, findings, execution traces, validation results, token estimates, and timelines. |
-| Human review TUI | A separate Textual process launches/resumes CLI runs, tails JSON checkpoints, displays contract queues and attempt diffs, renders live repo-map Mermaid text, and surfaces advisory history without making acceptance decisions. |
+| Human review TUI | The existing Textual process remains the stable interface. A Rust `ratatui` client now provides a non-blocking JSONL subprocess bridge and an in-process Mermaid-to-terminal-image modal; it is an additive preview until parity is verified. |
+| C/C++ compilation gate | Registered C/C++ drafts run a strict, timeout-bounded compiler pass (`-Wall -Wextra -Werror -fsyntax-only`) before later validation. Optional tree-sitter engines add structural checks when installed. |
+| Algorithmic profiling | An opt-in behavioral profiler measures repeated callable variants, reports median/spread and optional hardware counters, and only identifies a faster ordering beyond a documented noise floor. |
+| Compute Shield metrics | A task-level evaluator reads recorded model-token telemetry from paired artifacts, preserves each comparison row, and reports the exact aggregate delta; it is evidence, not an acceptance gate. |
 | API boundary | FastAPI exposes synchronous runs, asynchronous submission, persisted job status, and health checks. |
 
 ## Engine Layer
@@ -73,9 +77,55 @@ Python drafts pass through a registered engine set:
 | Bounds engine | Warns on high-confidence out-of-bounds read/write patterns |
 | State-flow engine | Flags helper functions that update parser/event state without returning it |
 | Lint engine | Required Pylint-backed fatal/error gate; skipped runs require explicit policy allowance |
+| Compilation engine | For C/C++, invokes an available Clang/GCC compiler with warnings promoted to errors and returns bounded diagnostics |
 
 Static checks are paired with behavior validation. A draft can be structurally
 clean and still fail if it does not satisfy the expected input/output behavior.
+
+The algorithmic profiler is intentionally not a default static engine: callers
+must supply two behaviorally equivalent operations to compare, so it cannot
+infer performance from AST shape or accidentally reject unrelated tasks.
+Compute Shield is likewise an evaluation metric rather than a gate.
+
+`GenerationController(profiling_runner=...)` is the opt-in integration seam.
+Results and failures are stored on every attempt, included in checkpoints and
+review artifacts, surfaced in the Textual console, and used by the existing
+repair/manual-review decision path. With no runner, the attempt shape records
+profiling as disabled and behavior is unchanged.
+
+## Rust TUI preview
+
+The Rust interface owns the terminal while Python continues to own the harness,
+models, engines, and artifacts. They communicate through newline-delimited JSON
+over a local subprocess—no server or port is introduced.
+
+```bash
+make rust-tui REPO_ROOT=.
+make test-rust
+```
+
+Keys: `r` launches the existing coding-capability CLI, `m` requests a fresh
+repository map and opens the rendered Mermaid modal, `Esc` closes the modal,
+and `q` requests cancellation before exiting. The Python bridge allowlists
+entrypoints and flags and wraps child output in typed log events so ordinary
+CLI text cannot corrupt the protocol.
+
+Controller events use a separate inherited file descriptor from CLI stdout.
+That keeps human log output and typed `compile_gate_result` /
+`profiling_result` messages independent while still using one local child
+process.
+
+Paired Compute Shield artifacts can be aggregated without rerunning models:
+
+```bash
+make compute-shield COMPUTE_SHIELD_ARGS="\
+  --baseline-run matrix=artifacts/runs/baseline-matrix \
+  --shielded-run matrix=artifacts/runs/shielded-matrix \
+  --output artifacts/compute-shield.json"
+```
+
+Rust is required for these two targets. The Textual `make tui` command remains
+supported during rollout.
 
 ## Execution Flow
 
@@ -99,6 +149,7 @@ flowchart TD
     parse -->|valid source| registry[EngineRegistry]
 
     subgraph static[Static analysis fan-out]
+        registry --> compile[Compilation gate for C/C++<br/>strict warnings and syntax]
         registry --> math[Math engine<br/>loop depth]
         registry --> hazards[Hazards engine<br/>state, imports, APIs]
         registry --> branching[Branching engine<br/>path complexity]
@@ -108,7 +159,8 @@ flowchart TD
         registry --> lint[Required Pylint<br/>errors, fatals, skip status]
     end
 
-    math --> policy[Policy validator]
+    compile --> policy[Policy validator]
+    math --> policy
     hazards --> policy
     branching --> policy
     cost --> policy
@@ -119,16 +171,24 @@ flowchart TD
     draft --> execute[Behavior sandbox<br/>optional retained ExecutionTrace]
     execute --> trace[ExecutionTrace<br/>returns, output, errors, timing]
     trace --> behavior[Behavior result]
+    behavior --> profile{Profiling runner supplied?}
+    profile -->|yes| profiling[Repeated behavioral profile<br/>median, spread, optional counters]
+    profile -->|no| gates
     draft --> formal[Optional CrossHair/formal validator]
     integration --> smoke[Headless integration smoke test]
     policy --> gates{All enabled gates pass?}
     behavior --> gates
+    profiling --> gates
     formal --> gates
     smoke --> gates
 
     gates -->|yes| completed[completed]
     completed --> artifacts[Artifacts and historian]
-    artifacts --> tui[Textual human-review console<br/>launch, resume, inspect, compare]
+    artifacts --> textual[Textual human-review console<br/>launch, resume, inspect, compare]
+    artifacts --> shield[Compute Shield<br/>paired token telemetry]
+    bridge[Python JSONL bridge<br/>separate typed event pipe] --> rust[Rust review TUI<br/>logs, progress, Mermaid modal]
+    artifacts --> rust
+    registry -. compile/profile events .-> bridge
 
     gates -->|no| debug{Debugger hints enabled?}
     debug -->|yes| hints[Trace-to-spec repair hints]
@@ -155,7 +215,10 @@ tracing and debugger hints are independently configurable and default off.
 Behavior validation still executes real examples when tracing is not retained;
 the trace option controls whether the richer evidence is attached to attempts
 and made available to the debugger hook. Architect output always returns to the
-same parse and validation path as local-worker output.
+same parse and validation path as local-worker output. Algorithmic profiling is
+also opt-in: a caller supplies a profiling runner with equivalent variants.
+When enabled, it participates in the same retry/manual-review path and its
+results persist beside behavior and formal evidence.
 
 ### What Each Engine Traverses
 
@@ -239,7 +302,8 @@ Those outcomes are recorded in artifact metadata and the contract queue results.
 
 | Path | Purpose |
 | --- | --- |
-| `agents/generation_controller.py` | Main create/repair loop, execution-trace attachment, debugger-hint injection, stagnation guard, branch-loop detection, architect escalation, and final status |
+| `agents/generation_controller.py` | Main create/repair loop, compilation/profiling event emission, opt-in profiling gate, execution-trace attachment, debugger-hint injection, stagnation guard, branch-loop detection, architect escalation, and final status |
+| `agents/artifact_manager.py` | Checkpoints sessions and preserves drafts, traces, profiling evidence, findings, token telemetry, and review timelines |
 | `agents/repo_map_agent.py` | Fresh AST repository map with functions, calls, returns, variables, loops, imports, compact context, and Mermaid rendering |
 | `agents/execution_agent.py` | Isolated behavior-case execution and structured runtime trace capture |
 | `agents/plan_mode.py` | Converts raw user intent and optional repository context into behavior examples, constraints, graph context, and `TaskIR` |
@@ -251,7 +315,12 @@ Those outcomes are recorded in artifact metadata and the contract queue results.
 | `harness_kernel/task_ir.py` | Structured task/spec handoff types |
 | `harness_kernel/function_contracts.py` | Function-level contract queue and Deal scaffold rendering |
 | `harness_kernel/execution_kernel.py` | Thin execution wrapper around the controller |
-| `engines/` | Static analysis engines |
+| `harness_kernel/event_stream.py` | Optional inherited JSONL event descriptor used by subprocess review clients |
+| `harness_kernel/tui_bridge.py` | Rust-client command bridge and typed event/log forwarding boundary |
+| `harness_kernel/profiling.py` | Opt-in repeated behavioral comparison with a documented noise floor |
+| `harness_kernel/compute_shield.py` | Paired artifact-token accounting and aggregate delta |
+| `engines/compilation_engine.py` | Strict Clang/GCC compilation gate for C/C++ |
+| `engines/` | Remaining static analysis engines |
 | `validation/behavior.py` | Isolated behavior execution, `ExecutionTrace`, and derived behavior results |
 | `validation/debugger.py` | Bounded trace-to-spec repair hints for debugger mode |
 | `validation/` | Policy, import validation, Deal/CrossHair formal validation, branch-loop detection, and violation types |
@@ -260,6 +329,7 @@ Those outcomes are recorded in artifact metadata and the contract queue results.
 | `api/` | FastAPI boundary for synchronous runs, asynchronous jobs, status lookup, and health checks |
 | `TUI/` | Separate Textual review process, JSON/subprocess data source, live checkpoint screen, repo-map modal, attempt diffs, and history hints |
 | `scripts/run_repo_map.py` | Repository-map CLI for compact context, JSON, Mermaid, and optional artifacts |
+| `scripts/run_compute_shield.py` | Aggregates matching baseline/shielded artifact telemetry without rerunning models |
 | `scripts/run_structured_spec.py` | Plan-only or full contract-queue generation, integration, validation, and smoke execution |
 | `scripts/` | Ladder runners, raw-vs-harness comparison, history aggregation, and review tools |
 | `tests/` | Unit, integration, edge-case, ladder, and pipeline tests |
@@ -276,6 +346,14 @@ Install the base runtime and optional formal-verification dependencies:
 ```bash
 make install
 make install-formal
+```
+
+The Rust preview additionally requires a Rust toolchain with `cargo`. It is not
+required for the Python harness or Textual TUI:
+
+```bash
+rustup toolchain install stable
+make test-rust
 ```
 
 Pull local Ollama models as needed:
@@ -509,9 +587,18 @@ make approve-library LIB=clang.cindex
 - [x] Artifact-driven Textual review console with CLI launch/resume, live
   attempt and contract-queue status, repo-map Mermaid text/SVG handoff,
   unified attempt diffs, and advisory history search.
+- [x] Rust TUI preview with a Tokio three-source event loop, typed JSONL
+  subprocess protocol, responsive state reducer, and in-process Mermaid
+  SVG-to-terminal-image modal.
+- [x] Strict C/C++ compilation gate plus opt-in algorithmic profiling and
+  task-level Compute Shield token accounting.
 
 ### Remaining Work
 
+- [ ] Complete manual terminal compatibility passes for Kitty, Sixel/Xterm,
+  and a half-block fallback before making the Rust TUI the default.
+- [ ] Run and publish a frozen 10-task Compute Shield experiment; the exact
+  task-level accounting exists, but no model-dependent result is claimed.
 - [ ] Expose `repo_root`, execution-trace retention, and debugger controls
   through the public API and remaining standalone run commands; the capability,
   worker-limit/Python-ladder, and raw-versus-harness drivers already honor the

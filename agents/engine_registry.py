@@ -39,8 +39,15 @@ class EngineRegistry:
     def default(cls, tool_registry: ToolRegistry | None = None) -> "EngineRegistry":
         registry = cls(tool_registry=tool_registry)
         registry.register("python", python_engine_factories())
-        # C/C++ are registered only when tree-sitter and its grammars are importable.
-        # Otherwise they stay unregistered and the parse contract gates them.
+        # Strict compilation is useful even when optional tree-sitter grammars
+        # are unavailable. Structural C/C++ engines are appended when present.
+        from engines.compilation_engine import CompilationEngine
+
+        for language in ("c", "cpp"):
+            registry.register(
+                language,
+                [lambda language=language: CompilationEngine(language)],
+            )
         try:
             from engines import treesitter_support
 
@@ -48,7 +55,13 @@ class EngineRegistry:
                 from engines.treesitter_engine import treesitter_engine_factories
 
                 for language in ("c", "cpp"):
-                    registry.register(language, treesitter_engine_factories(language))
+                    registry.register(
+                        language,
+                        [
+                            lambda language=language: CompilationEngine(language),
+                            *treesitter_engine_factories(language),
+                        ],
+                    )
         except Exception:
             pass
         return registry

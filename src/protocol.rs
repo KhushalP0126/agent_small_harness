@@ -1,0 +1,269 @@
+use std::collections::BTreeMap;
+
+use serde::{Deserialize, Serialize};
+use tokio::io::{AsyncBufRead, AsyncBufReadExt};
+use tokio::sync::mpsc;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "cmd", rename_all = "snake_case")]
+pub enum HarnessCommand {
+    Run {
+        entrypoint: String,
+        #[serde(default)]
+        args: Vec<String>,
+    },
+    Cancel,
+    RepoMap {
+        root: String,
+        #[serde(default)]
+        focus: String,
+    },
+    Compile {
+        language: String,
+        source: String,
+    },
+    ProfileSamples {
+        loop_order: String,
+        samples_ns: Vec<u64>,
+        cache_misses: Option<u64>,
+    },
+    ComputeShield {
+        phase: u8,
+        tasks: Vec<ShieldTaskTokens>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ShieldTaskTokens {
+    pub task: String,
+    pub baseline_tokens: u64,
+    pub shielded_tokens: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum HarnessEvent {
+    Ready {
+        protocol_version: u16,
+    },
+    EngineProgress {
+        engine: String,
+        pct: u16,
+    },
+    Log {
+        level: String,
+        msg: String,
+    },
+    ContractResult {
+        name: String,
+        status: String,
+    },
+    CompileGateResult {
+        status: String,
+        errors: Vec<String>,
+    },
+    ProfilingResult {
+        loop_order: String,
+        runtime_ns: u64,
+        cache_misses: Option<u64>,
+        #[serde(default)]
+        spread_ns: u64,
+    },
+    ComputeShieldMetrics {
+        phase: u8,
+        tokens_baseline: u64,
+        tokens_shielded: u64,
+        delta: i64,
+    },
+    RepoMap {
+        mermaid: String,
+    },
+    Result {
+        status: String,
+        #[serde(default)]
+        payload: BTreeMap<String, serde_json::Value>,
+    },
+    ProtocolError {
+        line: String,
+        error: String,
+    },
+    Done {
+        #[serde(default)]
+        status: String,
+    },
+}
+
+pub fn parse_event_line(line: &str) -> HarnessEvent {
+    serde_json::from_str(line).unwrap_or_else(|error| HarnessEvent::ProtocolError {
+        line: line.to_owned(),
+        error: error.to_string(),
+    })
+}
+
+pub async fn read_harness_events<R>(reader: R, tx: mpsc::UnboundedSender<HarnessEvent>)
+where
+    R: AsyncBufRead + Unpin,
+{
+    let mut lines = reader.lines();
+    while let Ok(Some(line)) = lines.next_line().await {
+        if tx.send(parse_event_line(&line)).is_err() {
+            break;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn event_fixtures() -> Vec<HarnessEvent> {
+        vec![
+            HarnessEvent::Ready {
+                protocol_version: 1,
+            },
+            HarnessEvent::EngineProgress {
+                engine: "cost".into(),
+                pct: 42,
+            },
+            HarnessEvent::Log {
+                level: "info".into(),
+                msg: "running".into(),
+            },
+            HarnessEvent::ContractResult {
+                name: "transform".into(),
+                status: "accepted".into(),
+            },
+            HarnessEvent::CompileGateResult {
+                status: "pass".into(),
+                errors: vec![],
+            },
+            HarnessEvent::ProfilingResult {
+                loop_order: "MKN".into(),
+                runtime_ns: 10,
+                cache_misses: None,
+                spread_ns: 2,
+            },
+            HarnessEvent::ComputeShieldMetrics {
+                phase: 3,
+                tokens_baseline: 100,
+                tokens_shielded: 40,
+                delta: 60,
+            },
+            HarnessEvent::RepoMap {
+                mermaid: "flowchart LR\n  A --> B".into(),
+            },
+            HarnessEvent::Result {
+                status: "ok".into(),
+                payload: BTreeMap::new(),
+            },
+            HarnessEvent::ProtocolError {
+                line: "{broken".into(),
+                error: "expected value".into(),
+            },
+            HarnessEvent::Done {
+                status: "completed".into(),
+            },
+        ]
+    }
+
+    #[test]
+    fn every_command_variant_round_trips() {
+        let commands = vec![
+            HarnessCommand::Cancel,
+            HarnessCommand::Run {
+                entrypoint: "coding_capability".into(),
+                args: vec!["--save-artifacts".into()],
+            },
+            HarnessCommand::RepoMap {
+                root: ".".into(),
+                focus: String::new(),
+            },
+            HarnessCommand::Compile {
+                language: "c".into(),
+                source: "int main(void) { return 0; }".into(),
+            },
+            HarnessCommand::ProfileSamples {
+                loop_order: "MKN".into(),
+                samples_ns: vec![10, 12, 11],
+                cache_misses: None,
+            },
+            HarnessCommand::ComputeShield {
+                phase: 3,
+                tasks: vec![ShieldTaskTokens {
+                    task: "matrix".into(),
+                    baseline_tokens: 100,
+                    shielded_tokens: 40,
+                }],
+            },
+        ];
+        for command in commands {
+            let encoded = serde_json::to_string(&command).unwrap();
+            let decoded: HarnessCommand = serde_json::from_str(&encoded).unwrap();
+            assert_eq!(decoded, command);
+        }
+    }
+
+    #[test]
+    fn every_event_variant_round_trips() {
+        for event in event_fixtures() {
+            let encoded = serde_json::to_string(&event).unwrap();
+            let decoded: HarnessEvent = serde_json::from_str(&encoded).unwrap();
+            assert_eq!(decoded, event);
+        }
+    }
+
+    #[test]
+    fn malformed_lines_become_protocol_errors() {
+        assert!(matches!(
+            parse_event_line("{broken"),
+            HarnessEvent::ProtocolError { .. }
+        ));
+    }
+
+    #[tokio::test]
+    async fn reader_keeps_valid_events_after_a_malformed_line() {
+        let input = b"{broken\n{\"type\":\"done\",\"status\":\"ok\"}\n";
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        read_harness_events(&input[..], tx).await;
+        assert!(matches!(
+            rx.recv().await.unwrap(),
+            HarnessEvent::ProtocolError { .. }
+        ));
+        assert_eq!(
+            rx.recv().await.unwrap(),
+            HarnessEvent::Done {
+                status: "ok".into()
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn reader_accepts_events_from_a_real_subprocess() {
+        use std::process::Stdio;
+        use tokio::io::BufReader;
+        use tokio::process::Command;
+
+        let mut child = Command::new("python3")
+            .args([
+                "-c",
+                "print('{broken'); print('{\"type\":\"done\",\"status\":\"ok\"}')",
+            ])
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let stdout = child.stdout.take().unwrap();
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        read_harness_events(BufReader::new(stdout), tx).await;
+        assert!(matches!(
+            rx.recv().await.unwrap(),
+            HarnessEvent::ProtocolError { .. }
+        ));
+        assert_eq!(
+            rx.recv().await.unwrap(),
+            HarnessEvent::Done {
+                status: "ok".into()
+            }
+        );
+        assert!(child.wait().await.unwrap().success());
+    }
+}

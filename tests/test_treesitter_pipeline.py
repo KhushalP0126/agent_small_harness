@@ -75,7 +75,15 @@ class TreeSitterRegistryAndControllerTests(unittest.TestCase):
         self.assertTrue(registry.has_language("c"))
         self.assertTrue(registry.has_language("cpp"))
         names = [engine.name for engine in registry.engines_for("c")]
-        self.assertEqual(names, ["engine-1-math", "engine-2-hazards", "engine-3-branching"])
+        self.assertEqual(
+            names,
+            [
+                "engine-compilation",
+                "engine-1-math",
+                "engine-2-hazards",
+                "engine-3-branching",
+            ],
+        )
 
     def test_controller_flags_complex_c(self) -> None:
         source = (C_DIR / "nested_branchy.c").read_text()

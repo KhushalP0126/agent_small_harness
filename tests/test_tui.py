@@ -314,6 +314,32 @@ flowchart LR
         self.assertIn(RUNTIME_REPAIR_COPY, lines)
         self.assertNotIn("static engines disabled", "\n".join(lines).lower())
 
+    def test_attempt_lines_surface_profiling_gate(self) -> None:
+        lines = _attempt_lines(
+            {
+                "attempts": [
+                    {
+                        "attempt": 0,
+                        "validation": {"is_compliant": True, "violations": []},
+                        "behavior_validation": {
+                            "is_compliant": True,
+                            "issues": [],
+                        },
+                        "profiling_validation": {
+                            "enabled": True,
+                            "is_compliant": False,
+                            "issues": [{"summary": "slower ordering"}],
+                        },
+                        "formal_validation": {
+                            "is_compliant": True,
+                            "issues": [],
+                        },
+                    }
+                ]
+            }
+        )
+        self.assertIn("  profile:  1 issues", lines)
+
 
 class TextualAppSmokeTests(unittest.IsolatedAsyncioTestCase):
     async def test_app_mounts_launcher_with_data_source(self) -> None:

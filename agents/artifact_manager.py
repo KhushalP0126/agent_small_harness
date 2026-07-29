@@ -59,6 +59,10 @@ class ArtifactManager:
                 {
                     "validation": attempt.get("validation", {}),
                     "behavior_validation": attempt.get("behavior_validation", {}),
+                    "execution_trace": attempt.get("execution_trace", {}),
+                    "profiling_validation": attempt.get(
+                        "profiling_validation", {}
+                    ),
                     "formal_validation": attempt.get("formal_validation", {}),
                     "diagnostic_deltas": attempt.get("diagnostic_deltas", []),
                     "repair_directives": attempt.get("repair_directives", []),
@@ -130,6 +134,7 @@ class ArtifactManager:
             validation = attempt.get("validation", {})
             behavior = attempt.get("behavior_validation", {})
             formal = attempt.get("formal_validation", {})
+            profiling = attempt.get("profiling_validation", {})
             rows.append(
                 {
                     "attempt": attempt.get("attempt", 0),
@@ -140,6 +145,11 @@ class ArtifactManager:
                     "behavior_issues": len(behavior.get("issues", [])),
                     "formal_compliant": bool(formal.get("is_compliant", True)),
                     "formal_issues": len(formal.get("issues", [])),
+                    "profiling_enabled": bool(profiling.get("enabled", False)),
+                    "profiling_compliant": bool(
+                        profiling.get("is_compliant", True)
+                    ),
+                    "profiling_issues": len(profiling.get("issues", [])),
                     "changed": bool(attempt.get("changed", False)),
                     "diff_chars": len(attempt.get("diff", "")),
                     "retry_prompt_chars": len(attempt.get("retry_prompt", "")),

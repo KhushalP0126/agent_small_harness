@@ -18,6 +18,8 @@ from harness_kernel.tool_handlers import (
     build_default_tool_registry,
 )
 from harness_kernel.tool_registry import ToolRegistry
+from harness_kernel.profiling import ProfileResult
+from harness_kernel.event_stream import event_sink_from_env
 from prompt.architect_builder import build_state_machine_architect_prompt
 from prompt.backend_failure_builder import build_backend_failure_architect_prompt
 from prompt.budget import PromptSummarizer, budget_prompt
@@ -42,6 +44,8 @@ from validation.types import ValidationResult, Violation
 DraftSupplier = Callable[[str], str]
 RepairSupplier = Callable[[str, str], str]
 CheckpointWriter = Callable[[dict], None]
+EventSink = Callable[[dict], None]
+ProfilingRunner = Callable[[str], tuple[list[ProfileResult], list[EngineFinding]]]
 
 SEVERITY_RANK = {
     "info": 0,
@@ -74,6 +78,14 @@ class GenerationAttempt:
     backend_failure: dict = field(default_factory=dict)
     diagnostic_stagnant: bool = False
     execution_trace: dict = field(default_factory=dict)
+    profiling_validation: dict = field(
+        default_factory=lambda: {
+            "is_compliant": True,
+            "enabled": False,
+            "results": [],
+            "issues": [],
+        }
+    )
 
 
 @dataclass
@@ -97,6 +109,7 @@ class HumanReviewPayload:
     blocking_violations: list[dict]
     behavior_issues: list[dict]
     formal_issues: list[dict] = field(default_factory=list)
+    profiling_issues: list[dict] = field(default_factory=list)
     last_retry_prompt: str = ""
     diagnostic_deltas: list[dict] = field(default_factory=list)
     repair_directives: list[dict] = field(default_factory=list)
@@ -143,6 +156,8 @@ class GenerationController(BaseAgent):
         prompt_summarizer: PromptSummarizer | None = None,
         historian: HistorianAgent | None = None,
         enable_history_context: bool = True,
+        profiling_runner: ProfilingRunner | None = None,
+        event_sink: EventSink | None = None,
     ) -> None:
         self.max_retries = max_retries
         self.draft_supplier = draft_supplier or (lambda prompt: prompt)
@@ -166,6 +181,8 @@ class GenerationController(BaseAgent):
         self.prompt_summarizer = prompt_summarizer or DefaultPromptSummarizer()
         self.historian = historian or HistorianAgent(DEFAULT_HISTORY_PATH)
         self.enable_history_context = enable_history_context
+        self.profiling_runner = profiling_runner
+        self.event_sink = event_sink or event_sink_from_env()
         self.execution_agent = execution_agent or (
             ExecutionAgent() if (enable_execution_trace or enable_debugger_hints) else None
         )
@@ -174,6 +191,41 @@ class GenerationController(BaseAgent):
         )
         self.engine_registry = engine_registry or EngineRegistry.default(
             tool_registry=self.tool_registry
+        )
+
+    def _emit_event(self, event: dict) -> None:
+        if self.event_sink is not None:
+            self.event_sink(dict(event))
+
+    def _emit_compilation_event(self, findings: list[EngineFinding]) -> None:
+        if (self.language or "").strip().lower() not in {"c", "cpp"}:
+            return
+        compilation = [
+            finding
+            for finding in findings
+            if finding.engine == "engine-compilation"
+        ]
+        statuses = [
+            str(finding.metrics.get("compile_status", "fail"))
+            for finding in compilation
+        ]
+        status = (
+            "fail"
+            if any(value in {"fail", "timeout"} for value in statuses)
+            else "skipped"
+            if "skipped" in statuses
+            else "pass"
+        )
+        self._emit_event(
+            {
+                "type": "compile_gate_result",
+                "status": status,
+                "errors": [
+                    finding.details
+                    for finding in compilation
+                    if finding.metrics.get("compile_status") in {"fail", "timeout"}
+                ],
+            }
         )
 
     def _scan(self, source: str) -> list[EngineFinding]:
@@ -326,11 +378,32 @@ class GenerationController(BaseAgent):
             )
         return violations
 
+    def _profiling_violations(self, result: dict) -> list[Violation]:
+        return [
+            Violation(
+                kind="algorithmic_profile",
+                engine=str(issue.get("engine", "engine-algorithmic-profiling")),
+                severity=str(issue.get("severity", "High")),
+                summary=str(issue.get("summary", "Algorithmic profile failed")),
+                rationale=str(issue.get("details", "")),
+                current_value=str(
+                    issue.get("metrics", {}).get("selected_runtime_ns", "slower")
+                ),
+                allowed_value=str(
+                    issue.get("metrics", {}).get("faster_runtime_ns", "faster variant")
+                ),
+                repair_hint="improve_algorithmic_order",
+                evidence={"profile": issue},
+            )
+            for issue in result.get("issues", [])
+        ]
+
     def _retry_violations(
         self,
         validation_result: ValidationResult,
         behavior_validation: dict,
         formal_validation: dict,
+        profiling_validation: dict | None = None,
     ) -> list[Violation]:
         """Return every distinct failing gate in stable validation order."""
 
@@ -341,6 +414,10 @@ class GenerationController(BaseAgent):
             candidates.extend(self._behavior_violations(behavior_validation))
         if not formal_validation.get("is_compliant", False):
             candidates.extend(self._formal_violations(formal_validation))
+        if profiling_validation and not profiling_validation.get(
+            "is_compliant", False
+        ):
+            candidates.extend(self._profiling_violations(profiling_validation))
 
         violations: list[Violation] = []
         seen: set[tuple[str, str, str, str, str, str]] = set()
@@ -808,6 +885,7 @@ class GenerationController(BaseAgent):
             blocking_violations=violations,
             behavior_issues=attempt.behavior_validation.get("issues", []),
             formal_issues=attempt.formal_validation.get("issues", []),
+            profiling_issues=attempt.profiling_validation.get("issues", []),
             last_retry_prompt=attempt.retry_prompt,
             diagnostic_deltas=attempt.diagnostic_deltas,
             repair_directives=attempt.repair_directives,
@@ -1021,6 +1099,7 @@ class GenerationController(BaseAgent):
 
         for attempt_index in range(start_attempt, self.max_retries + 1):
             findings = self._scan(draft)
+            self._emit_compilation_event(findings)
             validation_result: ValidationResult = validate_findings(findings, policy=self.policy)
             execution_trace_payload: dict = {}
             execution_trace_obj = None
@@ -1091,10 +1170,50 @@ class GenerationController(BaseAgent):
                         },
                         behavior_verified=True,
                     )
+            profiling_validation = {
+                "is_compliant": True,
+                "enabled": self.profiling_runner is not None,
+                "results": [],
+                "issues": [],
+            }
+            if (
+                self.profiling_runner is not None
+                and validation_result.is_compliant
+                and behavior_validation["is_compliant"]
+                and self._can_execute_behavior(draft)
+            ):
+                try:
+                    profile_results, profile_findings = self.profiling_runner(draft)
+                    profiling_validation = {
+                        "is_compliant": not profile_findings,
+                        "enabled": True,
+                        "results": [asdict(result) for result in profile_results],
+                        "issues": [
+                            asdict(finding) for finding in profile_findings
+                        ],
+                    }
+                    for result in profile_results:
+                        self._emit_event(result.to_event())
+                except Exception as exc:
+                    profiling_validation = {
+                        "is_compliant": False,
+                        "enabled": True,
+                        "results": [],
+                        "issues": [
+                            {
+                                "engine": "engine-algorithmic-profiling",
+                                "severity": "High",
+                                "summary": "Algorithmic profiling failed",
+                                "details": f"{type(exc).__name__}: {exc}",
+                                "metrics": {"profile_status": "error"},
+                            }
+                        ],
+                    }
             formal_validation = self._validate_formal_contracts(draft)
             is_complete = (
                 validation_result.is_compliant
                 and behavior_validation["is_compliant"]
+                and profiling_validation["is_compliant"]
                 and formal_validation["is_compliant"]
             )
             retry_prompt = ""
@@ -1117,10 +1236,16 @@ class GenerationController(BaseAgent):
                 if not validation_result.is_compliant
                 else (
                     []
-                    if behavior_validation["is_compliant"] and formal_validation["is_compliant"]
+                    if (
+                        behavior_validation["is_compliant"]
+                        and profiling_validation["is_compliant"]
+                        and formal_validation["is_compliant"]
+                    )
                     else (
                         self._behavior_violations(behavior_validation)
                         if not behavior_validation["is_compliant"]
+                        else self._profiling_violations(profiling_validation)
+                        if not profiling_validation["is_compliant"]
                         else self._formal_violations(formal_validation)
                     )
                 )
@@ -1139,6 +1264,14 @@ class GenerationController(BaseAgent):
                         for issue in behavior_validation["issues"]
                     )
                     self._debug_print(f"Iteration {attempt_index}: behavior violation detected: {issue_summaries}.")
+                elif not profiling_validation["is_compliant"]:
+                    issue_summaries = ", ".join(
+                        issue.get("summary", "algorithmic profile failed")
+                        for issue in profiling_validation["issues"]
+                    )
+                    self._debug_print(
+                        f"Iteration {attempt_index}: profiling violation detected: {issue_summaries}."
+                    )
                 else:
                     issue_summaries = ", ".join(
                         issue.get("summary", "formal validation failed")
@@ -1190,6 +1323,7 @@ class GenerationController(BaseAgent):
                     validation_result,
                     behavior_validation,
                     formal_validation,
+                    profiling_validation,
                 )
                 repair_worker, next_repair_supplier = self._repair_worker_for(len(failed_attempts))
                 if (
@@ -1218,8 +1352,18 @@ class GenerationController(BaseAgent):
                         behavior_issues=(
                             behavior_validation["issues"]
                             if validation_result.is_compliant and not behavior_validation["is_compliant"]
+                            else profiling_validation["issues"]
+                            if (
+                                validation_result.is_compliant
+                                and behavior_validation["is_compliant"]
+                                and not profiling_validation["is_compliant"]
+                            )
                             else formal_validation["issues"]
-                            if validation_result.is_compliant and behavior_validation["is_compliant"]
+                            if (
+                                validation_result.is_compliant
+                                and behavior_validation["is_compliant"]
+                                and profiling_validation["is_compliant"]
+                            )
                             else []
                         ),
                         attempt_index=attempt_index,
@@ -1273,6 +1417,7 @@ class GenerationController(BaseAgent):
                 diff=diff_text,
                 diagnostic_stagnant=diagnostic_stagnant,
                 execution_trace=execution_trace_payload,
+                profiling_validation=profiling_validation,
             )
             attempt.branch_state_signature = build_branch_state_signature(target, attempt).to_dict()
             session.attempts.append(attempt)
