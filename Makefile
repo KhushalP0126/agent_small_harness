@@ -21,7 +21,7 @@ IMAGE ?= agent-small-harness:local
 ARTIFACT_ARGS = $(if $(filter 1 true yes,$(SAVE_ARTIFACTS)),--save-artifacts --artifact-root "$(ARTIFACT_ROOT)",)
 DOC_ARGS = --doc-agent "$(DOC_AGENT)" $(if $(DOC_MODEL),--doc-model "$(DOC_MODEL)",) $(if $(DOC_OUTPUT),--doc-output "$(DOC_OUTPUT)",)
 
-.PHONY: help install install-formal install-kernel env-path init-env api-dev tui rust-tui test-rust docker-build test test-engine-expansion compute-shield test-claude-fixes test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-fixture resume-coding-capability test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-worker-limit-architect resume-worker-limit test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-python-ladder-stateful test-python-ladder-stateful-architect test-plan-mode-ladder test-raw-vs-harness test-raw-vs-harness-architect test-raw-vs-harness-repeated test-raw-vs-harness-ablation test-formal-experiment structured-spec structured-spec-plan resume-structured-spec repo-map review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library ollama-smoke inference-smoke live-repair day1 clean-history
+.PHONY: help install install-formal install-kernel env-path init-env api-dev tui rust-tui tui_rust test-rust docker-build test test-engine-expansion compute-shield test-claude-fixes test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-fixture resume-coding-capability test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-worker-limit-architect resume-worker-limit test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-python-ladder-stateful test-python-ladder-stateful-architect test-plan-mode-ladder test-raw-vs-harness test-raw-vs-harness-architect test-raw-vs-harness-repeated test-raw-vs-harness-ablation test-formal-experiment structured-spec structured-spec-plan resume-structured-spec repo-map review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library ollama-smoke inference-smoke live-repair day1 clean-history
 
 help:
 	@printf "Agent Small Harness commands\n"
@@ -34,6 +34,7 @@ help:
 	@printf "  make api-dev                         Run the synchronous FastAPI service locally\n"
 	@printf "  make tui                             Launch the artifact-driven human review TUI\n"
 	@printf "  make rust-tui                        Launch the Rust TUI and JSONL Python bridge\n"
+	@printf "  make tui_rust                        Alias for make rust-tui\n"
 	@printf "  make test-rust                       Run Rust protocol, state, and Mermaid tests\n"
 	@printf "  make docker-build                    Build the local API container image\n"
 	@printf "\nDeterministic validation, no model calls:\n"
@@ -138,6 +139,8 @@ tui:
 
 rust-tui:
 	PYTHON="$(PYTHON)" cargo run -- "$(REPO_ROOT)"
+
+tui_rust: rust-tui
 
 test-rust:
 	cargo test

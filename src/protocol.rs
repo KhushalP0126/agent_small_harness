@@ -31,6 +31,12 @@ pub enum HarnessCommand {
         phase: u8,
         tasks: Vec<ShieldTaskTokens>,
     },
+    History {
+        #[serde(default)]
+        run_id: Option<String>,
+        #[serde(default)]
+        limit: Option<u32>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -38,6 +44,17 @@ pub struct ShieldTaskTokens {
     pub task: String,
     pub baseline_tokens: u64,
     pub shielded_tokens: u64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RunSummary {
+    pub run_id: String,
+    #[serde(default)]
+    pub target: String,
+    #[serde(default)]
+    pub final_status: String,
+    #[serde(default)]
+    pub attempt_count: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -77,6 +94,14 @@ pub enum HarnessEvent {
     },
     RepoMap {
         mermaid: String,
+    },
+    HistoryList {
+        runs: Vec<RunSummary>,
+    },
+    HistoryDetail {
+        run_id: String,
+        #[serde(default)]
+        checkpoint: BTreeMap<String, serde_json::Value>,
     },
     Result {
         status: String,
@@ -152,6 +177,18 @@ mod tests {
             HarnessEvent::RepoMap {
                 mermaid: "flowchart LR\n  A --> B".into(),
             },
+            HarnessEvent::HistoryList {
+                runs: vec![RunSummary {
+                    run_id: "run-123".into(),
+                    target: "matrix.py".into(),
+                    final_status: "accepted".into(),
+                    attempt_count: 2,
+                }],
+            },
+            HarnessEvent::HistoryDetail {
+                run_id: "run-123".into(),
+                checkpoint: BTreeMap::new(),
+            },
             HarnessEvent::Result {
                 status: "ok".into(),
                 payload: BTreeMap::new(),
@@ -194,6 +231,14 @@ mod tests {
                     baseline_tokens: 100,
                     shielded_tokens: 40,
                 }],
+            },
+            HarnessCommand::History {
+                run_id: Some("run-123".into()),
+                limit: Some(5),
+            },
+            HarnessCommand::History {
+                run_id: None,
+                limit: None,
             },
         ];
         for command in commands {

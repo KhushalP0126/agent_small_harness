@@ -14,7 +14,6 @@ from agents.artifact_manager import ArtifactManager
 from backends.architect_client import ArchitectApiClient, ArchitectConfig, ArchitectModelSupplier
 from backends.ollama_client import DEFAULT_OLLAMA_MODEL, OllamaGenerationConfig, OllamaModelSupplier
 from benchmarker import (
-    HISTORY_PATH,
     ROOT,
     build_ollama_controller,
     linear_scan,
@@ -49,6 +48,8 @@ from scripts.run_plan_mode_ladder import run_plan_ladder
 from scripts.run_worker_limit import _apply_decomposition_prompt
 from scripts.run_worker_limit import _keep_first_break as keep_first_worker_break
 
+from tests.fixtures import seed_empty_history
+
 
 class BenchmarkerTests(unittest.TestCase):
     def test_linear_scan_is_classified_linear(self) -> None:
@@ -56,14 +57,13 @@ class BenchmarkerTests(unittest.TestCase):
         self.assertEqual(report.classification, "linear")
 
     def test_day1_pipeline_writes_generation_record(self) -> None:
-        original = HISTORY_PATH.read_text(encoding="utf-8")
-        try:
-            result = run_day1_pipeline(gen_id="test-day1")
-            self.assertIn("benchmark", result)
-            history = json.loads(HISTORY_PATH.read_text(encoding="utf-8"))
-            self.assertTrue(any(entry["gen_id"] == "test-day1" for entry in history["generations"]))
-        finally:
-            HISTORY_PATH.write_text(original, encoding="utf-8")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            history_path = seed_empty_history(Path(tmpdir) / "history.json")
+            with patch("benchmarker.HISTORY_PATH", history_path):
+                result = run_day1_pipeline(gen_id="test-day1")
+                self.assertIn("benchmark", result)
+                history = json.loads(history_path.read_text(encoding="utf-8"))
+                self.assertTrue(any(entry["gen_id"] == "test-day1" for entry in history["generations"]))
 
     def test_project_structure_exists(self) -> None:
         self.assertTrue((ROOT / "agents").is_dir())
@@ -498,16 +498,15 @@ def analyze(value):
         self.assertIn("Module-level mutation targets: STATE", prompt)
 
     def test_pipeline_returns_prompt_and_constraints(self) -> None:
-        original = HISTORY_PATH.read_text(encoding="utf-8")
-        try:
-            result = run_day1_pipeline(gen_id="test-prompt")
-            self.assertIn("prompt", result["coder"])
-            self.assertIn("constraint_block", result["coder"])
-            self.assertIn("GOAL:", result["coder"]["prompt"])
-            self.assertIn("validation", result)
-            self.assertIn("controller_session", result)
-        finally:
-            HISTORY_PATH.write_text(original, encoding="utf-8")
+        with tempfile.TemporaryDirectory() as tmpdir:
+            history_path = seed_empty_history(Path(tmpdir) / "history.json")
+            with patch("benchmarker.HISTORY_PATH", history_path):
+                result = run_day1_pipeline(gen_id="test-prompt")
+                self.assertIn("prompt", result["coder"])
+                self.assertIn("constraint_block", result["coder"])
+                self.assertIn("GOAL:", result["coder"]["prompt"])
+                self.assertIn("validation", result)
+                self.assertIn("controller_session", result)
 
     def test_coder_repair_prompt_includes_static_and_behavior_requirements(self) -> None:
         prompt = CoderAgent().build_repair_prompt(

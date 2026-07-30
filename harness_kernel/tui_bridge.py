@@ -16,6 +16,7 @@ import threading
 from pathlib import Path
 from typing import Any, TextIO
 
+from agents.artifact_manager import ArtifactManager
 from agents.repo_map_agent import RepoMapAgent
 from engines.compilation_engine import CompilationEngine
 from harness_kernel.compute_shield import ShieldTaskTokens, compute_shield_metrics
@@ -64,8 +65,17 @@ class EventWriter:
 
 
 class Bridge:
-    def __init__(self, writer: EventWriter | None = None) -> None:
+    def __init__(
+        self,
+        writer: EventWriter | None = None,
+        artifact_root: Path | str | None = None,
+    ) -> None:
         self.writer = writer or EventWriter()
+        self.artifact_root = (
+            Path(artifact_root)
+            if artifact_root is not None
+            else REPO_ROOT / "artifacts" / "runs"
+        )
         self._process: subprocess.Popen[str] | None = None
         self._lock = threading.Lock()
 
@@ -96,6 +106,8 @@ class Bridge:
             )
         elif kind == "compute_shield":
             self.compute_shield(command.get("phase"), command.get("tasks"))
+        elif kind == "history":
+            self.history(command.get("run_id"), command.get("limit"))
         else:
             self.writer.emit("log", level="error", msg=f"unknown command: {kind}")
 
@@ -265,6 +277,48 @@ class Bridge:
             tokens_shielded=metrics.tokens_shielded,
             delta=metrics.delta,
         )
+
+    def history(self, run_id: Any = None, limit: Any = None) -> None:
+        manager = ArtifactManager(self.artifact_root)
+        if run_id:
+            checkpoint = manager.load_checkpoint(str(run_id))
+            if checkpoint is None:
+                self.writer.emit(
+                    "log",
+                    level="warning",
+                    msg=f"unknown run: {run_id}",
+                )
+                return
+            self.writer.emit(
+                "history_detail",
+                run_id=str(run_id),
+                checkpoint=checkpoint,
+            )
+            return
+        bound = 20
+        if limit is not None:
+            try:
+                bound = max(0, int(limit))
+            except (TypeError, ValueError):
+                bound = 20
+        runs = [
+            self._run_summary(manager, run)
+            for run in manager.list_runs()[:bound]
+        ]
+        self.writer.emit("history_list", runs=runs)
+
+    def _run_summary(self, manager: ArtifactManager, run_id: str) -> dict[str, Any]:
+        try:
+            checkpoint = manager.load_checkpoint(run_id) or {}
+        except (ValueError, json.JSONDecodeError, OSError):
+            checkpoint = {}
+        attempts = checkpoint.get("attempts") or []
+        return {
+            "run_id": run_id,
+            "target": str(checkpoint.get("target", "")),
+            "final_status": str(checkpoint.get("final_status", "")),
+            "attempt_count": len(attempts),
+        }
 
     def _forward_run(
         self,

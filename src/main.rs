@@ -14,7 +14,7 @@ use crossterm::{
 };
 use futures::{FutureExt, StreamExt};
 use mermaid_view::MermaidView;
-use protocol::{read_harness_events, HarnessCommand, HarnessEvent};
+use protocol::{read_harness_events, HarnessCommand, HarnessEvent, RunSummary};
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout, Rect},
@@ -35,16 +35,24 @@ struct AppState {
     pct: u16,
     running: bool,
     repo_map_source: Option<String>,
+    history_visible: bool,
+    history_runs: Vec<RunSummary>,
+    history_selected: usize,
+    history_detail: Option<String>,
 }
 
 impl Default for AppState {
     fn default() -> Self {
         Self {
-            logs: vec!["r: run  m: repository map  q: quit".into()],
+            logs: vec!["r: run  m: repository map  d: history  q: quit".into()],
             engine: "idle".into(),
             pct: 0,
             running: false,
             repo_map_source: None,
+            history_visible: false,
+            history_runs: Vec::new(),
+            history_selected: 0,
+            history_detail: None,
         }
     }
 }
@@ -92,6 +100,20 @@ impl AppState {
             HarnessEvent::RepoMap { mermaid } => {
                 self.repo_map_source = Some(mermaid);
                 self.logs.push("repository map received".into());
+            }
+            HarnessEvent::HistoryList { runs } => {
+                self.logs.push(format!("run history: {} run(s)", runs.len()));
+                self.history_runs = runs;
+                self.history_selected = 0;
+                self.history_detail = None;
+                self.history_visible = true;
+            }
+            HarnessEvent::HistoryDetail { run_id, checkpoint } => {
+                let body = serde_json::to_string_pretty(&checkpoint)
+                    .unwrap_or_else(|_| "<unrenderable checkpoint>".into());
+                self.history_detail = Some(format!("run {run_id}\n\n{body}"));
+                self.history_visible = true;
+                self.logs.push(format!("run detail: {run_id}"));
             }
             HarnessEvent::Result { status, .. } => {
                 self.logs.push(format!("result: {status}"));
@@ -212,6 +234,50 @@ async fn run_loop(
                                 state.logs.push("building repository map…".into());
                             }
                         }
+                        KeyCode::Char('d') => {
+                            if state.history_visible {
+                                state.history_visible = false;
+                                state.history_detail = None;
+                            } else {
+                                send_command(
+                                    child_stdin,
+                                    &HarnessCommand::History {
+                                        run_id: None,
+                                        limit: None,
+                                    },
+                                ).await?;
+                                state.logs.push("loading run history…".into());
+                            }
+                        }
+                        KeyCode::Up if state.history_visible => {
+                            state.history_selected = state.history_selected.saturating_sub(1);
+                            state.history_detail = None;
+                        }
+                        KeyCode::Down if state.history_visible => {
+                            if state.history_selected + 1 < state.history_runs.len() {
+                                state.history_selected += 1;
+                            }
+                            state.history_detail = None;
+                        }
+                        KeyCode::Enter if state.history_visible => {
+                            let run_id = state
+                                .history_runs
+                                .get(state.history_selected)
+                                .map(|run| run.run_id.clone());
+                            if let Some(run_id) = run_id {
+                                send_command(
+                                    child_stdin,
+                                    &HarnessCommand::History {
+                                        run_id: Some(run_id),
+                                        limit: None,
+                                    },
+                                ).await?;
+                            }
+                        }
+                        KeyCode::Esc if state.history_visible => {
+                            state.history_visible = false;
+                            state.history_detail = None;
+                        }
                         KeyCode::Esc if mermaid.is_visible() => mermaid.toggle(),
                         _ => {}
                     }
@@ -299,6 +365,55 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState, mermaid: &mut MermaidView)
             mermaid.render(frame, inner);
         }
     }
+
+    if state.history_visible {
+        let area = centered_rect(86, 86, frame.area());
+        frame.render_widget(Clear, area);
+        let title = if state.history_detail.is_some() {
+            "Run history · detail · Esc/d to close"
+        } else {
+            "Run history · Up/Down select · Enter detail · Esc/d to close"
+        };
+        frame.render_widget(
+            Block::default().borders(Borders::ALL).title(title),
+            area,
+        );
+        let inner = Rect {
+            x: area.x + 1,
+            y: area.y + 1,
+            width: area.width.saturating_sub(2),
+            height: area.height.saturating_sub(2),
+        };
+        if let Some(detail) = &state.history_detail {
+            frame.render_widget(
+                Paragraph::new(detail.as_str()).wrap(Wrap { trim: false }),
+                inner,
+            );
+        } else if state.history_runs.is_empty() {
+            frame.render_widget(
+                Paragraph::new("no checkpointed runs found").wrap(Wrap { trim: true }),
+                inner,
+            );
+        } else {
+            let items: Vec<ListItem> = state
+                .history_runs
+                .iter()
+                .enumerate()
+                .map(|(index, run)| {
+                    let marker = if index == state.history_selected {
+                        "> "
+                    } else {
+                        "  "
+                    };
+                    ListItem::new(format!(
+                        "{marker}{} · {} · {} · {} attempts",
+                        run.run_id, run.target, run.final_status, run.attempt_count
+                    ))
+                })
+                .collect();
+            frame.render_widget(List::new(items), inner);
+        }
+    }
 }
 
 fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
@@ -348,5 +463,41 @@ mod tests {
         }
         assert_eq!(state.logs.len(), 2_000);
         assert_eq!(state.logs.last().unwrap(), "[info] event-2499");
+    }
+
+    #[test]
+    fn history_events_drive_modal_state() {
+        let mut state = AppState::default();
+        state.apply(HarnessEvent::HistoryList {
+            runs: vec![
+                RunSummary {
+                    run_id: "run-a".into(),
+                    target: "a.py".into(),
+                    final_status: "accepted".into(),
+                    attempt_count: 1,
+                },
+                RunSummary {
+                    run_id: "run-b".into(),
+                    target: "b.py".into(),
+                    final_status: "manual_review_required".into(),
+                    attempt_count: 3,
+                },
+            ],
+        });
+        assert!(state.history_visible);
+        assert_eq!(state.history_runs.len(), 2);
+        assert_eq!(state.history_selected, 0);
+        assert!(state.history_detail.is_none());
+
+        state.apply(HarnessEvent::HistoryDetail {
+            run_id: "run-b".into(),
+            checkpoint: std::collections::BTreeMap::new(),
+        });
+        assert!(state.history_visible);
+        assert!(state
+            .history_detail
+            .as_deref()
+            .unwrap()
+            .contains("run run-b"));
     }
 }

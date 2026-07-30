@@ -230,6 +230,8 @@ Checked-in evaluation evidence and review material.
 - `docs/qwen-capability-results-2026-07-18.md` - Qwen coding-capability baseline, retry, and architect-escalation results.
 - `docs/gemma-deepseek-capability-results-2026-07-19.md` - Gemma worker and DeepSeek architect comparison results.
 - `docs/snake-pong-execution-report-2026-07-19.md` - Reproducible Snake/Pong commands, failures, fixes, artifact IDs, and post-fix runtime outcomes.
+- `docs/additional-harness-results-2026-07-24.md` - Raw-versus-harness, repeated paired-sample, structured-spec resume, Pong closure, and stateful-ladder architect-recovery results.
+- `docs/structured-spec-repo-map-results-2026-07-24.md` - Structured-spec Snake/Pong plan and full-run results plus repo-mapper context/Mermaid/JSON output metrics.
 - `docs/open_source_readiness_audit.pdf` - Snapshot of the repository's open-source readiness review.
 
 ## `examples/`
@@ -274,6 +276,7 @@ Unit and integration coverage.
 - `tests/test_agents_pipeline.py` - Agent, registry, repair, historian, library, and controller integration tests.
 - `tests/test_behavior.py` - Behavior validator parity, isolation, timeout, trace, output-capture, exception, and runtime-backed issue tests.
 - `tests/test_engine_edge_cases.py` - Engine false-positive and boundary tests.
+- `tests/test_engine_expansion.py` - Compilation-engine C/C++ gate, algorithmic-profiler selection/noise-floor, and Compute Shield token-accounting tests.
 - `tests/test_cost_engine_scoping.py` - Cost-engine type/scoping tests.
 - `tests/test_graph_grounded_context.py` - Graph/context preservation tests.
 - `tests/test_context_window_prompt.py` - Compact prompt tests.
@@ -285,6 +288,7 @@ Unit and integration coverage.
 - `tests/test_repo_map_agent.py` - Repo mapper record/node/edge extraction, call/import/mutation graphing, import classification, unparseable-file skip, renderings, and opt-in Plan Mode merge.
 - `tests/test_execution_agent.py` - Execution-trace capture, parse-success controller attachment, default-off behavior, and debugger type-contract hook tests.
 - `tests/test_tui.py` - Run enumeration, command allowlisting, resume inference, repo-map output, attempt/contract diffs, status-copy correctness, and headless Textual mount tests.
+- `tests/test_tui_bridge.py` - JSON-lines TUI bridge command dispatch, argument allowlisting, typed profiling/Compute Shield/repo-map events, and inherited-fd event-sink tests.
 - `tests/coding_capability/tasks.json` - Seven code-generation tasks with executable expected behaviors and edge cases.
 - `tests/worker_limit/tasks.json` - Graduated task set used to locate the local worker's capability boundary.
 - `tests/worker_limit/decompositions.json` - Decomposed versions of worker-limit tasks for testing whether smaller contracts improve completion.

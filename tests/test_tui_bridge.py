@@ -1,9 +1,12 @@
 import io
 import json
 import os
+import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
+from agents.artifact_manager import ArtifactManager
 from harness_kernel.event_stream import EVENT_FD_ENV, event_sink_from_env
 from harness_kernel.tui_bridge import Bridge, EventWriter, _validated_args
 
@@ -94,6 +97,41 @@ class TuiBridgeTests(unittest.TestCase):
                 os.close(write_fd)
             if read_fd >= 0:
                 os.close(read_fd)
+
+    def test_history_list_mode_is_bounded(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manager = ArtifactManager(Path(tmpdir))
+            created = []
+            for index in range(3):
+                run_id = f"run-{index}"
+                paths = manager.create_run(run_id=run_id)
+                manager.checkpoint(
+                    {
+                        "target": f"task-{index}.py",
+                        "final_status": "manual_review_required",
+                        "attempts": [{"attempt": 0}],
+                    },
+                    paths,
+                )
+                created.append(run_id)
+            bridge = Bridge(EventWriter(self.output), artifact_root=Path(tmpdir))
+            bridge.handle({"cmd": "history", "limit": 2})
+        event = self.events()[0]
+        self.assertEqual(event["type"], "history_list")
+        self.assertEqual(len(event["runs"]), 2)
+        for summary in event["runs"]:
+            self.assertIn(summary["run_id"], created)
+            self.assertEqual(summary["final_status"], "manual_review_required")
+            self.assertEqual(summary["attempt_count"], 1)
+
+    def test_history_detail_missing_run_warns_without_crashing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bridge = Bridge(EventWriter(self.output), artifact_root=Path(tmpdir))
+            bridge.handle({"cmd": "history", "run_id": "does-not-exist"})
+        event = self.events()[0]
+        self.assertEqual(event["type"], "log")
+        self.assertEqual(event["level"], "warning")
+        self.assertIn("does-not-exist", event["msg"])
 
 
 if __name__ == "__main__":

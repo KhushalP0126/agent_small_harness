@@ -141,6 +141,7 @@ Rules:
 - If a state-machine/parser task fails after one small-worker repair, route to architect or human review instead of spending repeated small-worker retries.
 - Domain-specific app prompts may be used as external experiments, but Plan Mode must not embed permanent app-specific behavior.
 - Template routes must come from explicit configuration or injection, not hard-coded matching inside Plan Mode.
+- Plan Mode may merge task-agnostic repo-map structural context (`agents/repo_map_agent.py`) when a repo root or prebuilt graph is supplied. That context is rebuilt per task and must not introduce app-specific behavior.
 
 ## Artifact Review Design
 
@@ -216,6 +217,8 @@ Additional diagnostic examples:
 
 - `BOUNDS_RISK`: guard indices, iterate directly, or avoid one-past-end range/index patterns.
 - `STATE_FLOW_RISK`: return updated parser/event state from helpers and assign it at the call site.
+
+When execution tracing is enabled, the debugger hook (`validation/debugger.py`) diffs the observed `ExecutionTrace` against the spec sheet and appends bounded, targeted repair hints. The trace is runtime evidence for the existing behavior gate, not a new blocking gate.
 
 ## Fixture Policy
 
