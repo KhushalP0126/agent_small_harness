@@ -19,7 +19,7 @@ impl MermaidView {
         // test runner may not answer, so retain ratatui-image's half-block
         // compatible picker instead of making the entire TUI fail to start.
         let picker =
-            Picker::from_query_stdio().unwrap_or_else(|_| Picker::new((8, 16)));
+            Picker::from_query_stdio().unwrap_or_else(|_| Picker::from_fontsize((8, 16)));
         Ok(Self::with_picker(picker))
     }
 
@@ -79,17 +79,17 @@ fn render_png(source: &str) -> Result<Vec<u8>> {
 }
 
 fn svg_to_png(svg: &str) -> Result<Vec<u8>> {
-    let options = usvg::Options::default();
-    let tree = usvg::Tree::from_str(svg, &options).context("parse rendered SVG")?;
+    let options = resvg::usvg::Options::default();
+    let tree = resvg::usvg::Tree::from_str(svg, &options).context("parse rendered SVG")?;
     let size = tree.size().to_int_size();
     if size.width() == 0 || size.height() == 0 {
         return Err(anyhow!("renderer produced an empty SVG"));
     }
-    let mut pixmap =
-        tiny_skia::Pixmap::new(size.width(), size.height()).context("allocate PNG canvas")?;
+    let mut pixmap = resvg::tiny_skia::Pixmap::new(size.width(), size.height())
+        .context("allocate PNG canvas")?;
     resvg::render(
         &tree,
-        tiny_skia::Transform::identity(),
+        resvg::tiny_skia::Transform::identity(),
         &mut pixmap.as_mut(),
     );
     pixmap.encode_png().context("encode Mermaid PNG")
