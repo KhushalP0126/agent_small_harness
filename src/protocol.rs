@@ -15,6 +15,13 @@ pub enum HarnessCommand {
     Prompt {
         text: String,
     },
+    Chat {
+        text: String,
+    },
+    DraftSpec,
+    ExecuteSpec {
+        text: String,
+    },
     Cancel,
     RepoMap {
         root: String,
@@ -104,6 +111,32 @@ pub enum HarnessEvent {
     Log {
         level: String,
         msg: String,
+    },
+    ConfigStatus {
+        deepseek_configured: bool,
+        source: String,
+        memory_path: String,
+        preference_count: u32,
+    },
+    AssistantStatus {
+        stage: String,
+        busy: bool,
+    },
+    ChatMessage {
+        role: String,
+        content: String,
+    },
+    ChatError {
+        stage: String,
+        message: String,
+    },
+    SpecDraft {
+        text: String,
+    },
+    MemoryUpdated {
+        preference: String,
+        added: bool,
+        count: u32,
     },
     ContractResult {
         name: String,
@@ -209,6 +242,32 @@ mod tests {
                 level: "info".into(),
                 msg: "running".into(),
             },
+            HarnessEvent::ConfigStatus {
+                deepseek_configured: true,
+                source: ".env:DEEPSEEK_API_KEY".into(),
+                memory_path: ".tui_memory.json".into(),
+                preference_count: 2,
+            },
+            HarnessEvent::AssistantStatus {
+                stage: "chat".into(),
+                busy: true,
+            },
+            HarnessEvent::ChatMessage {
+                role: "assistant".into(),
+                content: "What should we build?".into(),
+            },
+            HarnessEvent::ChatError {
+                stage: "chat".into(),
+                message: "offline".into(),
+            },
+            HarnessEvent::SpecDraft {
+                text: "# Spec".into(),
+            },
+            HarnessEvent::MemoryUpdated {
+                preference: "keep responses concise".into(),
+                added: true,
+                count: 1,
+            },
             HarnessEvent::ContractResult {
                 name: "transform".into(),
                 status: "accepted".into(),
@@ -301,6 +360,13 @@ mod tests {
             },
             HarnessCommand::Prompt {
                 text: "Build a parser".into(),
+            },
+            HarnessCommand::Chat {
+                text: "Help me plan a parser".into(),
+            },
+            HarnessCommand::DraftSpec,
+            HarnessCommand::ExecuteSpec {
+                text: "# Parser spec".into(),
             },
             HarnessCommand::RepoMap {
                 root: ".".into(),

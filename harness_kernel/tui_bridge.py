@@ -21,6 +21,7 @@ from typing import Any, TextIO
 
 from agents.artifact_manager import ArtifactManager
 from agents.repo_map_agent import RepoMapAgent
+from backends.architect_client import ArchitectApiClient, ArchitectConfig
 from engines.compilation_engine import CompilationEngine
 from harness_kernel.compute_shield import ShieldTaskTokens, compute_shield_metrics
 from harness_kernel.profiling import ProfileResult
@@ -31,6 +32,9 @@ from TUI.mermaid_renderer import render_repo_architecture
 
 PROTOCOL_VERSION = 1
 REPO_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_MEMORY_PATH = REPO_ROOT / ".tui_memory.json"
+MAX_CHAT_MESSAGES = 24
+MAX_PREFERENCES = 50
 ENTRYPOINTS = {
     "coding_capability": REPO_ROOT / "scripts" / "run_coding_capability.py",
     "worker_limit": REPO_ROOT / "scripts" / "run_worker_limit.py",
@@ -74,6 +78,8 @@ class Bridge:
         writer: EventWriter | None = None,
         artifact_root: Path | str | None = None,
         env_file: Path | str | None = None,
+        memory_path: Path | str | None = None,
+        architect_client: ArchitectApiClient | None = None,
     ) -> None:
         self.writer = writer or EventWriter()
         self.artifact_root = (
@@ -82,11 +88,30 @@ class Bridge:
             else REPO_ROOT / "artifacts" / "runs"
         )
         self.env_file = Path(env_file) if env_file is not None else REPO_ROOT / ".env"
+        self.memory_path = (
+            Path(memory_path) if memory_path is not None else DEFAULT_MEMORY_PATH
+        )
+        self._architect_client = architect_client
+        self._chat_history: list[dict[str, str]] = []
+        self._assistant_busy = False
         self._process: subprocess.Popen[str] | None = None
         self._lock = threading.Lock()
 
-    def emit_startup_warnings(self) -> None:
-        if not self._child_environment().get("DEEPSEEK_API_KEY", "").strip():
+    def emit_startup_status(self) -> None:
+        child_env = self._child_environment()
+        configured = bool(
+            child_env.get("ARCHITECT_API_KEY", "").strip()
+            or child_env.get("DEEPSEEK_API_KEY", "").strip()
+        )
+        source = self._architect_key_source()
+        self.writer.emit(
+            "config_status",
+            deepseek_configured=configured,
+            source=source,
+            memory_path=str(self.memory_path),
+            preference_count=len(self._load_preferences()),
+        )
+        if not configured:
             self.writer.emit(
                 "log",
                 level="warning",
@@ -103,8 +128,12 @@ class Bridge:
                 str(command.get("entrypoint") or ""),
                 [str(item) for item in command.get("args") or []],
             )
-        elif kind == "prompt":
-            self.start_prompt(str(command.get("text") or ""))
+        elif kind in {"prompt", "chat"}:
+            self.start_chat(str(command.get("text") or ""))
+        elif kind == "draft_spec":
+            self.start_spec_draft()
+        elif kind == "execute_spec":
+            self.start_spec_execution(str(command.get("text") or ""))
         elif kind == "cancel":
             self.cancel()
         elif kind == "repo_map":
@@ -131,9 +160,44 @@ class Bridge:
         else:
             self.writer.emit("log", level="error", msg=f"unknown command: {kind}")
 
-    def start_prompt(self, text: str) -> None:
+    def start_chat(self, text: str) -> None:
+        text = text.strip()
+        if not text:
+            self.writer.emit("log", level="warning", msg="chat message cannot be empty")
+            return
+        if self._assistant_busy:
+            self.writer.emit("log", level="warning", msg="DeepSeek is already responding")
+            return
+        self._chat_history.append({"role": "user", "content": text})
+        self._chat_history = self._chat_history[-MAX_CHAT_MESSAGES:]
+        self.writer.emit("chat_message", role="user", content=text)
+        remembered = self._preference_from_message(text)
+        if remembered:
+            added = self._remember_preference(remembered)
+            self.writer.emit(
+                "memory_updated",
+                preference=remembered,
+                added=added,
+                count=len(self._load_preferences()),
+            )
+        self._start_assistant_task("chat", self._run_chat)
+
+    def start_spec_draft(self) -> None:
+        if self._assistant_busy:
+            self.writer.emit("log", level="warning", msg="DeepSeek is already responding")
+            return
+        if not self._chat_history:
+            self.writer.emit(
+                "log",
+                level="warning",
+                msg="Discuss the task in chat before drafting a specification.",
+            )
+            return
+        self._start_assistant_task("drafting_spec", self._run_spec_draft)
+
+    def start_spec_execution(self, text: str) -> None:
         if not text.strip():
-            self.writer.emit("log", level="warning", msg="prompt cannot be empty")
+            self.writer.emit("log", level="warning", msg="approved spec cannot be empty")
             return
         with tempfile.NamedTemporaryFile(
             mode="w",
@@ -149,6 +213,127 @@ class Bridge:
             ["--spec", str(spec_path), "--save-artifacts"],
             cleanup_path=spec_path,
         )
+
+    def _start_assistant_task(self, stage: str, target: Any) -> None:
+        self._assistant_busy = True
+        self.writer.emit("assistant_status", stage=stage, busy=True)
+        threading.Thread(
+            target=self._finish_assistant_task,
+            args=(stage, target),
+            daemon=True,
+        ).start()
+
+    def _finish_assistant_task(self, stage: str, target: Any) -> None:
+        try:
+            target()
+        except Exception as exc:  # noqa: BLE001 - assistant protocol boundary
+            self.writer.emit(
+                "chat_error",
+                stage=stage,
+                message=f"{type(exc).__name__}: {exc}",
+            )
+        finally:
+            self._assistant_busy = False
+            self.writer.emit("assistant_status", stage=stage, busy=False)
+
+    def _run_chat(self) -> None:
+        response = self._client().generate(
+            self._chat_prompt(),
+            system=(
+                "You are a privacy-focused terminal planning assistant. Converse "
+                "naturally, ask concise clarifying questions, and help refine software "
+                "ideas. Do not claim to have executed commands or changed files. When "
+                "the idea is ready, tell the user they can press s to draft a spec."
+            ),
+        ).strip()
+        self._chat_history.append({"role": "assistant", "content": response})
+        self._chat_history = self._chat_history[-MAX_CHAT_MESSAGES:]
+        self.writer.emit("chat_message", role="assistant", content=response)
+
+    def _run_spec_draft(self) -> None:
+        response = self._client().generate(
+            self._spec_prompt(),
+            system=(
+                "You turn a software planning conversation into an executable markdown "
+                "specification. Return markdown only. Include goal, files, behavior, "
+                "interfaces, constraints, acceptance examples, and validation. Do not "
+                "execute anything and do not wrap the markdown in a code fence."
+            ),
+        ).strip()
+        self.writer.emit("spec_draft", text=response)
+
+    def _client(self) -> ArchitectApiClient:
+        if self._architect_client is None:
+            self._architect_client = ArchitectApiClient(
+                ArchitectConfig(env_file=str(self.env_file))
+            )
+        return self._architect_client
+
+    def _chat_prompt(self) -> str:
+        return "\n\n".join(
+            [
+                _preference_context(self._load_preferences()),
+                "CONVERSATION:\n" + _chat_transcript(self._chat_history),
+                "Respond to the latest user message.",
+            ]
+        )
+
+    def _spec_prompt(self) -> str:
+        return "\n\n".join(
+            [
+                _preference_context(self._load_preferences()),
+                "CONVERSATION:\n" + _chat_transcript(self._chat_history),
+                "Draft the concrete implementation specification now.",
+            ]
+        )
+
+    def _architect_key_source(self) -> str:
+        for key in ("ARCHITECT_API_KEY", "DEEPSEEK_API_KEY"):
+            if os.environ.get(key, "").strip():
+                return f"environment:{key}"
+        values = _dotenv_values(self.env_file)
+        for key in ("ARCHITECT_API_KEY", "DEEPSEEK_API_KEY"):
+            if values.get(key, "").strip():
+                return f".env:{key}"
+        return "missing"
+
+    def _load_preferences(self) -> list[str]:
+        try:
+            payload = json.loads(self.memory_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return []
+        preferences = payload.get("preferences", []) if isinstance(payload, dict) else []
+        return [str(item) for item in preferences if str(item).strip()][-MAX_PREFERENCES:]
+
+    def _remember_preference(self, preference: str) -> bool:
+        preferences = self._load_preferences()
+        if preference in preferences:
+            return False
+        preferences.append(preference)
+        self.memory_path.parent.mkdir(parents=True, exist_ok=True)
+        self.memory_path.write_text(
+            json.dumps(
+                {"version": 1, "preferences": preferences[-MAX_PREFERENCES:]},
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return True
+
+    @staticmethod
+    def _preference_from_message(text: str) -> str:
+        lowered = text.casefold()
+        prefixes = ("/remember ", "remember that ", "i prefer ")
+        for prefix in prefixes:
+            if lowered.startswith(prefix):
+                preference = text[len(prefix):].strip()
+                sensitive = ("api key", "password", "secret", "token", "credential")
+                if preference and len(preference) <= 300 and not any(
+                    marker in preference.casefold() for marker in sensitive
+                ):
+                    return preference
+        return ""
 
     def start_run(
         self,
@@ -513,19 +698,39 @@ def _dotenv_values(path: Path) -> dict[str, str]:
     return values
 
 
+def _chat_transcript(history: list[dict[str, str]]) -> str:
+    return "\n".join(
+        f"{message.get('role', 'unknown').upper()}: {message.get('content', '')}"
+        for message in history[-MAX_CHAT_MESSAGES:]
+    )
+
+
+def _preference_context(preferences: list[str]) -> str:
+    if not preferences:
+        return "USER PREFERENCES: none recorded"
+    return "USER PREFERENCES:\n" + "\n".join(
+        f"- {preference}" for preference in preferences[-MAX_PREFERENCES:]
+    )
+
+
 def _architect_error_event(payload: Any) -> dict[str, Any] | None:
     if not isinstance(payload, dict):
         return None
     error = str(payload.get("architect_contract_error") or "").strip()
     if not error:
         return None
+    code = str(payload.get("architect_contract_error_code") or "").strip()
+    if code == "architect_contract_missing_api_key":
+        message = (
+            f"DeepSeek is not configured: {error}. Set DEEPSEEK_API_KEY in the "
+            "repository .env file or export it in the launching shell."
+        )
+    else:
+        message = f"DeepSeek contract planner error ({code or 'unknown'}): {error}"
     return {
         "type": "log",
         "level": "error",
-        "msg": (
-            f"DeepSeek unavailable: {error}. Check DEEPSEEK_API_KEY in the "
-            "repository .env file or export it in the shell that launches the TUI."
-        ),
+        "msg": message,
     }
 
 
@@ -580,7 +785,7 @@ def _contract_event_from_line(line: str) -> dict[str, Any] | None:
 def main() -> int:
     bridge = Bridge()
     bridge.writer.emit("ready", protocol_version=PROTOCOL_VERSION)
-    bridge.emit_startup_warnings()
+    bridge.emit_startup_status()
     for raw_line in sys.stdin:
         try:
             command = json.loads(raw_line)

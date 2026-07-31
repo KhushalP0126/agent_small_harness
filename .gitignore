@@ -14,6 +14,7 @@ build/
 dist/
 target/
 .env
+.tui_memory.json
 .env.*
 !.env.example
 artifacts/

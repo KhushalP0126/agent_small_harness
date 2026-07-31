@@ -1222,7 +1222,7 @@ def run_spec(
                 queue = fallback_queue
                 contract_metadata["architect_contracts_fallback_used"] = True
                 contract_metadata["architect_contract_count"] = len(queue.contracts)
-            elif plan.components:
+            else:
                 payload = {
                     "status": "manual_review_required",
                     "reason": "missing_contract_queue_for_structured_spec",
@@ -1540,6 +1540,7 @@ def run_spec(
                 "architect_contract_plan_parsed": contract_metadata["architect_contract_plan_parsed"],
                 "architect_contract_plan_applied": contract_metadata["architect_contract_plan_applied"],
                 "architect_contract_count": contract_metadata["architect_contract_count"],
+                "architect_contract_error_code": contract_metadata["architect_contract_error_code"],
                 "architect_contract_error": contract_metadata["architect_contract_error"],
                 "contract_queue_mode": "sequential" if queue.contracts else "bulk",
                 "contract_queue_results": [

@@ -2,6 +2,7 @@ import io
 import json
 import os
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -29,6 +30,15 @@ class TuiBridgeTests(unittest.TestCase):
             for line in self.output.getvalue().splitlines()
             if line.strip()
         ]
+
+    def wait_for_event(self, event_type: str) -> dict:
+        deadline = time.monotonic() + 2
+        while time.monotonic() < deadline:
+            for event in self.events():
+                if event.get("type") == event_type:
+                    return event
+            time.sleep(0.01)
+        self.fail(f"timed out waiting for {event_type}: {self.events()}")
 
     def test_unknown_command_is_structured_log(self) -> None:
         self.bridge.handle({"cmd": "missing"})
@@ -145,19 +155,46 @@ class TuiBridgeTests(unittest.TestCase):
                 env_file=Path(tmpdir) / ".env",
             )
             with patch.dict(os.environ, {}, clear=True):
-                bridge.emit_startup_warnings()
+                bridge.emit_startup_status()
+        events = self.events()
+        self.assertEqual(events[0]["type"], "config_status")
+        self.assertFalse(events[0]["deepseek_configured"])
+        self.assertEqual(events[1]["level"], "warning")
+        self.assertIn("DEEPSEEK_API_KEY", events[1]["msg"])
+
+    def test_startup_status_reports_dotenv_source_without_secret(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env_file = Path(tmpdir) / ".env"
+            env_file.write_text("DEEPSEEK_API_KEY=secret-value\n", encoding="utf-8")
+            bridge = Bridge(EventWriter(self.output), env_file=env_file)
+            with patch.dict(os.environ, {}, clear=True):
+                bridge.emit_startup_status()
         event = self.events()[0]
-        self.assertEqual(event["level"], "warning")
-        self.assertIn("DEEPSEEK_API_KEY", event["msg"])
+        self.assertTrue(event["deepseek_configured"])
+        self.assertEqual(event["source"], ".env:DEEPSEEK_API_KEY")
+        self.assertNotIn("secret-value", json.dumps(event))
 
     def test_architect_error_payload_becomes_high_visibility_log(self) -> None:
         event = _architect_error_event(
-            {"architect_contract_error": "architect API key not configured"}
+            {
+                "architect_contract_error_code": "architect_contract_missing_api_key",
+                "architect_contract_error": "architect API key not configured",
+            }
         )
         self.assertEqual(event["type"], "log")
         self.assertEqual(event["level"], "error")
-        self.assertIn("DeepSeek unavailable", event["msg"])
+        self.assertIn("not configured", event["msg"])
         self.assertIn("DEEPSEEK_API_KEY", event["msg"])
+
+    def test_invalid_planner_response_does_not_blame_api_key(self) -> None:
+        event = _architect_error_event(
+            {
+                "architect_contract_error_code": "architect_contract_plan_invalid_json",
+                "architect_contract_error": "plan must contain an order",
+            }
+        )
+        self.assertIn("planner error", event["msg"])
+        self.assertNotIn("DEEPSEEK_API_KEY", event["msg"])
 
     def test_forward_run_surfaces_error_from_multiline_json_summary(self) -> None:
         process = MagicMock()
@@ -165,6 +202,7 @@ class TuiBridgeTests(unittest.TestCase):
             json.dumps(
                 {
                     "status": "manual_review_required",
+                    "architect_contract_error_code": "architect_contract_missing_api_key",
                     "architect_contract_error": "architect API key not configured",
                 },
                 indent=2,
@@ -179,8 +217,70 @@ class TuiBridgeTests(unittest.TestCase):
             if event.get("type") == "log" and event.get("level") == "error"
         ]
         self.assertEqual(len(errors), 1)
-        self.assertIn("DeepSeek unavailable", errors[0]["msg"])
+        self.assertIn("not configured", errors[0]["msg"])
         self.assertEqual(self.events()[-1], {"type": "done", "status": "failed"})
+
+    def test_chat_is_non_mutating_and_emits_assistant_reply(self) -> None:
+        client = MagicMock()
+        client.generate.return_value = "Hello. What would you like to plan?"
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bridge = Bridge(
+                EventWriter(self.output),
+                memory_path=Path(tmpdir) / "memory.json",
+                architect_client=client,
+            )
+            bridge.handle({"cmd": "chat", "text": "hello"})
+            reply = self.wait_for_event("chat_message")
+            deadline = time.monotonic() + 2
+            while time.monotonic() < deadline and len(
+                [event for event in self.events() if event["type"] == "chat_message"]
+            ) < 2:
+                time.sleep(0.01)
+        messages = [event for event in self.events() if event["type"] == "chat_message"]
+        self.assertEqual(reply["role"], "user")
+        self.assertEqual(messages[-1]["role"], "assistant")
+        self.assertIsNone(bridge._process)
+
+    def test_draft_spec_uses_chat_history_without_executing(self) -> None:
+        client = MagicMock()
+        client.generate.side_effect = ["Let's plan it.", "# Spec\n\nBuild a parser."]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bridge = Bridge(
+                EventWriter(self.output),
+                memory_path=Path(tmpdir) / "memory.json",
+                architect_client=client,
+            )
+            bridge.start_chat("Build a parser")
+            self.wait_for_event("assistant_status")
+            deadline = time.monotonic() + 2
+            while bridge._assistant_busy and time.monotonic() < deadline:
+                time.sleep(0.01)
+            bridge.start_spec_draft()
+            event = self.wait_for_event("spec_draft")
+        self.assertTrue(event["text"].startswith("# Spec"))
+        self.assertIsNone(bridge._process)
+
+    def test_execute_spec_is_the_only_command_that_starts_structured_run(self) -> None:
+        with patch.object(self.bridge, "start_run") as start_run:
+            self.bridge.handle({"cmd": "execute_spec", "text": "# Approved spec"})
+        start_run.assert_called_once()
+        self.assertEqual(start_run.call_args.args[0], "structured_spec")
+
+    def test_explicit_preference_is_saved_without_sensitive_values(self) -> None:
+        client = MagicMock()
+        client.generate.return_value = "Understood."
+        with tempfile.TemporaryDirectory() as tmpdir:
+            memory_path = Path(tmpdir) / "memory.json"
+            bridge = Bridge(
+                EventWriter(self.output),
+                memory_path=memory_path,
+                architect_client=client,
+            )
+            bridge.start_chat("remember that keep responses concise")
+            event = self.wait_for_event("memory_updated")
+            saved = json.loads(memory_path.read_text(encoding="utf-8"))
+        self.assertTrue(event["added"])
+        self.assertEqual(saved["preferences"], ["keep responses concise"])
 
     def test_contract_plan_line_becomes_typed_event(self) -> None:
         event = _contract_event_from_line(

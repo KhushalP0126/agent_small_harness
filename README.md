@@ -108,9 +108,22 @@ make test-rust
 ```
 
 The primary view keeps main output and repository context above persistent
-context, prompt, and settings panels. Press `p` to type a live request and
-`Enter` to send it through Plan Mode, DeepSeek contract planning, and the small
-worker queue. `m` focuses/refreshes the repository panel and eagerly loads its
+context, chat, and settings panels. Press `c` or `p` to chat with the architect
+without executing anything. When the idea is ready, press `s` to generate a
+markdown specification from the bounded conversation. The TUI opens a review
+gate: `y` explicitly sends that spec through DeepSeek contract planning and the
+small-worker queue, while `n` or `Esc` returns to chat for revision. Ordinary
+chat text—including greetings—can never start workers.
+
+The context panel reports whether DeepSeek was configured from the environment
+or repository `.env`; it never displays the key. Explicit phrases such as
+`/remember keep responses concise`, `remember that ...`, or `I prefer ...`
+store a bounded preference in ignored `.tui_memory.json`. Those preferences are
+injected into later chat and spec-drafting prompts. Session conversation stays
+in memory and is not written to disk; messages containing credential-like
+preferences are refused by the memory extractor.
+
+`m` focuses/refreshes the repository panel and eagerly loads its
 typed file, summary, symbol, import, and variable records. `Up`/`Down` then
 navigate that cached list without an IPC call. While focused, `r` shows the
 selected file's variables/imports and `t` shows its summary and symbols in a
@@ -394,10 +407,10 @@ ARCHITECT_MODEL=deepseek-v4-pro
 - `execution.architect.repair` uses a separate bounded repair profile for code repair after worker failure.
 
 `.env` is ignored by git. Use `.env.example` as the committed template.
-The Rust TUI bridge loads this repository-level `.env` before launching prompt
-runs. Values already exported by the launching shell take precedence. If
-`DEEPSEEK_API_KEY` is unavailable from both sources, the TUI shows a startup
-warning and reports the failed prompt as a highlighted error.
+The Rust TUI bridge loads this repository-level `.env` for chat, spec drafting,
+and approved execution. Values already exported by the launching shell take
+precedence. The context panel identifies the active source without exposing the
+secret. If no key is available, the TUI shows a startup warning.
 Transient architect API failures are retried by default. Tune
 `ARCHITECT_RETRY_ATTEMPTS` and `ARCHITECT_RETRY_BACKOFF_SECONDS` in `.env` when
 needed.

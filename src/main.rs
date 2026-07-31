@@ -2,12 +2,14 @@ mod mermaid_view;
 mod protocol;
 
 use std::io;
+use std::panic;
 use std::path::PathBuf;
 use std::process::Stdio;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
 use crossterm::{
+    cursor::Show,
     event::{DisableMouseCapture, EnableMouseCapture, Event as CtEvent, EventStream, KeyCode},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
@@ -31,7 +33,27 @@ use tokio::{
 };
 
 #[derive(Debug, Clone, PartialEq)]
+enum AppMode {
+    Chat,
+    DraftingSpec,
+    SpecReview { spec_text: String },
+    Executing,
+}
+
+impl AppMode {
+    fn label(&self) -> &'static str {
+        match self {
+            Self::Chat => "chat",
+            Self::DraftingSpec => "drafting spec",
+            Self::SpecReview { .. } => "spec review",
+            Self::Executing => "executing",
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
 struct AppState {
+    mode: AppMode,
     logs: Vec<String>,
     engine: String,
     pct: u16,
@@ -50,12 +72,18 @@ struct AppState {
     history_detail: Option<String>,
     prompt: String,
     prompt_active: bool,
+    assistant_busy: bool,
+    deepseek_configured: bool,
+    deepseek_source: String,
+    memory_path: String,
+    preference_count: u32,
 }
 
 impl Default for AppState {
     fn default() -> Self {
         Self {
-            logs: vec!["p: enter prompt  r: benchmark  m: repository map  d: history  q: quit".into()],
+            mode: AppMode::Chat,
+            logs: vec!["c/p: chat  s: draft spec  m: repository map  d: history  q: quit".into()],
             engine: "idle".into(),
             pct: 0,
             running: false,
@@ -73,6 +101,11 @@ impl Default for AppState {
             history_detail: None,
             prompt: String::new(),
             prompt_active: false,
+            assistant_busy: false,
+            deepseek_configured: false,
+            deepseek_source: "checking".into(),
+            memory_path: ".tui_memory.json".into(),
+            preference_count: 0,
         }
     }
 }
@@ -90,6 +123,60 @@ impl AppState {
             }
             HarnessEvent::Log { level, msg } => {
                 self.logs.push(format!("[{level}] {msg}"));
+            }
+            HarnessEvent::ConfigStatus {
+                deepseek_configured,
+                source,
+                memory_path,
+                preference_count,
+            } => {
+                self.deepseek_configured = deepseek_configured;
+                self.deepseek_source = source;
+                self.memory_path = memory_path;
+                self.preference_count = preference_count;
+                self.logs.push(format!(
+                    "DeepSeek: {} · source={} · {} saved preference(s)",
+                    if deepseek_configured {
+                        "configured"
+                    } else {
+                        "not configured"
+                    },
+                    self.deepseek_source,
+                    self.preference_count
+                ));
+            }
+            HarnessEvent::AssistantStatus { stage, busy } => {
+                self.assistant_busy = busy;
+                self.engine = if busy { stage } else { "idle".into() };
+            }
+            HarnessEvent::ChatMessage { role, content } => {
+                let label = if role == "user" { "you" } else { "assistant" };
+                self.logs.push(format!("[{label}] {content}"));
+            }
+            HarnessEvent::ChatError { stage, message } => {
+                self.assistant_busy = false;
+                self.engine = "idle".into();
+                self.mode = AppMode::Chat;
+                self.logs.push(format!("[error] {stage} failed: {message}"));
+            }
+            HarnessEvent::SpecDraft { text } => {
+                self.assistant_busy = false;
+                self.engine = "idle".into();
+                self.mode = AppMode::SpecReview { spec_text: text };
+                self.logs
+                    .push("spec draft ready; review it and press y to execute or n to revise".into());
+            }
+            HarnessEvent::MemoryUpdated {
+                preference,
+                added,
+                count,
+            } => {
+                self.preference_count = count;
+                self.logs.push(if added {
+                    format!("[memory] saved preference: {preference}")
+                } else {
+                    format!("[memory] preference already saved: {preference}")
+                });
             }
             HarnessEvent::ContractResult { name, status } => {
                 self.logs.push(format!("contract {name}: {status}"));
@@ -192,6 +279,9 @@ impl AppState {
                 self.running = false;
                 self.engine = "idle".into();
                 self.pct = 0;
+                if self.mode == AppMode::Executing {
+                    self.mode = AppMode::Chat;
+                }
                 self.logs.push(format!("harness finished: {status}"));
             }
         }
@@ -258,8 +348,35 @@ fn indented_or_none(values: &[String]) -> String {
     }
 }
 
+struct TerminalGuard;
+
+impl Drop for TerminalGuard {
+    fn drop(&mut self) {
+        restore_terminal_state();
+    }
+}
+
+fn restore_terminal_state() {
+    let _ = disable_raw_mode();
+    let _ = execute!(
+        io::stdout(),
+        LeaveAlternateScreen,
+        DisableMouseCapture,
+        Show
+    );
+}
+
+fn install_terminal_panic_hook() {
+    let previous = panic::take_hook();
+    panic::set_hook(Box::new(move |panic_info| {
+        restore_terminal_state();
+        previous(panic_info);
+    }));
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
+    install_terminal_panic_hook();
     let repo_root = std::env::args()
         .nth(1)
         .map(PathBuf::from)
@@ -292,20 +409,13 @@ async fn run_terminal(
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    let _terminal_guard = TerminalGuard;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
     // Terminal graphics probing must happen after entering the alternate screen
     // and before the crossterm event reader starts consuming terminal replies.
     let mut mermaid = MermaidView::new();
-    let result = run_loop(&mut terminal, child_stdin, rx, repo_root, &mut mermaid).await;
-    disable_raw_mode()?;
-    execute!(
-        terminal.backend_mut(),
-        LeaveAlternateScreen,
-        DisableMouseCapture
-    )?;
-    terminal.show_cursor()?;
-    result
+    run_loop(&mut terminal, child_stdin, rx, repo_root, &mut mermaid).await
 }
 
 async fn run_loop(
@@ -328,12 +438,10 @@ async fn run_loop(
                             KeyCode::Backspace => {
                                 state.prompt.pop();
                             }
-                            KeyCode::Enter if !state.prompt.trim().is_empty() && !state.running => {
+                            KeyCode::Enter if !state.prompt.trim().is_empty() && !state.assistant_busy => {
                                 let text = std::mem::take(&mut state.prompt);
-                                send_command(child_stdin, &HarnessCommand::Prompt { text }).await?;
+                                send_command(child_stdin, &HarnessCommand::Chat { text }).await?;
                                 state.prompt_active = false;
-                                state.running = true;
-                                state.logs.push("prompt sent to structured-spec pipeline".into());
                             }
                             KeyCode::Char(character) => state.prompt.push(character),
                             _ => {}
@@ -344,6 +452,36 @@ async fn run_loop(
                         KeyCode::Char('q') => {
                             send_command(child_stdin, &HarnessCommand::Cancel).await?;
                             break;
+                        }
+                        KeyCode::Char('y') if matches!(state.mode, AppMode::SpecReview { .. }) => {
+                            let spec_text = match &state.mode {
+                                AppMode::SpecReview { spec_text } => spec_text.clone(),
+                                _ => unreachable!(),
+                            };
+                            send_command(
+                                child_stdin,
+                                &HarnessCommand::ExecuteSpec { text: spec_text },
+                            )
+                            .await?;
+                            state.mode = AppMode::Executing;
+                            state.running = true;
+                            state
+                                .logs
+                                .push("approved spec sent to the execution pipeline".into());
+                        }
+                        KeyCode::Char('n') | KeyCode::Esc
+                            if matches!(state.mode, AppMode::SpecReview { .. }) =>
+                        {
+                            state.mode = AppMode::Chat;
+                            state
+                                .logs
+                                .push("spec execution declined; return to chat to revise".into());
+                        }
+                        KeyCode::Char('s')
+                            if state.mode == AppMode::Chat && !state.assistant_busy =>
+                        {
+                            send_command(child_stdin, &HarnessCommand::DraftSpec).await?;
+                            state.mode = AppMode::DraftingSpec;
                         }
                         KeyCode::Char('r') if state.repo_focused => {
                             state.repo_mode = "variables".into();
@@ -372,7 +510,9 @@ async fn run_loop(
                             ).await?;
                             state.running = true;
                         }
-                        KeyCode::Char('p') if !state.running => {
+                        KeyCode::Char('c' | 'p')
+                            if state.mode == AppMode::Chat && !state.assistant_busy =>
+                        {
                             state.prompt_active = true;
                         }
                         KeyCode::Char('m') => {
@@ -551,9 +691,16 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState, mermaid: &mut MermaidView)
     );
 
     let context = format!(
-        "status: {} · engine: {}\n{}",
+        "mode: {} · status: {}\nDeepSeek: {} ({})\nmemory: {} preference(s)\n{}",
+        state.mode.label(),
         if state.running { "running" } else { "idle" },
-        state.engine,
+        if state.deepseek_configured {
+            "configured"
+        } else {
+            "missing"
+        },
+        state.deepseek_source,
+        state.preference_count,
         state.context_content
     );
     frame.render_widget(
@@ -561,14 +708,20 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState, mermaid: &mut MermaidView)
         bottom[0],
     );
     let prompt_title = if state.prompt_active {
-        "Prompt · Enter to run through DeepSeek contracts · Esc to cancel"
-    } else if state.running {
-        "Prompt · harness run active"
+        "Chat · Enter sends message only · Esc cancels input"
+    } else if state.assistant_busy {
+        "Chat · DeepSeek is responding"
+    } else if state.mode == AppMode::Executing {
+        "Execution · approved spec is running"
+    } else if state.mode == AppMode::DraftingSpec {
+        "Spec · drafting from conversation"
+    } else if matches!(state.mode, AppMode::SpecReview { .. }) {
+        "Spec review · y execute · n revise"
     } else {
-        "Prompt · press p to type"
+        "Chat · c/p type · s draft spec · /remember <preference>"
     };
     let prompt_text = if state.prompt.is_empty() && !state.prompt_active {
-        "Type a live coding request and send it through Plan Mode → DeepSeek → small worker."
+        "Chat refines the idea without changing files. Execution requires a generated spec and explicit y approval."
     } else {
         state.prompt.as_str()
     };
@@ -578,9 +731,12 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState, mermaid: &mut MermaidView)
         bottom[1],
     );
     frame.render_widget(
-        Paragraph::new("Settings are intentionally read-only in this round.")
-            .wrap(Wrap { trim: true })
-            .block(Block::default().borders(Borders::ALL).title("settings")),
+        Paragraph::new(format!(
+            "Local memory\n{}\n{} preference(s)\n\nUse /remember <preference> in chat.",
+            state.memory_path, state.preference_count
+        ))
+        .wrap(Wrap { trim: true })
+        .block(Block::default().borders(Borders::ALL).title("settings")),
         bottom[2],
     );
 
@@ -607,6 +763,10 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState, mermaid: &mut MermaidView)
 
     if state.repo_focused && state.repo_mode != "diagram" {
         draw_repo_browser(frame, state);
+    }
+
+    if let AppMode::SpecReview { spec_text } = &state.mode {
+        draw_spec_review(frame, spec_text);
     }
 
     if state.history_visible {
@@ -654,6 +814,24 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState, mermaid: &mut MermaidView)
             frame.render_widget(List::new(items), inner);
         }
     }
+}
+
+fn draw_spec_review(frame: &mut ratatui::Frame, spec_text: &str) {
+    let area = centered_rect(90, 90, frame.area());
+    frame.render_widget(Clear, area);
+    frame.render_widget(
+        Block::default()
+            .borders(Borders::ALL)
+            .title("Spec draft ready · review carefully · y execute · n/Esc revise"),
+        area,
+    );
+    let inner = Rect {
+        x: area.x + 1,
+        y: area.y + 1,
+        width: area.width.saturating_sub(2),
+        height: area.height.saturating_sub(2),
+    };
+    frame.render_widget(Paragraph::new(spec_text).wrap(Wrap { trim: false }), inner);
 }
 
 fn draw_repo_browser(frame: &mut ratatui::Frame, state: &AppState) {
@@ -740,6 +918,55 @@ mod tests {
         });
         assert!(!state.running);
         assert_eq!(state.engine, "idle");
+    }
+
+    #[test]
+    fn chat_spec_review_and_execution_are_distinct_states() {
+        let mut state = AppState::default();
+        assert_eq!(state.mode, AppMode::Chat);
+        state.apply(HarnessEvent::AssistantStatus {
+            stage: "drafting_spec".into(),
+            busy: true,
+        });
+        state.mode = AppMode::DraftingSpec;
+        assert!(state.assistant_busy);
+        state.apply(HarnessEvent::SpecDraft {
+            text: "# Approved candidate".into(),
+        });
+        assert_eq!(
+            state.mode,
+            AppMode::SpecReview {
+                spec_text: "# Approved candidate".into()
+            }
+        );
+        assert!(!state.running);
+        state.mode = AppMode::Executing;
+        state.running = true;
+        state.apply(HarnessEvent::Done {
+            status: "completed".into(),
+        });
+        assert_eq!(state.mode, AppMode::Chat);
+        assert!(!state.running);
+    }
+
+    #[test]
+    fn configuration_and_memory_status_are_visible_in_state() {
+        let mut state = AppState::default();
+        state.apply(HarnessEvent::ConfigStatus {
+            deepseek_configured: true,
+            source: ".env:DEEPSEEK_API_KEY".into(),
+            memory_path: ".tui_memory.json".into(),
+            preference_count: 3,
+        });
+        assert!(state.deepseek_configured);
+        assert_eq!(state.preference_count, 3);
+        assert!(state.logs.last().unwrap().contains("configured"));
+        state.apply(HarnessEvent::MemoryUpdated {
+            preference: "keep responses concise".into(),
+            added: true,
+            count: 4,
+        });
+        assert_eq!(state.preference_count, 4);
     }
 
     #[test]

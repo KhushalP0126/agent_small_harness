@@ -25,6 +25,13 @@ Implemented in this tree with two architecture-grounded clarifications:
 - Compute Shield consumes paired `ArtifactManager` telemetry through
   `scripts/run_compute_shield.py`; it does not rerun models or become an
   acceptance gate.
+- The Rust prompt surface is a four-state workflow: `Chat`, `DraftingSpec`,
+  `SpecReview`, and `Executing`. Chat is non-mutating, drafting produces a
+  reviewable markdown spec, and only explicit `y` approval can launch workers.
+  A bounded ignored JSON file stores only explicit non-secret preferences.
+- Terminal raw mode and alternate-screen ownership are protected by an RAII
+  drop guard plus panic hook, so both ordinary errors and unwinding panics
+  restore the user's terminal.
 
 The Textual TUI remains supported. Use `make rust-tui` for the Rust preview and
 `make test-rust` for its automated checks.
@@ -95,7 +102,23 @@ the others:
 - Regenerate on: `m` hotkey press, or after a draft is accepted and the
   function/variable graph changes.
 
-### 2.5 Deliverables from this repo turn
+### 2.5 Chat, specification, and execution state machine
+
+- `Chat`: `c`/`p` opens input and Enter sends a conversational architect
+  request. No subprocess execution is reachable from this transition.
+- `DraftingSpec`: `s` asks the architect to convert the bounded conversation
+  and saved preferences into an executable markdown specification.
+- `SpecReview`: the generated specification is shown in a blocking overlay.
+  `y` approves it; `n`/`Esc` returns to chat without executing.
+- `Executing`: the approved spec alone is written to the temporary spec file
+  and passed to `run_structured_spec.py`.
+
+Bridge startup emits a typed configuration status naming the environment or
+`.env` key source without its value. Local `.tui_memory.json` contains at most
+50 explicit preferences and is excluded from git. Conversation history is
+bounded to 24 messages and remains process-local.
+
+### 2.6 Deliverables from this repo turn
 
 - `Cargo.toml` — dependency manifest
 - `src/main.rs` — event loop, subprocess spawn, harness event enum, base UI
