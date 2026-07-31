@@ -73,6 +73,7 @@ class Bridge:
         self,
         writer: EventWriter | None = None,
         artifact_root: Path | str | None = None,
+        env_file: Path | str | None = None,
     ) -> None:
         self.writer = writer or EventWriter()
         self.artifact_root = (
@@ -80,8 +81,20 @@ class Bridge:
             if artifact_root is not None
             else REPO_ROOT / "artifacts" / "runs"
         )
+        self.env_file = Path(env_file) if env_file is not None else REPO_ROOT / ".env"
         self._process: subprocess.Popen[str] | None = None
         self._lock = threading.Lock()
+
+    def emit_startup_warnings(self) -> None:
+        if not self._child_environment().get("DEEPSEEK_API_KEY", "").strip():
+            self.writer.emit(
+                "log",
+                level="warning",
+                msg=(
+                    "DeepSeek is not configured. Set DEEPSEEK_API_KEY in the "
+                    "repository .env file or export it before sending a prompt."
+                ),
+            )
 
     def handle(self, command: dict[str, Any]) -> None:
         kind = str(command.get("cmd") or "")
@@ -169,7 +182,7 @@ class Bridge:
                 return
             read_fd: int | None = None
             write_fd: int | None = None
-            child_env = os.environ.copy()
+            child_env = self._child_environment()
             popen_options: dict[str, Any] = {}
             if os.name == "posix":
                 read_fd, write_fd = os.pipe()
@@ -202,6 +215,13 @@ class Bridge:
             args=(process, event_thread, cleanup_path),
             daemon=True,
         ).start()
+
+    def _child_environment(self) -> dict[str, str]:
+        child_env = os.environ.copy()
+        for key, value in _dotenv_values(self.env_file).items():
+            if not child_env.get(key, "").strip():
+                child_env[key] = value
+        return child_env
 
     def cancel(self) -> None:
         with self._lock:
@@ -397,12 +417,25 @@ class Bridge:
         cleanup_path: Path | None = None,
     ) -> None:
         assert process.stdout is not None
+        json_lines: list[str] = []
         for line in process.stdout:
             text = line.rstrip()
             if text:
                 event = _contract_event_from_line(text)
                 if event is not None:
                     self.writer.emit_event(event)
+                if json_lines or text.lstrip().startswith("{"):
+                    json_lines.append(text)
+                    try:
+                        payload = json.loads("\n".join(json_lines))
+                    except json.JSONDecodeError:
+                        if len(json_lines) > 10_000:
+                            json_lines.clear()
+                    else:
+                        error_event = _architect_error_event(payload)
+                        if error_event is not None:
+                            self.writer.emit_event(error_event)
+                        json_lines.clear()
                 self.writer.emit("log", level="info", msg=text)
         returncode = process.wait()
         if cleanup_path is not None:
@@ -446,6 +479,47 @@ def _validated_args(args: list[str]) -> list[str]:
             index += 1
         index += 1
     return validated
+
+
+def _dotenv_values(path: Path) -> dict[str, str]:
+    if not path.is_file():
+        return {}
+    values: dict[str, str] = {}
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return {}
+    for raw_line in lines:
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line.removeprefix("export ").strip()
+        if "=" not in line:
+            continue
+        key, value = (part.strip() for part in line.split("=", 1))
+        if not key:
+            continue
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+            value = value[1:-1]
+        values[key] = value
+    return values
+
+
+def _architect_error_event(payload: Any) -> dict[str, Any] | None:
+    if not isinstance(payload, dict):
+        return None
+    error = str(payload.get("architect_contract_error") or "").strip()
+    if not error:
+        return None
+    return {
+        "type": "log",
+        "level": "error",
+        "msg": (
+            f"DeepSeek unavailable: {error}. Check DEEPSEEK_API_KEY in the "
+            "repository .env file or export it in the shell that launches the TUI."
+        ),
+    }
 
 
 def _contract_event_from_line(line: str) -> dict[str, Any] | None:
@@ -499,6 +573,7 @@ def _contract_event_from_line(line: str) -> dict[str, Any] | None:
 def main() -> int:
     bridge = Bridge()
     bridge.writer.emit("ready", protocol_version=PROTOCOL_VERSION)
+    bridge.emit_startup_warnings()
     for raw_line in sys.stdin:
         try:
             command = json.loads(raw_line)

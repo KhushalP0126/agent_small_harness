@@ -18,6 +18,7 @@ use protocol::{read_harness_events, HarnessCommand, HarnessEvent, RunSummary};
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout, Rect},
+    style::{Color, Modifier, Style},
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap},
     Terminal,
 };
@@ -377,7 +378,7 @@ async fn run_loop(
                     if let Some(source) = repo_map {
                         if mermaid.uses_low_resolution_fallback() {
                             state.logs.push(
-                                "bitmap diagram disabled for half-block fallback; showing readable repository text".into()
+                                "bitmap diagram disabled for half-block fallback; showing readable repository text (try iTerm2, WezTerm, Kitty, or Ghostty for the visual diagram)".into()
                             );
                         } else {
                             match mermaid.set_diagram(&source) {
@@ -424,7 +425,20 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState, mermaid: &mut MermaidView)
         .rev()
         .take(200)
         .rev()
-        .map(|line| ListItem::new(line.as_str()))
+        .map(|line| {
+            let style = if line.starts_with("[error]") {
+                Style::default()
+                    .fg(Color::LightRed)
+                    .add_modifier(Modifier::BOLD)
+            } else if line.starts_with("[warning]") || line.starts_with("[protocol warning]") {
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default()
+            };
+            ListItem::new(line.as_str()).style(style)
+        })
         .collect();
     frame.render_widget(
         List::new(items).block(

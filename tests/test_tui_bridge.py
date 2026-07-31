@@ -4,14 +4,16 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from agents.artifact_manager import ArtifactManager
 from harness_kernel.event_stream import EVENT_FD_ENV, event_sink_from_env
 from harness_kernel.tui_bridge import (
     Bridge,
     EventWriter,
+    _architect_error_event,
     _contract_event_from_line,
+    _dotenv_values,
     _validated_args,
 )
 
@@ -82,6 +84,79 @@ class TuiBridgeTests(unittest.TestCase):
     def test_argument_allowlist_rejects_unknown_flag(self) -> None:
         with self.assertRaises(ValueError):
             _validated_args(["--not-real", "value"])
+
+    def test_dotenv_values_support_export_and_quotes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env_file = Path(tmpdir) / ".env"
+            env_file.write_text(
+                "# local settings\nexport DEEPSEEK_API_KEY='secret'\nEMPTY=\n",
+                encoding="utf-8",
+            )
+            self.assertEqual(
+                _dotenv_values(env_file),
+                {"DEEPSEEK_API_KEY": "secret", "EMPTY": ""},
+            )
+
+    def test_child_environment_loads_dotenv_without_overwriting_shell(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env_file = Path(tmpdir) / ".env"
+            env_file.write_text(
+                "DEEPSEEK_API_KEY=from-dotenv\nARCHITECT_MODEL=from-file\n",
+                encoding="utf-8",
+            )
+            bridge = Bridge(EventWriter(self.output), env_file=env_file)
+            with patch.dict(
+                os.environ,
+                {"DEEPSEEK_API_KEY": "from-shell"},
+                clear=True,
+            ):
+                child_env = bridge._child_environment()
+            self.assertEqual(child_env["DEEPSEEK_API_KEY"], "from-shell")
+            self.assertEqual(child_env["ARCHITECT_MODEL"], "from-file")
+
+    def test_startup_warning_when_deepseek_is_not_configured(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bridge = Bridge(
+                EventWriter(self.output),
+                env_file=Path(tmpdir) / ".env",
+            )
+            with patch.dict(os.environ, {}, clear=True):
+                bridge.emit_startup_warnings()
+        event = self.events()[0]
+        self.assertEqual(event["level"], "warning")
+        self.assertIn("DEEPSEEK_API_KEY", event["msg"])
+
+    def test_architect_error_payload_becomes_high_visibility_log(self) -> None:
+        event = _architect_error_event(
+            {"architect_contract_error": "architect API key not configured"}
+        )
+        self.assertEqual(event["type"], "log")
+        self.assertEqual(event["level"], "error")
+        self.assertIn("DeepSeek unavailable", event["msg"])
+        self.assertIn("DEEPSEEK_API_KEY", event["msg"])
+
+    def test_forward_run_surfaces_error_from_multiline_json_summary(self) -> None:
+        process = MagicMock()
+        process.stdout = io.StringIO(
+            json.dumps(
+                {
+                    "status": "manual_review_required",
+                    "architect_contract_error": "architect API key not configured",
+                },
+                indent=2,
+            )
+            + "\n"
+        )
+        process.wait.return_value = 1
+        self.bridge._forward_run(process)
+        errors = [
+            event
+            for event in self.events()
+            if event.get("type") == "log" and event.get("level") == "error"
+        ]
+        self.assertEqual(len(errors), 1)
+        self.assertIn("DeepSeek unavailable", errors[0]["msg"])
+        self.assertEqual(self.events()[-1], {"type": "done", "status": "failed"})
 
     def test_contract_plan_line_becomes_typed_event(self) -> None:
         event = _contract_event_from_line(

@@ -388,6 +388,10 @@ ARCHITECT_MODEL=deepseek-v4-pro
 - `execution.architect.repair` uses a separate bounded repair profile for code repair after worker failure.
 
 `.env` is ignored by git. Use `.env.example` as the committed template.
+The Rust TUI bridge loads this repository-level `.env` before launching prompt
+runs. Values already exported by the launching shell take precedence. If
+`DEEPSEEK_API_KEY` is unavailable from both sources, the TUI shows a startup
+warning and reports the failed prompt as a highlighted error.
 Transient architect API failures are retried by default. Tune
 `ARCHITECT_RETRY_ATTEMPTS` and `ARCHITECT_RETRY_BACKOFF_SECONDS` in `.env` when
 needed.
