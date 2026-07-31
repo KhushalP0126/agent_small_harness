@@ -1,5 +1,8 @@
 # clang.cindex Syntax and Documentation Notes
 
+> Generated discovery evidence, audited 2026-07-30. This supports manual
+> registry review; it does not by itself approve or enable the library.
+
 Documentation was discovered and verified with a Kernel browser.
 
 ## Public Symbols

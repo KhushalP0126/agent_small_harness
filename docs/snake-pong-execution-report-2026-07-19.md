@@ -1,5 +1,8 @@
 # Snake and Pong execution report — 2026-07-19
 
+> Historical run record. Audited 2026-07-30 without rerunning generation.
+> Snake and Pong remain external fixtures rather than product-specific logic.
+
 ## Setup
 
 - Worker backend: local Ollama at `http://127.0.0.1:11434`

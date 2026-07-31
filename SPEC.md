@@ -1,5 +1,8 @@
 # agent_small_harness — Rust TUI + Engine Expansion Spec
 
+> Audited against the implementation on 2026-07-30. This is an implemented
+> subsystem specification; rollout language is retained as design context.
+
 ## Implementation status
 
 Implemented in this tree with two architecture-grounded clarifications:

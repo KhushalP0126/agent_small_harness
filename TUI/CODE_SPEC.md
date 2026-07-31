@@ -1,5 +1,8 @@
 # TUI Code Spec — `agent_small_harness`
 
+> Audited 2026-07-30. This file specifies the Python Textual client. The
+> Rust/Ratatui client is documented separately in `SPEC.md`.
+
 Implemented Phase 1 + Phase 2 from the grounded specification. Phase 3 (extra
 model providers, master-key mode, commercial tiering) is intentionally excluded
 pending an explicit decision; nothing below assumes it.
@@ -146,7 +149,7 @@ is wanted later.
 
 ---
 
-## 3. Data-access module (`tui/data_source.py`)
+## 3. Data-access module (`TUI/data_source.py`)
 
 All screens go through one module. No screen reads `artifacts/` or shells to a
 script directly. This is the seam that makes a later JSON-to-SQLite migration,

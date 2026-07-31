@@ -8,10 +8,13 @@ protocol.
 
 from __future__ import annotations
 
+import ast
 import json
 import os
+import re
 import subprocess
 import sys
+import tempfile
 import threading
 from pathlib import Path
 from typing import Any, TextIO
@@ -23,6 +26,7 @@ from harness_kernel.compute_shield import ShieldTaskTokens, compute_shield_metri
 from harness_kernel.profiling import ProfileResult
 from harness_kernel.event_stream import EVENT_FD_ENV
 from TUI.mermaid_renderer import render_repo_architecture_mermaid
+from TUI.mermaid_renderer import render_repo_architecture
 
 
 PROTOCOL_VERSION = 1
@@ -86,12 +90,15 @@ class Bridge:
                 str(command.get("entrypoint") or ""),
                 [str(item) for item in command.get("args") or []],
             )
+        elif kind == "prompt":
+            self.start_prompt(str(command.get("text") or ""))
         elif kind == "cancel":
             self.cancel()
         elif kind == "repo_map":
             self.repo_map(
                 str(command.get("root") or REPO_ROOT),
                 str(command.get("focus") or ""),
+                str(command.get("mode") or "diagram"),
             )
         elif kind == "compile":
             self.compile_source(
@@ -111,7 +118,32 @@ class Bridge:
         else:
             self.writer.emit("log", level="error", msg=f"unknown command: {kind}")
 
-    def start_run(self, entrypoint: str, args: list[str]) -> None:
+    def start_prompt(self, text: str) -> None:
+        if not text.strip():
+            self.writer.emit("log", level="warning", msg="prompt cannot be empty")
+            return
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            prefix="harness-tui-prompt-",
+            suffix=".md",
+            delete=False,
+        ) as stream:
+            stream.write(text)
+            spec_path = Path(stream.name)
+        self.start_run(
+            "structured_spec",
+            ["--spec", str(spec_path), "--save-artifacts"],
+            cleanup_path=spec_path,
+        )
+
+    def start_run(
+        self,
+        entrypoint: str,
+        args: list[str],
+        *,
+        cleanup_path: Path | None = None,
+    ) -> None:
         script = ENTRYPOINTS.get(entrypoint)
         if script is None:
             self.writer.emit(
@@ -127,6 +159,8 @@ class Bridge:
             return
         with self._lock:
             if self._process is not None and self._process.poll() is None:
+                if cleanup_path is not None:
+                    cleanup_path.unlink(missing_ok=True)
                 self.writer.emit(
                     "log",
                     level="warning",
@@ -165,7 +199,7 @@ class Bridge:
         self.writer.emit("engine_progress", engine="harness", pct=1)
         threading.Thread(
             target=self._forward_run,
-            args=(process, event_thread),
+            args=(process, event_thread, cleanup_path),
             daemon=True,
         ).start()
 
@@ -176,9 +210,10 @@ class Bridge:
             process.terminate()
             self.writer.emit("log", level="warning", msg="cancellation requested")
 
-    def repo_map(self, root: str, focus: str) -> None:
+    def repo_map(self, root: str, focus: str, mode: str = "diagram") -> None:
         try:
-            graph = RepoMapAgent().map_repo(Path(root).resolve())
+            root_path = Path(root).resolve()
+            graph = RepoMapAgent().map_repo(root_path)
             diagram = render_repo_architecture_mermaid(graph, focus=focus)
         except Exception as exc:  # noqa: BLE001 - protocol boundary
             self.writer.emit(
@@ -187,7 +222,42 @@ class Bridge:
                 msg=f"repository map failed: {type(exc).__name__}: {exc}",
             )
             return
-        self.writer.emit("repo_map", mermaid=diagram)
+        if mode == "variables":
+            lines = []
+            for record in graph.files:
+                imports = sorted({item.module for item in record.imports if item.module})
+                variables = sorted({item.name for item in record.variables})
+                if imports or variables:
+                    lines.append(record.path)
+                    lines.append(f"  imports: {', '.join(imports) or 'none'}")
+                    lines.append(f"  variables: {', '.join(variables) or 'none'}")
+            self.writer.emit(
+                "repo_map_view",
+                mode=mode,
+                content="\n".join(lines) or "No imports or variables found.",
+            )
+            return
+        if mode == "files":
+            lines = []
+            for record in graph.files:
+                symbols = [*record.classes, *(item.name for item in record.functions)]
+                lines.append(record.path)
+                summary = ""
+                try:
+                    source = (root_path / record.path).read_text(encoding="utf-8")
+                    summary = (ast.get_docstring(ast.parse(source)) or "").splitlines()[0]
+                except (OSError, UnicodeDecodeError, SyntaxError, IndexError):
+                    summary = ""
+                if not summary:
+                    summary = f"Defines {', '.join(symbols[:8])}." if symbols else "No module-level classes or functions."
+                lines.append(f"  {summary}")
+            self.writer.emit("repo_map_view", mode=mode, content="\n".join(lines))
+            return
+        self.writer.emit(
+            "repo_map",
+            mermaid=diagram,
+            summary=render_repo_architecture(graph, focus=focus),
+        )
 
     def compile_source(self, language: str, source: str) -> None:
         try:
@@ -324,13 +394,19 @@ class Bridge:
         self,
         process: subprocess.Popen[str],
         event_thread: threading.Thread | None = None,
+        cleanup_path: Path | None = None,
     ) -> None:
         assert process.stdout is not None
         for line in process.stdout:
             text = line.rstrip()
             if text:
+                event = _contract_event_from_line(text)
+                if event is not None:
+                    self.writer.emit_event(event)
                 self.writer.emit("log", level="info", msg=text)
         returncode = process.wait()
+        if cleanup_path is not None:
+            cleanup_path.unlink(missing_ok=True)
         if event_thread is not None:
             event_thread.join(timeout=2.0)
         status = "completed" if returncode == 0 else "failed"
@@ -370,6 +446,54 @@ def _validated_args(args: list[str]) -> list[str]:
             index += 1
         index += 1
     return validated
+
+
+def _contract_event_from_line(line: str) -> dict[str, Any] | None:
+    if line.startswith("[contract-plan] "):
+        try:
+            payload = json.loads(line.removeprefix("[contract-plan] "))
+        except json.JSONDecodeError:
+            return None
+        contracts = payload.get("contracts")
+        if isinstance(contracts, list):
+            return {"type": "contract_queue_planned", "contracts": contracts}
+        return None
+
+    match = re.match(
+        r"^\[contract-queue\](?:\s+\d+/\d+)?\s+"
+        r"(?P<name>[A-Za-z_][A-Za-z0-9_]*):\s+(?P<message>.+)$",
+        line,
+    )
+    if match is None:
+        return None
+    message = match.group("message")
+    status = "running"
+    worker = "small_worker"
+    attempt = 0
+    retry_match = re.search(r"retry\s+(\d+)", message)
+    if retry_match:
+        status = "retrying"
+        attempt = int(retry_match.group(1))
+    elif "sending to small worker" in message:
+        status = "dispatched"
+    elif "escalating contract to architect" in message:
+        status = "escalated"
+        worker = "architect_llm"
+    elif "accepted" in message:
+        status = "accepted"
+    elif "failed validation" in message:
+        status = "validation_failed"
+    elif "backend failed" in message:
+        status = "backend_failed"
+    elif "waiting on" in message:
+        status = "waiting"
+    return {
+        "type": "contract_progress",
+        "name": match.group("name"),
+        "status": status,
+        "attempt": attempt,
+        "worker": worker,
+    }
 
 
 def main() -> int:

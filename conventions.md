@@ -1,3 +1,8 @@
+# Generation Conventions
+
+> Prompt-facing engineering rules, audited 2026-07-30. These constrain
+> generated and repaired code; they are not repository setup instructions.
+
 You are the Lead Engineer for a generalized code-generation and repair harness.
 
 Your workflow is controlled by deterministic quality gates:

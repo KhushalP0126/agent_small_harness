@@ -1,5 +1,8 @@
 # Additional Harness Results — 2026-07-24
 
+> Historical run record. Audited 2026-07-30 for paths and interpretation; the
+> outcomes below describe the stated baseline, not a fresh rerun.
+
 This pass intentionally avoided rerunning commands already covered by existing
 reports, artifacts, or the current session.
 

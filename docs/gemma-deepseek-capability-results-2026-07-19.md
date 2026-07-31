@@ -1,5 +1,8 @@
 # Gemma 1B and DeepSeek architect results — 2026-07-19
 
+> Historical run record. Audited 2026-07-30 without rerunning external models.
+> Provider model availability may change independently of this evaluation.
+
 ## Purpose
 
 This evaluation replaces a proposed “weak DeepSeek worker” test with a genuinely

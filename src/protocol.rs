@@ -12,11 +12,16 @@ pub enum HarnessCommand {
         #[serde(default)]
         args: Vec<String>,
     },
+    Prompt {
+        text: String,
+    },
     Cancel,
     RepoMap {
         root: String,
         #[serde(default)]
         focus: String,
+        #[serde(default)]
+        mode: String,
     },
     Compile {
         language: String,
@@ -58,6 +63,17 @@ pub struct RunSummary {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ContractSummary {
+    pub name: String,
+    #[serde(default)]
+    pub signature: String,
+    #[serde(default)]
+    pub purpose: String,
+    #[serde(default)]
+    pub dependencies: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum HarnessEvent {
     Ready {
@@ -74,6 +90,15 @@ pub enum HarnessEvent {
     ContractResult {
         name: String,
         status: String,
+    },
+    ContractQueuePlanned {
+        contracts: Vec<ContractSummary>,
+    },
+    ContractProgress {
+        name: String,
+        status: String,
+        attempt: u32,
+        worker: String,
     },
     CompileGateResult {
         status: String,
@@ -94,6 +119,12 @@ pub enum HarnessEvent {
     },
     RepoMap {
         mermaid: String,
+        #[serde(default)]
+        summary: String,
+    },
+    RepoMapView {
+        mode: String,
+        content: String,
     },
     HistoryList {
         runs: Vec<RunSummary>,
@@ -158,6 +189,20 @@ mod tests {
                 name: "transform".into(),
                 status: "accepted".into(),
             },
+            HarnessEvent::ContractQueuePlanned {
+                contracts: vec![ContractSummary {
+                    name: "parse".into(),
+                    signature: "def parse(text: str) -> dict".into(),
+                    purpose: "Parse the input".into(),
+                    dependencies: vec![],
+                }],
+            },
+            HarnessEvent::ContractProgress {
+                name: "parse".into(),
+                status: "dispatched".into(),
+                attempt: 0,
+                worker: "small_worker".into(),
+            },
             HarnessEvent::CompileGateResult {
                 status: "pass".into(),
                 errors: vec![],
@@ -176,6 +221,11 @@ mod tests {
             },
             HarnessEvent::RepoMap {
                 mermaid: "flowchart LR\n  A --> B".into(),
+                summary: "Repository architecture".into(),
+            },
+            HarnessEvent::RepoMapView {
+                mode: "variables".into(),
+                content: "main.py\n  variables: state".into(),
             },
             HarnessEvent::HistoryList {
                 runs: vec![RunSummary {
@@ -211,9 +261,13 @@ mod tests {
                 entrypoint: "coding_capability".into(),
                 args: vec!["--save-artifacts".into()],
             },
+            HarnessCommand::Prompt {
+                text: "Build a parser".into(),
+            },
             HarnessCommand::RepoMap {
                 root: ".".into(),
                 focus: String::new(),
+                mode: "diagram".into(),
             },
             HarnessCommand::Compile {
                 language: "c".into(),

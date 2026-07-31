@@ -1,5 +1,8 @@
 # Design Constraints
 
+> Prompt-facing design context, audited 2026-07-30. Visual tokens apply only
+> when a task has a UI or presentation surface.
+
 This file is treated as static prompt context. Generated code must respect these design constraints when a task involves UI, style, components, or architecture.
 
 ## Visual & Architectural Design Constraints

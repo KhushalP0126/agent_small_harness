@@ -8,7 +8,12 @@ from unittest.mock import patch
 
 from agents.artifact_manager import ArtifactManager
 from harness_kernel.event_stream import EVENT_FD_ENV, event_sink_from_env
-from harness_kernel.tui_bridge import Bridge, EventWriter, _validated_args
+from harness_kernel.tui_bridge import (
+    Bridge,
+    EventWriter,
+    _contract_event_from_line,
+    _validated_args,
+)
 
 
 class TuiBridgeTests(unittest.TestCase):
@@ -77,6 +82,28 @@ class TuiBridgeTests(unittest.TestCase):
     def test_argument_allowlist_rejects_unknown_flag(self) -> None:
         with self.assertRaises(ValueError):
             _validated_args(["--not-real", "value"])
+
+    def test_contract_plan_line_becomes_typed_event(self) -> None:
+        event = _contract_event_from_line(
+            '[contract-plan] {"contracts":[{"name":"parse","signature":"def parse()"}]}'
+        )
+        self.assertEqual(event["type"], "contract_queue_planned")
+        self.assertEqual(event["contracts"][0]["name"], "parse")
+
+    def test_contract_progress_line_becomes_typed_event(self) -> None:
+        event = _contract_event_from_line(
+            "[contract-queue] 2/7 parse: retry 1 with small worker"
+        )
+        self.assertEqual(
+            event,
+            {
+                "type": "contract_progress",
+                "name": "parse",
+                "status": "retrying",
+                "attempt": 1,
+                "worker": "small_worker",
+            },
+        )
 
     @unittest.skipUnless(os.name == "posix", "inherited fd test requires POSIX")
     def test_inherited_event_sink_is_independent_from_stdout(self) -> None:

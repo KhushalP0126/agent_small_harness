@@ -1,5 +1,8 @@
 # Snake Game Spec
 
+> Fixture audit: 2026-07-30. Plan without worker generation using
+> `make structured-spec-plan SPEC_PATH=examples/specs/snake_game_spec.md`.
+
 This file is an external experiment spec. It is not part of the harness design,
 controller logic, Plan Mode rules, engine rules, or retry strategy.
 

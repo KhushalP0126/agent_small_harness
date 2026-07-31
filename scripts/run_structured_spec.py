@@ -1234,6 +1234,14 @@ def run_spec(
                 }
                 print(json.dumps(payload, indent=2))
                 return 1
+        print(
+            "[contract-plan] "
+            + json.dumps(
+                {"contracts": _contract_queue_payload(queue)},
+                separators=(",", ":"),
+            ),
+            flush=True,
+        )
     if plan_only:
         artifact_path = ""
         session = {

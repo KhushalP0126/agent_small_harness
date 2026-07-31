@@ -1,5 +1,8 @@
 # Agent Small Harness
 
+> Documentation audit: 2026-07-30. Commands and component names below reflect
+> the current local tree. Dated files under `docs/` remain historical records.
+
 Agent Small Harness is a Python-first research and engineering prototype for
 validated code generation. It studies how far small local coding models can go
 when they are wrapped in deterministic software-engineering gates, scoped repair
@@ -104,9 +107,18 @@ make rust-tui REPO_ROOT=.
 make test-rust
 ```
 
-Keys: `r` launches the existing coding-capability CLI, `m` requests a fresh
-repository map and opens the rendered Mermaid modal, `Esc` closes the modal,
-and `q` requests cancellation before exiting. The Python bridge allowlists
+The primary view keeps main output and repository context above persistent
+context, prompt, and settings panels. Press `p` to type a live request and
+`Enter` to send it through Plan Mode, DeepSeek contract planning, and the small
+worker queue. `m` focuses/refreshes the repository panel; while focused, `r`
+shows variables/imports and `t` shows per-file definitions. Outside repository
+focus, `r` retains the coding-capability shortcut. `d` opens run history,
+`Esc` leaves the current focus/overlay, and `q` cancels before exiting.
+
+Terminals with Kitty, Sixel, or iTerm2 image support retain the rendered
+Mermaid overlay. Half-block-only terminals such as Apple Terminal use the
+readable architecture panel instead of attempting a low-resolution bitmap.
+The Python bridge allowlists
 entrypoints and flags and wraps child output in typed log events so ordinary
 CLI text cannot corrupt the protocol.
 

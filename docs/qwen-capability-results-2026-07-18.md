@@ -1,5 +1,8 @@
 # Qwen coding-capability results — 2026-07-18
 
+> Historical run record. Audited 2026-07-30 for current terminology; scores and
+> artifacts remain tied to the original environment and commit.
+
 ## Setup
 
 - Worker backend: local Ollama at `http://127.0.0.1:11434`

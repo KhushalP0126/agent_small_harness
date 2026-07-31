@@ -1,5 +1,8 @@
 # Structured-Spec and Repo-Map Results — 2026-07-24
 
+> Historical run record. Audited 2026-07-30. The resume-CLI gap at this
+> baseline is now closed by `make resume-structured-spec`.
+
 Baseline: `main` at `38a1f22`
 
 Worker model: Ollama `qwen2.5-coder:1.5b`
@@ -15,7 +18,7 @@ Worker model: Ollama `qwen2.5-coder:1.5b`
 | Contract failure isolation | Pass | Pong continued through `main` after `render` required retries and architect escalation |
 | Snake artifact review | Pass | Completed in two integration attempts |
 | Pong artifact review | Pass | Correctly reports `architect_static_gate_failed` and six blocking lint errors |
-| Structured-spec resume CLI | Gap | `scripts/run_structured_spec.py` does not expose `--resume-run` |
+| Structured-spec resume CLI | Gap at this baseline; resolved in current tree | This run predated the current `--resume-run` CLI and Make target |
 | Repo-map context | Pass | 105 Python files; 125 output lines |
 | Repo-map Mermaid | Pass | 29,200 output lines |
 | Repo-map JSON | Pass | 105 files, 10,995 nodes, 18,203 edges |

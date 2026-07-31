@@ -1,5 +1,8 @@
 # Repository Structure
 
+> Tree audit: 2026-07-30. Generated caches, build output, local environments,
+> and run artifacts are intentionally omitted.
+
 This repository is a generalized Python-first code-generation and repair
 harness. The shared flow is:
 
