@@ -110,14 +110,20 @@ make test-rust
 The primary view keeps main output and repository context above persistent
 context, prompt, and settings panels. Press `p` to type a live request and
 `Enter` to send it through Plan Mode, DeepSeek contract planning, and the small
-worker queue. `m` focuses/refreshes the repository panel; while focused, `r`
-shows variables/imports and `t` shows per-file definitions. Outside repository
-focus, `r` retains the coding-capability shortcut. `d` opens run history,
-`Esc` leaves the current focus/overlay, and `q` cancels before exiting.
+worker queue. `m` focuses/refreshes the repository panel and eagerly loads its
+typed file, summary, symbol, import, and variable records. `Up`/`Down` then
+navigate that cached list without an IPC call. While focused, `r` shows the
+selected file's variables/imports and `t` shows its summary and symbols in a
+split list/detail modal. Outside repository focus, `r` retains the
+coding-capability shortcut. `d` opens run history, `Esc` leaves the current
+focus/overlay, and `q` cancels before exiting.
 
-Terminals with Kitty, Sixel, or iTerm2 image support retain the rendered
-Mermaid overlay. Half-block-only terminals such as Apple Terminal use the
-readable architecture panel instead of attempting a low-resolution bitmap.
+Kitty and Ghostty use the directly emitted Kitty graphics protocol; iTerm2 and
+WezTerm use directly emitted iTerm2 inline images. Other terminals, including
+Apple Terminal and Windows Terminal, use the built-in quadrant-block renderer,
+which represents a 2×2 pixel region in every colored terminal cell. Renderer
+detection uses terminal environment markers and does not perform a blocking
+stdio capability query.
 The Python bridge allowlists
 entrypoints and flags and wraps child output in typed log events so ordinary
 CLI text cannot corrupt the protocol.
@@ -611,8 +617,9 @@ make approve-library LIB=clang.cindex
 
 ### Remaining Work
 
-- [ ] Complete manual terminal compatibility passes for Kitty, Sixel/Xterm,
-  and a half-block fallback before making the Rust TUI the default.
+- [ ] Complete manual terminal compatibility passes for the directly emitted
+  Kitty and iTerm2 protocol paths before making the Rust TUI the default. The
+  quadrant-block fallback has been smoke-tested in Apple Terminal.
 - [ ] Run and publish a frozen 10-task Compute Shield experiment; the exact
   task-level accounting exists, but no model-dependent result is claimed.
 - [ ] Expose `repo_root`, execution-trace retention, and debugger controls

@@ -14,7 +14,9 @@ use crossterm::{
 };
 use futures::{FutureExt, StreamExt};
 use mermaid_view::MermaidView;
-use protocol::{read_harness_events, HarnessCommand, HarnessEvent, RunSummary};
+use protocol::{
+    read_harness_events, FileEntry, HarnessCommand, HarnessEvent, RunSummary, VariableEntry,
+};
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout, Rect},
@@ -38,6 +40,9 @@ struct AppState {
     repo_content: String,
     repo_mode: String,
     repo_focused: bool,
+    repo_files: Vec<FileEntry>,
+    repo_variables: Vec<VariableEntry>,
+    repo_selected: usize,
     context_content: String,
     history_visible: bool,
     history_runs: Vec<RunSummary>,
@@ -58,6 +63,9 @@ impl Default for AppState {
             repo_content: "Press m to load the repository map.\nThen use r for variables/imports or t for file descriptions.".into(),
             repo_mode: "diagram".into(),
             repo_focused: false,
+            repo_files: Vec::new(),
+            repo_variables: Vec::new(),
+            repo_selected: 0,
             context_content: "Load the repo map to capture the current structure.\nRun history appears under d.".into(),
             history_visible: false,
             history_runs: Vec::new(),
@@ -151,6 +159,14 @@ impl AppState {
                 self.repo_mode = mode;
                 self.repo_content = content;
             }
+            HarnessEvent::RepoMapFiles { entries } => {
+                self.repo_files = entries;
+                self.clamp_repo_selection();
+            }
+            HarnessEvent::RepoMapVariables { entries } => {
+                self.repo_variables = entries;
+                self.clamp_repo_selection();
+            }
             HarnessEvent::HistoryList { runs } => {
                 self.logs.push(format!("run history: {} run(s)", runs.len()));
                 self.history_runs = runs;
@@ -183,6 +199,62 @@ impl AppState {
         if self.logs.len() > MAX_LOGS {
             self.logs.drain(..self.logs.len() - MAX_LOGS);
         }
+    }
+
+    fn clamp_repo_selection(&mut self) {
+        let len = self.repo_files.len().max(self.repo_variables.len());
+        self.repo_selected = self.repo_selected.min(len.saturating_sub(1));
+    }
+
+    fn selected_repo_detail(&self) -> String {
+        match self.repo_mode.as_str() {
+            "files" => self
+                .repo_files
+                .get(self.repo_selected)
+                .map(|entry| {
+                    format!(
+                        "{}\n\n{}\n\nsymbols\n{}",
+                        entry.path,
+                        entry.summary,
+                        if entry.symbols.is_empty() {
+                            "  none".into()
+                        } else {
+                            entry
+                                .symbols
+                                .iter()
+                                .map(|symbol| format!("  {symbol}"))
+                                .collect::<Vec<_>>()
+                                .join("\n")
+                        }
+                    )
+                })
+                .unwrap_or_else(|| "No file selected.".into()),
+            "variables" => self
+                .repo_variables
+                .get(self.repo_selected)
+                .map(|entry| {
+                    format!(
+                        "{}\n\nimports\n{}\n\nvariables\n{}",
+                        entry.path,
+                        indented_or_none(&entry.imports),
+                        indented_or_none(&entry.variables)
+                    )
+                })
+                .unwrap_or_else(|| "No file selected.".into()),
+            _ => self.repo_content.clone(),
+        }
+    }
+}
+
+fn indented_or_none(values: &[String]) -> String {
+    if values.is_empty() {
+        "  none".into()
+    } else {
+        values
+            .iter()
+            .map(|value| format!("  {value}"))
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 }
 
@@ -274,24 +346,21 @@ async fn run_loop(
                             break;
                         }
                         KeyCode::Char('r') if state.repo_focused => {
-                            send_command(
-                                child_stdin,
-                                &HarnessCommand::RepoMap {
-                                    root: repo_root.display().to_string(),
-                                    focus: String::new(),
-                                    mode: "variables".into(),
-                                },
-                            ).await?;
+                            state.repo_mode = "variables".into();
+                            mermaid.hide();
                         }
                         KeyCode::Char('t') if state.repo_focused => {
-                            send_command(
-                                child_stdin,
-                                &HarnessCommand::RepoMap {
-                                    root: repo_root.display().to_string(),
-                                    focus: String::new(),
-                                    mode: "files".into(),
-                                },
-                            ).await?;
+                            state.repo_mode = "files".into();
+                            mermaid.hide();
+                        }
+                        KeyCode::Up if state.repo_focused => {
+                            state.repo_selected = state.repo_selected.saturating_sub(1);
+                        }
+                        KeyCode::Down if state.repo_focused => {
+                            let len = state.repo_files.len().max(state.repo_variables.len());
+                            if state.repo_selected + 1 < len {
+                                state.repo_selected += 1;
+                            }
                         }
                         KeyCode::Char('r') if !state.running => {
                             send_command(
@@ -308,12 +377,29 @@ async fn run_loop(
                         }
                         KeyCode::Char('m') => {
                             state.repo_focused = true;
+                            state.repo_mode = "diagram".into();
                             send_command(
                                 child_stdin,
                                 &HarnessCommand::RepoMap {
                                     root: repo_root.display().to_string(),
                                     focus: String::new(),
                                     mode: "diagram".into(),
+                                },
+                            ).await?;
+                            send_command(
+                                child_stdin,
+                                &HarnessCommand::RepoMap {
+                                    root: repo_root.display().to_string(),
+                                    focus: String::new(),
+                                    mode: "files".into(),
+                                },
+                            ).await?;
+                            send_command(
+                                child_stdin,
+                                &HarnessCommand::RepoMap {
+                                    root: repo_root.display().to_string(),
+                                    focus: String::new(),
+                                    mode: "variables".into(),
                                 },
                             ).await?;
                             state.logs.push("building repository map…".into());
@@ -362,8 +448,10 @@ async fn run_loop(
                             state.history_visible = false;
                             state.history_detail = None;
                         }
-                        KeyCode::Esc if mermaid.is_visible() => mermaid.toggle(),
-                        KeyCode::Esc if state.repo_focused => state.repo_focused = false,
+                        KeyCode::Esc if state.repo_focused => {
+                            state.repo_focused = false;
+                            mermaid.hide();
+                        }
                         _ => {}
                     }
                 }
@@ -376,21 +464,23 @@ async fn run_loop(
                     };
                     state.apply(event);
                     if let Some(source) = repo_map {
-                        if mermaid.uses_low_resolution_fallback() {
-                            state.logs.push(
-                                "bitmap diagram disabled for half-block fallback; showing readable repository text (try iTerm2, WezTerm, Kitty, or Ghostty for the visual diagram)".into()
-                            );
-                        } else {
-                            match mermaid.set_diagram(&source) {
-                                Ok(()) => mermaid.show(),
-                                Err(error) => state.logs.push(format!("[diagram error] {error}")),
+                        match mermaid.set_diagram(&source) {
+                            Ok(()) => {
+                                mermaid.show();
+                                if mermaid.uses_text_fallback() {
+                                    state.logs.push(
+                                        "using the built-in quadrant-block renderer (2x2 pixels per terminal cell); iTerm2, WezTerm, Kitty, and Ghostty use native graphics".into()
+                                    );
+                                }
                             }
+                            Err(error) => state.logs.push(format!("[diagram error] {error}")),
                         }
                     }
                 }
             }
             _ = tick.tick() => {
                 terminal.draw(|frame| draw(frame, &state, mermaid))?;
+                mermaid.write_protocol(terminal.backend_mut())?;
             }
         }
     }
@@ -454,7 +544,7 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState, mermaid: &mut MermaidView)
         if state.repo_focused { " · ACTIVE" } else { "" }
     );
     frame.render_widget(
-        Paragraph::new(state.repo_content.as_str())
+        Paragraph::new(state.selected_repo_detail())
             .wrap(Wrap { trim: false })
             .block(Block::default().borders(Borders::ALL).title(repo_title)),
         top[1],
@@ -515,6 +605,10 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState, mermaid: &mut MermaidView)
         }
     }
 
+    if state.repo_focused && state.repo_mode != "diagram" {
+        draw_repo_browser(frame, state);
+    }
+
     if state.history_visible {
         let area = centered_rect(86, 86, frame.area());
         frame.render_widget(Clear, area);
@@ -560,6 +654,56 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState, mermaid: &mut MermaidView)
             frame.render_widget(List::new(items), inner);
         }
     }
+}
+
+fn draw_repo_browser(frame: &mut ratatui::Frame, state: &AppState) {
+    let area = centered_rect(86, 86, frame.area());
+    frame.render_widget(Clear, area);
+    frame.render_widget(
+        Block::default()
+            .borders(Borders::ALL)
+            .title("Repository files · Up/Down select · t summary · r variables · Esc close"),
+        area,
+    );
+    let inner = Rect {
+        x: area.x + 1,
+        y: area.y + 1,
+        width: area.width.saturating_sub(2),
+        height: area.height.saturating_sub(2),
+    };
+    let columns =
+        Layout::horizontal([Constraint::Percentage(36), Constraint::Percentage(64)]).split(inner);
+    let paths: Vec<ListItem> = state
+        .repo_files
+        .iter()
+        .enumerate()
+        .map(|(index, entry)| {
+            let marker = if index == state.repo_selected {
+                "> "
+            } else {
+                "  "
+            };
+            let style = if index == state.repo_selected {
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(Color::LightCyan)
+                    .add_modifier(Modifier::BOLD)
+            } else {
+                Style::default()
+            };
+            ListItem::new(format!("{marker}{}", entry.path)).style(style)
+        })
+        .collect();
+    frame.render_widget(
+        List::new(paths).block(Block::default().borders(Borders::RIGHT).title("files")),
+        columns[0],
+    );
+    frame.render_widget(
+        Paragraph::new(state.selected_repo_detail())
+            .wrap(Wrap { trim: false })
+            .block(Block::default().title(state.repo_mode.as_str())),
+        columns[1],
+    );
 }
 
 fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
@@ -645,5 +789,45 @@ mod tests {
             .as_deref()
             .unwrap()
             .contains("run run-b"));
+    }
+
+    #[test]
+    fn structured_repo_entries_drive_local_file_details() {
+        let mut state = AppState::default();
+        state.apply(HarnessEvent::RepoMapFiles {
+            entries: vec![
+                FileEntry {
+                    path: "a.py".into(),
+                    summary: "First file".into(),
+                    symbols: vec!["alpha".into()],
+                },
+                FileEntry {
+                    path: "b.py".into(),
+                    summary: "Second file".into(),
+                    symbols: vec!["beta".into()],
+                },
+            ],
+        });
+        state.apply(HarnessEvent::RepoMapVariables {
+            entries: vec![
+                VariableEntry {
+                    path: "a.py".into(),
+                    imports: vec!["os".into()],
+                    variables: vec!["ROOT".into()],
+                },
+                VariableEntry {
+                    path: "b.py".into(),
+                    imports: vec!["json".into()],
+                    variables: vec!["DATA".into()],
+                },
+            ],
+        });
+        state.repo_selected = 1;
+        state.repo_mode = "files".into();
+        assert!(state.selected_repo_detail().contains("Second file"));
+        state.repo_mode = "variables".into();
+        let detail = state.selected_repo_detail();
+        assert!(detail.contains("json"));
+        assert!(detail.contains("DATA"));
     }
 }

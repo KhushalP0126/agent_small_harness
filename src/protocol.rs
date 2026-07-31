@@ -74,6 +74,24 @@ pub struct ContractSummary {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct FileEntry {
+    pub path: String,
+    #[serde(default)]
+    pub summary: String,
+    #[serde(default)]
+    pub symbols: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct VariableEntry {
+    pub path: String,
+    #[serde(default)]
+    pub imports: Vec<String>,
+    #[serde(default)]
+    pub variables: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum HarnessEvent {
     Ready {
@@ -125,6 +143,12 @@ pub enum HarnessEvent {
     RepoMapView {
         mode: String,
         content: String,
+    },
+    RepoMapFiles {
+        entries: Vec<FileEntry>,
+    },
+    RepoMapVariables {
+        entries: Vec<VariableEntry>,
     },
     HistoryList {
         runs: Vec<RunSummary>,
@@ -226,6 +250,20 @@ mod tests {
             HarnessEvent::RepoMapView {
                 mode: "variables".into(),
                 content: "main.py\n  variables: state".into(),
+            },
+            HarnessEvent::RepoMapFiles {
+                entries: vec![FileEntry {
+                    path: "src/main.rs".into(),
+                    summary: "Rust TUI".into(),
+                    symbols: vec!["main".into()],
+                }],
+            },
+            HarnessEvent::RepoMapVariables {
+                entries: vec![VariableEntry {
+                    path: "main.py".into(),
+                    imports: vec!["os".into()],
+                    variables: vec!["state".into()],
+                }],
             },
             HarnessEvent::HistoryList {
                 runs: vec![RunSummary {

@@ -81,6 +81,30 @@ class TuiBridgeTests(unittest.TestCase):
         self.assertEqual(event["type"], "repo_map")
         self.assertTrue(event["mermaid"].startswith("flowchart"))
 
+    def test_repo_map_files_are_structured_per_file(self) -> None:
+        self.bridge.handle(
+            {"cmd": "repo_map", "root": ".", "focus": "", "mode": "files"}
+        )
+        event = self.events()[0]
+        self.assertEqual(event["type"], "repo_map_files")
+        self.assertGreater(len(event["entries"]), 1)
+        self.assertEqual(
+            set(event["entries"][0]),
+            {"path", "summary", "symbols"},
+        )
+
+    def test_repo_map_variables_are_structured_per_file(self) -> None:
+        self.bridge.handle(
+            {"cmd": "repo_map", "root": ".", "focus": "", "mode": "variables"}
+        )
+        event = self.events()[0]
+        self.assertEqual(event["type"], "repo_map_variables")
+        self.assertGreater(len(event["entries"]), 1)
+        self.assertEqual(
+            set(event["entries"][0]),
+            {"path", "imports", "variables"},
+        )
+
     def test_argument_allowlist_rejects_unknown_flag(self) -> None:
         with self.assertRaises(ValueError):
             _validated_args(["--not-real", "value"])

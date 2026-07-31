@@ -14,8 +14,9 @@ Implemented in this tree with two architecture-grounded clarifications:
   AST gate.
 - `mermaid-rs-renderer` 0.3.1 returns SVG. The Rust modal therefore uses its
   real `render` API, rasterizes the SVG with `usvg`/`resvg`/`tiny-skia`, then
-  gives the decoded image to `ratatui-image`. No browser or Node process is
-  required.
+  directly emits Kitty/iTerm2 graphics or converts the decoded image to
+  colored Unicode quadrant cells. No browser, Node process, protocol query, or
+  `ratatui-image` dependency is required.
 - `GenerationController` now owns the profiling integration seam and persists
   its result with each attempt. `ArtifactManager` retains profiling and
   execution evidence, the Textual console displays profiling state, and a
@@ -25,10 +26,8 @@ Implemented in this tree with two architecture-grounded clarifications:
   `scripts/run_compute_shield.py`; it does not rerun models or become an
   acceptance gate.
 
-The Textual TUI remains supported until terminal compatibility is manually
-verified. Use `make rust-tui` for the Rust preview and `make test-rust` where a
-Rust toolchain is installed. The full Python suite currently passes; Rust
-compilation still requires installing `cargo` on this development machine.
+The Textual TUI remains supported. Use `make rust-tui` for the Rust preview and
+`make test-rust` for its automated checks.
 
 ## 1. Scope
 
@@ -63,7 +62,7 @@ TUI reaches parity (see §5, Rollout).
 |--------------------------|---------------------------|---------|
 | TUI core                 | `ratatui` + `crossterm`   | Immediate-mode rendering, input |
 | Async runtime             | `tokio`                   | Non-blocking event loop, subprocess I/O |
-| Terminal image rendering  | `ratatui-image`           | Sixel/Kitty/iTerm2 auto-detect, halfblock fallback |
+| Terminal image rendering  | local renderer + `base64` | Direct Kitty/iTerm2 output, cached 2×2 quadrant fallback |
 | Mermaid rendering          | `mermaid-rs-renderer` (`mmdr`) | In-process `.mmd` → PNG, no Node/browser |
 | Serialization              | `serde` / `serde_json`   | Event (de)serialization |
 | Error handling              | `anyhow`                 | Propagation across async tasks |
@@ -86,8 +85,13 @@ the others:
   to these two, `mmdr`'s most mature coverage).
 - `mermaid-rs-renderer` renders SVG in-process; `usvg`/`resvg`/`tiny-skia`
   rasterize it to PNG without a subprocess.
-- `ratatui-image`'s `Picker` converts the PNG into a `StatefulProtocol` and
-  renders it as a widget — triggered by the `m` hotkey, shown in a modal.
+- Environment markers select Kitty graphics, iTerm2 inline images, or the
+  universal quadrant-block renderer. Native protocol encoders write the PNG
+  directly; the fallback downsamples it to two horizontal and two vertical
+  samples per terminal cell and renders a two-color quadrant glyph.
+- The same `m` request eagerly returns typed per-file records. `Up`/`Down`
+  changes a Rust-owned selection without IPC; `t` and `r` switch the detail
+  pane between summary/symbol and import/variable data.
 - Regenerate on: `m` hotkey press, or after a draft is accepted and the
   function/variable graph changes.
 

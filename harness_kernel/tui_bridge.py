@@ -243,25 +243,26 @@ class Bridge:
             )
             return
         if mode == "variables":
-            lines = []
+            entries = []
             for record in graph.files:
                 imports = sorted({item.module for item in record.imports if item.module})
                 variables = sorted({item.name for item in record.variables})
-                if imports or variables:
-                    lines.append(record.path)
-                    lines.append(f"  imports: {', '.join(imports) or 'none'}")
-                    lines.append(f"  variables: {', '.join(variables) or 'none'}")
+                entries.append(
+                    {
+                        "path": record.path,
+                        "imports": imports,
+                        "variables": variables,
+                    }
+                )
             self.writer.emit(
-                "repo_map_view",
-                mode=mode,
-                content="\n".join(lines) or "No imports or variables found.",
+                "repo_map_variables",
+                entries=entries,
             )
             return
         if mode == "files":
-            lines = []
+            entries = []
             for record in graph.files:
                 symbols = [*record.classes, *(item.name for item in record.functions)]
-                lines.append(record.path)
                 summary = ""
                 try:
                     source = (root_path / record.path).read_text(encoding="utf-8")
@@ -270,8 +271,14 @@ class Bridge:
                     summary = ""
                 if not summary:
                     summary = f"Defines {', '.join(symbols[:8])}." if symbols else "No module-level classes or functions."
-                lines.append(f"  {summary}")
-            self.writer.emit("repo_map_view", mode=mode, content="\n".join(lines))
+                entries.append(
+                    {
+                        "path": record.path,
+                        "summary": summary,
+                        "symbols": symbols,
+                    }
+                )
+            self.writer.emit("repo_map_files", entries=entries)
             return
         self.writer.emit(
             "repo_map",
