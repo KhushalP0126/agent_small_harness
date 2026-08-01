@@ -220,6 +220,12 @@ pub enum HarnessEvent {
         #[serde(default)]
         payload: BTreeMap<String, serde_json::Value>,
     },
+    ValidatedSource {
+        language: String,
+        source: String,
+        #[serde(default)]
+        artifact_path: String,
+    },
     ProtocolError {
         line: String,
         error: String,
@@ -378,6 +384,11 @@ mod tests {
             HarnessEvent::Result {
                 status: "ok".into(),
                 payload: BTreeMap::new(),
+            },
+            HarnessEvent::ValidatedSource {
+                language: "python".into(),
+                source: "def main():\n    return 0\n".into(),
+                artifact_path: "artifacts/runs/run-123".into(),
             },
             HarnessEvent::ProtocolError {
                 line: "{broken".into(),

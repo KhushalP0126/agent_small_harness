@@ -2,9 +2,16 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+import ast
+import difflib
+import fnmatch
+import hashlib
+import os
+from dataclasses import dataclass, field, replace as dataclass_replace
+from pathlib import Path
 
 from agents.execution_agent import ExecutionAgent
+from agents.repo_map_agent import DEFAULT_SKIP_DIRS
 from backends.architect_client import ArchitectApiClient, ArchitectProfile
 from backends.ollama_client import (
     DEFAULT_OLLAMA_MODEL,
@@ -13,7 +20,9 @@ from backends.ollama_client import (
 )
 from engines.base import EngineFinding
 from engines.lint_engine import LintEngine
-from harness_kernel.tool_registry import ToolHandler, ToolRegistry
+from harness_kernel.local_sandbox import MAX_CAPTURE_BYTES, run_python_locally_isolated
+from harness_kernel.tool_paths import repository_relative, resolve_within_root
+from harness_kernel.tool_registry import ToolError, ToolHandler, ToolRegistry
 from validation.behavior import (
     DEFAULT_BEHAVIOR_TIMEOUT_SECONDS,
     ExecutionTrace,
@@ -79,6 +88,90 @@ class FormalVerificationRequest:
 @dataclass(frozen=True)
 class FormalVerificationResponse:
     result: dict
+
+
+@dataclass(frozen=True)
+class SearchDirectoryRequest:
+    root: Path
+    pattern: str
+    max_results: int = 50
+
+
+@dataclass(frozen=True)
+class SearchDirectoryResponse:
+    paths: list[str]
+    truncated: bool = False
+
+
+@dataclass(frozen=True)
+class ReadFileRequest:
+    root: Path
+    path: str
+    max_bytes: int = MAX_CAPTURE_BYTES
+
+
+@dataclass(frozen=True)
+class ReadFileResponse:
+    path: str
+    content: str
+    truncated: bool = False
+
+
+@dataclass(frozen=True)
+class ApplySearchReplaceRequest:
+    root: Path
+    path: str
+    search: str
+    replace: str
+
+
+@dataclass(frozen=True)
+class ApplySearchReplaceResponse:
+    path: str
+    diff: str
+    replacements: int
+    proposed_content: str
+    original_sha256: str
+    applied: bool = False
+
+
+@dataclass(frozen=True)
+class ExecuteScriptRequest:
+    root: Path
+    source: str
+    timeout_seconds: float = 10.0
+
+
+@dataclass(frozen=True)
+class ExecuteScriptResponse:
+    returncode: int | None
+    stdout: str
+    stderr: str
+    timed_out: bool
+
+
+SAFE_SCRIPT_IMPORTS = frozenset(
+    {
+        "collections",
+        "dataclasses",
+        "decimal",
+        "fractions",
+        "functools",
+        "heapq",
+        "itertools",
+        "json",
+        "math",
+        "operator",
+        "random",
+        "re",
+        "statistics",
+        "string",
+        "typing",
+    }
+)
+BLOCKED_SCRIPT_CALLS = frozenset(
+    {"__import__", "breakpoint", "compile", "eval", "exec", "input", "open"}
+)
 
 
 def _make_lint_handler(
@@ -206,16 +299,224 @@ def _make_formal_verification_handler(
     )
 
 
+def _make_search_directory_handler(
+    repository_root: Path,
+) -> ToolHandler[SearchDirectoryRequest, SearchDirectoryResponse]:
+    def invoke(request: SearchDirectoryRequest) -> SearchDirectoryResponse:
+        search_root = resolve_within_root(repository_root, request.root)
+        if not search_root.is_dir():
+            raise ToolError(f"Search root is not a directory: {request.root}", kind="not_directory")
+        pattern = request.pattern.strip() or "*"
+        pattern_path = Path(pattern)
+        if pattern_path.is_absolute() or ".." in pattern_path.parts:
+            raise ToolError(f"Unsafe search pattern: {pattern!r}", kind="invalid_pattern")
+        limit = max(1, min(int(request.max_results), 200))
+        matches: list[str] = []
+        truncated = False
+        for current_root, dirnames, filenames in os.walk(search_root, followlinks=False):
+            dirnames[:] = sorted(name for name in dirnames if name not in DEFAULT_SKIP_DIRS)
+            for filename in sorted(filenames):
+                candidate = resolve_within_root(repository_root, Path(current_root) / filename)
+                relative_to_search = candidate.relative_to(search_root).as_posix()
+                if not (
+                    fnmatch.fnmatch(relative_to_search, pattern)
+                    or fnmatch.fnmatch(filename, pattern)
+                    or pattern in relative_to_search
+                ):
+                    continue
+                if len(matches) >= limit:
+                    truncated = True
+                    return SearchDirectoryResponse(matches, truncated)
+                matches.append(repository_relative(repository_root, candidate))
+        return SearchDirectoryResponse(matches, truncated)
+
+    return ToolHandler(
+        name="search_directory",
+        request_type=SearchDirectoryRequest,
+        response_type=SearchDirectoryResponse,
+        invoke=invoke,
+        description="Search repository files by glob or substring without leaving the repository root.",
+    )
+
+
+def _make_read_file_handler(
+    repository_root: Path,
+) -> ToolHandler[ReadFileRequest, ReadFileResponse]:
+    def invoke(request: ReadFileRequest) -> ReadFileResponse:
+        requested = Path(request.path)
+        path = resolve_within_root(
+            repository_root,
+            requested if requested.is_absolute() else request.root / requested,
+        )
+        if not path.is_file():
+            raise ToolError(f"File does not exist: {request.path}", kind="not_file")
+        limit = max(1, min(int(request.max_bytes), 1024 * 1024))
+        payload = path.read_bytes()
+        truncated = len(payload) > limit
+        content = payload[:limit].decode("utf-8", errors="replace")
+        if truncated:
+            content += f"\n[truncated after {limit} bytes]\n"
+        return ReadFileResponse(
+            path=repository_relative(repository_root, path),
+            content=content,
+            truncated=truncated,
+        )
+
+    return ToolHandler(
+        name="read_file",
+        request_type=ReadFileRequest,
+        response_type=ReadFileResponse,
+        invoke=invoke,
+        description="Read a repository file with bounded output and traversal protection.",
+    )
+
+
+def _make_apply_search_replace_handler(
+    repository_root: Path,
+) -> ToolHandler[ApplySearchReplaceRequest, ApplySearchReplaceResponse]:
+    def invoke(request: ApplySearchReplaceRequest) -> ApplySearchReplaceResponse:
+        requested = Path(request.path)
+        path = resolve_within_root(
+            repository_root,
+            requested if requested.is_absolute() else request.root / requested,
+        )
+        if not path.is_file():
+            raise ToolError(f"File does not exist: {request.path}", kind="not_file")
+        if not request.search:
+            raise ToolError("Search text cannot be empty", kind="invalid_search")
+        original = path.read_text(encoding="utf-8")
+        replacements = original.count(request.search)
+        if replacements == 0:
+            raise ToolError(
+                f"Search text was not found in {request.path}",
+                kind="search_not_found",
+            )
+        proposed = original.replace(request.search, request.replace)
+        relative = repository_relative(repository_root, path)
+        diff = "".join(
+            difflib.unified_diff(
+                original.splitlines(keepends=True),
+                proposed.splitlines(keepends=True),
+                fromfile=f"a/{relative}",
+                tofile=f"b/{relative}",
+            )
+        )
+        return ApplySearchReplaceResponse(
+            path=relative,
+            diff=diff,
+            replacements=replacements,
+            proposed_content=proposed,
+            original_sha256=hashlib.sha256(original.encode("utf-8")).hexdigest(),
+            applied=False,
+        )
+
+    return ToolHandler(
+        name="apply_search_replace",
+        request_type=ApplySearchReplaceRequest,
+        response_type=ApplySearchReplaceResponse,
+        invoke=invoke,
+        description="Prepare a unified diff for explicit review; never write the repository file.",
+    )
+
+
+def apply_reviewed_search_replace(
+    repository_root: Path | str,
+    proposal: ApplySearchReplaceResponse,
+    *,
+    approved: bool,
+) -> ApplySearchReplaceResponse:
+    """Apply an unchanged proposal only after an explicit host/UI approval."""
+
+    if not approved:
+        return proposal
+    root = Path(repository_root).resolve()
+    path = resolve_within_root(root, proposal.path)
+    if not path.is_file():
+        raise ToolError(f"File does not exist: {proposal.path}", kind="not_file")
+    current = path.read_text(encoding="utf-8")
+    current_sha256 = hashlib.sha256(current.encode("utf-8")).hexdigest()
+    if current_sha256 != proposal.original_sha256:
+        raise ToolError(
+            f"File changed after diff review: {proposal.path}",
+            kind="stale_diff",
+        )
+    path.write_text(proposal.proposed_content, encoding="utf-8")
+    return dataclass_replace(proposal, applied=True)
+
+
+def _make_execute_script_handler(
+    repository_root: Path,
+) -> ToolHandler[ExecuteScriptRequest, ExecuteScriptResponse]:
+    def invoke(request: ExecuteScriptRequest) -> ExecuteScriptResponse:
+        resolve_within_root(repository_root, request.root)
+        if not request.source.strip():
+            raise ToolError("Script source cannot be empty", kind="invalid_source")
+        if len(request.source.encode("utf-8")) > 128 * 1024:
+            raise ToolError("Script source exceeds 128 KiB", kind="source_too_large")
+        _validate_tool_script(request.source)
+        timeout = max(0.1, min(float(request.timeout_seconds), 30.0))
+        result = run_python_locally_isolated(request.source, timeout_seconds=timeout)
+        return ExecuteScriptResponse(
+            returncode=result.returncode,
+            stdout=result.stdout,
+            stderr=result.stderr,
+            timed_out=result.timed_out,
+        )
+
+    return ToolHandler(
+        name="execute_script",
+        request_type=ExecuteScriptRequest,
+        response_type=ExecuteScriptResponse,
+        invoke=invoke,
+        description="Execute Python in the disposable, sanitized, resource-bounded local runner.",
+    )
+
+
+def _validate_tool_script(source: str) -> None:
+    try:
+        tree = ast.parse(source)
+    except SyntaxError as exc:
+        raise ToolError(f"Script does not parse: {exc}", kind="invalid_source") from exc
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            modules = [alias.name.split(".", 1)[0] for alias in node.names]
+        elif isinstance(node, ast.ImportFrom):
+            modules = [(node.module or "").split(".", 1)[0]]
+        else:
+            modules = []
+        blocked_modules = [module for module in modules if module not in SAFE_SCRIPT_IMPORTS]
+        if blocked_modules:
+            raise ToolError(
+                f"Script import is not allowed: {', '.join(blocked_modules)}",
+                kind="unsafe_script",
+            )
+        if (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Name)
+            and node.func.id in BLOCKED_SCRIPT_CALLS
+        ):
+            raise ToolError(
+                f"Script call is not allowed: {node.func.id}",
+                kind="unsafe_script",
+            )
+
+
 def build_default_tool_registry(
     lint_engine: LintEngine | None = None,
     execution_agent: ExecutionAgent | None = None,
     ollama_client: OllamaClient | None = None,
     architect_client: ArchitectApiClient | None = None,
+    repository_root: Path | str | None = None,
 ) -> ToolRegistry:
+    trusted_root = Path(repository_root or Path.cwd()).resolve()
     registry = ToolRegistry()
     registry.register(_make_lint_handler(lint_engine))
     registry.register(_make_execution_sandbox_handler(execution_agent))
     registry.register(_make_ollama_generate_handler(ollama_client))
     registry.register(_make_architect_generate_handler(architect_client))
     registry.register(_make_formal_verification_handler())
+    registry.register(_make_search_directory_handler(trusted_root))
+    registry.register(_make_read_file_handler(trusted_root))
+    registry.register(_make_apply_search_replace_handler(trusted_root))
+    registry.register(_make_execute_script_handler(trusted_root))
     return registry

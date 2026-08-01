@@ -1,11 +1,17 @@
 import unittest
 from dataclasses import dataclass
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from agents.engine_registry import EngineRegistry
 from agents.generation_controller import GenerationController
 from engines.base import EngineFinding
 from harness_kernel.tool_handlers import (
     ArchitectGenerateRequest,
+    ApplySearchReplaceRequest,
+    ApplySearchReplaceResponse,
+    ExecuteScriptRequest,
+    ExecuteScriptResponse,
     ExecutionRequest,
     FormalVerificationRequest,
     FormalVerificationResponse,
@@ -13,6 +19,11 @@ from harness_kernel.tool_handlers import (
     LintRequest,
     LintResult,
     OllamaGenerateRequest,
+    ReadFileRequest,
+    ReadFileResponse,
+    SearchDirectoryRequest,
+    SearchDirectoryResponse,
+    apply_reviewed_search_replace,
     build_default_tool_registry,
 )
 from harness_kernel.tool_registry import ToolError, ToolHandler, ToolRegistry
@@ -140,6 +151,121 @@ class ToolRegistryTests(unittest.TestCase):
 
         self.assertEqual(ollama.value, GenerateResponse("ollama-result"))
         self.assertEqual(architect.value, GenerateResponse("architect-result"))
+
+    def test_repository_tools_search_read_diff_and_execute_without_writing(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            source_path = root / "src" / "example.py"
+            source_path.parent.mkdir()
+            source_path.write_text("value = 1\n", encoding="utf-8")
+            registry = build_default_tool_registry(repository_root=root)
+
+            search = registry.dispatch(
+                "search_directory",
+                SearchDirectoryRequest(root=Path("."), pattern="*.py"),
+            )
+            read = registry.dispatch(
+                "read_file",
+                ReadFileRequest(root=Path("src"), path="example.py"),
+            )
+            replacement = registry.dispatch(
+                "apply_search_replace",
+                ApplySearchReplaceRequest(
+                    root=Path("."),
+                    path="src/example.py",
+                    search="value = 1",
+                    replace="value = 2",
+                ),
+            )
+            execution = registry.dispatch(
+                "execute_script",
+                ExecuteScriptRequest(root=Path("."), source="print('sandboxed')"),
+            )
+
+            self.assertEqual(search.value, SearchDirectoryResponse(["src/example.py"], False))
+            self.assertEqual(read.value, ReadFileResponse("src/example.py", "value = 1\n", False))
+            self.assertIsInstance(replacement.value, ApplySearchReplaceResponse)
+            self.assertIn("+value = 2", replacement.value.diff)
+            self.assertFalse(replacement.value.applied)
+            self.assertEqual(source_path.read_text(encoding="utf-8"), "value = 1\n")
+            declined = apply_reviewed_search_replace(
+                root,
+                replacement.value,
+                approved=False,
+            )
+            self.assertFalse(declined.applied)
+            self.assertEqual(source_path.read_text(encoding="utf-8"), "value = 1\n")
+            accepted = apply_reviewed_search_replace(
+                root,
+                replacement.value,
+                approved=True,
+            )
+            self.assertTrue(accepted.applied)
+            self.assertEqual(source_path.read_text(encoding="utf-8"), "value = 2\n")
+            self.assertIsInstance(execution.value, ExecuteScriptResponse)
+            self.assertEqual(execution.value.stdout.strip(), "sandboxed")
+
+            unsafe = registry.dispatch(
+                "execute_script",
+                ExecuteScriptRequest(
+                    root=Path("."),
+                    source="print(open('/etc/passwd').read())",
+                ),
+            )
+            self.assertFalse(unsafe.ok)
+            self.assertEqual(unsafe.error_kind, "unsafe_script")
+
+    def test_repository_tools_reject_path_and_symlink_escape(self) -> None:
+        with TemporaryDirectory() as tmpdir, TemporaryDirectory() as outside_dir:
+            root = Path(tmpdir)
+            outside = Path(outside_dir) / "secret.txt"
+            outside.write_text("secret", encoding="utf-8")
+            registry = build_default_tool_registry(repository_root=root)
+
+            traversal = registry.dispatch(
+                "read_file",
+                ReadFileRequest(root=Path("."), path="../secret.txt"),
+            )
+            absolute = registry.dispatch(
+                "read_file",
+                ReadFileRequest(root=Path("."), path=str(outside)),
+            )
+            self.assertEqual(traversal.error_kind, "path_escape")
+            self.assertEqual(absolute.error_kind, "path_escape")
+
+            link = root / "outside-link"
+            try:
+                link.symlink_to(outside)
+            except OSError:
+                return
+            symlink = registry.dispatch(
+                "read_file",
+                ReadFileRequest(root=Path("."), path="outside-link"),
+            )
+            self.assertEqual(symlink.error_kind, "path_escape")
+
+    def test_reviewed_diff_rejects_stale_file(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            path = root / "example.py"
+            path.write_text("value = 1\n", encoding="utf-8")
+            registry = build_default_tool_registry(repository_root=root)
+            result = registry.dispatch(
+                "apply_search_replace",
+                ApplySearchReplaceRequest(
+                    root=Path("."),
+                    path="example.py",
+                    search="value = 1",
+                    replace="value = 2",
+                ),
+            )
+            path.write_text("value = 3\n", encoding="utf-8")
+
+            with self.assertRaises(ToolError) as raised:
+                apply_reviewed_search_replace(root, result.value, approved=True)
+
+            self.assertEqual(raised.exception.kind, "stale_diff")
+            self.assertEqual(path.read_text(encoding="utf-8"), "value = 3\n")
 
     def test_controller_surfaces_registered_formal_handler_failure(self) -> None:
         registry = ToolRegistry()

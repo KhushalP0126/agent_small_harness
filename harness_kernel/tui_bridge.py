@@ -30,7 +30,7 @@ from TUI.mermaid_renderer import render_repo_architecture_mermaid
 from TUI.mermaid_renderer import render_repo_architecture
 
 
-PROTOCOL_VERSION = 2
+PROTOCOL_VERSION = 3
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MEMORY_PATH = REPO_ROOT / ".tui_memory.json"
 MAX_CHAT_MESSAGES = 24

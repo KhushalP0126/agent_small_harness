@@ -130,6 +130,18 @@ use a cyan border/title accent; inactive utility panes are dimmed. The 33 ms UI
 tick advances a status-strip spinner while asynchronous chat, drafting, or
 execution work is active, so backend work never blocks terminal input.
 
+The output viewport follows the newest physical log line by default and owns a
+Rust-side offset for keyboard and mouse-wheel navigation. `Up`/`Down` and
+`PageUp`/`PageDown` move through retained output, `Home` reaches the oldest
+retained line, and `End` restores live following. New events preserve the
+current history position when the user is not following the tail.
+
+On a completed run only, `run_structured_spec.py` emits a typed
+`validated_source` event after all engine, formal, structured-spec, import, and
+integration-smoke decisions are finalized. The TUI automatically opens the
+line-numbered source modal and retains it for `v` to reopen. Failed or
+manual-review candidates are never presented as validated source.
+
 Typed questionnaire options use `1`–`5` as direct local selections; only the
 final answer crosses the JSONL boundary. Plain assistant responses expose
 quick-reference selection only when at least two lines use an explicit numbered
@@ -178,6 +190,29 @@ TUI. Each reports results as a new JSON-lines event type so either TUI
 - This is defense in depth for trusted local generation, not a hardened boundary:
   a container or OS sandbox is still required to deny absolute host filesystem
   and network access for adversarial code.
+
+### 3.0.1 Repository Tool Boundary
+
+- `search_directory`, `read_file`, `apply_search_replace`, and
+  `execute_script` are typed `ToolHandler` registrations rather than direct
+  model access to Python or the filesystem.
+- Every requested root and path resolves through one repository-root guard.
+  Absolute paths, traversal, and symlinks that resolve outside that root fail
+  with the stable `path_escape` error kind.
+- Search results, file reads, script source, captured output, execution time,
+  and model tool turns are bounded. Script imports use a standard-library
+  allowlist before the disposable local runner is invoked.
+- `apply_search_replace` only returns a unified diff and proposed content. The
+  model-facing loop cannot write it. A separate host/TUI approval call may
+  apply it, but only if the file's SHA-256 still matches the reviewed version;
+  otherwise it fails as `stale_diff`.
+- Qwen is the default tool selector and DeepSeek is optional. Both receive the
+  same four-tool contract and feed each typed result into the next bounded
+  decision turn.
+
+This boundary reduces accidental repository and secret exposure but remains a
+trusted-local-development control. It is not a hardened kernel, container, or
+network sandbox for adversarial model-generated Python.
 
 ### 3.1 C/C++ Compilation Gate
 

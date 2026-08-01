@@ -27,6 +27,7 @@ from backends.architect_client import (
 )
 from backends.ollama_client import DEFAULT_OLLAMA_MODEL, OllamaModelSupplier
 from harness_kernel.function_contracts import ContractQueue, ContractQueuePlan, DealExample, FunctionContract
+from harness_kernel.event_stream import event_sink_from_env
 from harness_kernel.local_sandbox import run_python_locally_isolated
 from prompt.budget import budget_prompt
 from prompt.summarizer import DefaultPromptSummarizer
@@ -50,6 +51,22 @@ class ContractExecutionResult:
     prompt_size: int = 0
     dependencies: list[str] = field(default_factory=list)
     repair_attempts: list[dict] = field(default_factory=list)
+
+
+def _validated_source_event(
+    source: str,
+    language: str,
+    status: str,
+    artifact_path: str,
+) -> dict | None:
+    if status != "completed" or not source:
+        return None
+    return {
+        "type": "validated_source",
+        "language": language or "python",
+        "source": source,
+        "artifact_path": artifact_path,
+    }
 
 
 def _contract_queue_from_architect(
@@ -1572,6 +1589,15 @@ def run_spec(
     ]
     formal = final_attempt.get("formal_validation", {})
     validation = final_attempt.get("validation", {})
+    validated_source_event = _validated_source_event(
+        final_source,
+        plan.language,
+        str(session.get("final_status") or ""),
+        artifact_path,
+    )
+    event_sink = event_sink_from_env()
+    if event_sink is not None and validated_source_event is not None:
+        event_sink(validated_source_event)
     print(
         json.dumps(
             {

@@ -12,6 +12,8 @@ Initial tagged release of the generalized code-generation and repair harness.
 - Validated DeepSeek JSON execution sheets rendered into deterministic
   planner-compatible specifications, with a safe sheet-derived queue fallback
   when optional contract ordering is malformed.
+- Bottom-following execution output with keyboard and mouse-wheel history
+  scrolling, plus an automatically opened, reusable validated-source code view.
 - DeepSeek configuration visibility and bounded local preference memory without
   displaying or persisting credentials.
 - Navigable repository map, per-file details, run history, and cross-platform
@@ -19,6 +21,9 @@ Initial tagged release of the generalized code-generation and repair harness.
 - Defense-in-depth local execution for generated Python using sanitized child
   environments, disposable working directories, bounded output, process-group
   timeouts, and supported POSIX resource limits.
+- A bounded Qwen/DeepSeek repository tool loop with typed search, bounded file
+  reads, review-only search/replace diffs, isolated script execution, shared
+  path-escape protection, and stale-diff checks at explicit approval time.
 - Structured contract planning, sequential small-worker execution, repair and
   architect escalation, checkpoint artifacts, and validation evidence.
 

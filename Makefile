@@ -17,11 +17,12 @@ RAW_VS_HARNESS_SAMPLES ?= 5
 DOC_AGENT ?= deepseek
 DOC_MODEL ?=
 DOC_OUTPUT ?= $(if $(filter none,$(DOC_AGENT)),,data/library_proposals/$(LIB).docs.md)
+TOOL_AGENT ?= qwen
 IMAGE ?= agent-small-harness:local
 ARTIFACT_ARGS = $(if $(filter 1 true yes,$(SAVE_ARTIFACTS)),--save-artifacts --artifact-root "$(ARTIFACT_ROOT)",)
 DOC_ARGS = --doc-agent "$(DOC_AGENT)" $(if $(DOC_MODEL),--doc-model "$(DOC_MODEL)",) $(if $(DOC_OUTPUT),--doc-output "$(DOC_OUTPUT)",)
 
-.PHONY: help install install-formal install-kernel env-path init-env api-dev tui rust-tui tui_rust test-rust docker-build test test-engine-expansion compute-shield test-claude-fixes test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-fixture resume-coding-capability test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-worker-limit-architect resume-worker-limit test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-python-ladder-stateful test-python-ladder-stateful-architect test-plan-mode-ladder test-raw-vs-harness test-raw-vs-harness-architect test-raw-vs-harness-repeated test-raw-vs-harness-ablation test-formal-experiment structured-spec structured-spec-plan resume-structured-spec repo-map review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library ollama-smoke inference-smoke live-repair day1 clean-history
+.PHONY: help install install-formal install-kernel env-path init-env api-dev tui rust-tui tui_rust test-rust docker-build test test-engine-expansion compute-shield test-claude-fixes test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-fixture resume-coding-capability test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-worker-limit-architect resume-worker-limit test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-python-ladder-stateful test-python-ladder-stateful-architect test-plan-mode-ladder test-raw-vs-harness test-raw-vs-harness-architect test-raw-vs-harness-repeated test-raw-vs-harness-ablation test-formal-experiment structured-spec structured-spec-plan resume-structured-spec repo-map review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library tool-agent ollama-smoke inference-smoke live-repair day1 clean-history
 
 help:
 	@printf "Agent Small Harness commands\n"
@@ -85,6 +86,7 @@ help:
 	@printf "  make discover-library LIB=name DOC_AGENT=qwen Ask local Qwen for documentation candidates\n"
 	@printf "  make discover-library LIB=name DOC_AGENT=kernel Verify documentation with a Kernel browser\n"
 	@printf "  make discover-library LIB=name DOC_AGENT=none Write proposal without model documentation search\n"
+	@printf "  make tool-agent TASK='inspect src' Run bounded read/execute/diff tools (no writes)\n"
 	@printf "  make approve-library LIB=name        Merge approved proposal into library registry\n"
 	@printf "\nConvenience:\n"
 	@printf "  make test-adversarial                Run trap prompts through the PEV loop\n"
@@ -104,6 +106,7 @@ help:
 	@printf "  DOC_AGENT=deepseek|qwen|kernel|none  Backend for library documentation search; default is $(DOC_AGENT)\n"
 	@printf "  DOC_MODEL=name                       Optional doc-search model override\n"
 	@printf "  DOC_OUTPUT=path                      Markdown docs output path; default is data/library_proposals/<LIB>.docs.md for model search\n"
+	@printf "  TOOL_AGENT=qwen|deepseek             Backend for bounded repository tool calls; default is $(TOOL_AGENT)\n"
 	@printf "  IMAGE=agent-small-harness:local      Docker image tag for docker-build\n"
 	@printf "\nExamples:\n"
 	@printf "  make test-worker-limit MODEL=qwen2.5-coder:3b SAVE_ARTIFACTS=1\n"
@@ -273,6 +276,10 @@ discover-library:
 approve-library:
 	@test -n "$(LIB)" || (echo "Set LIB, e.g. make approve-library LIB=json" && exit 1)
 	$(PYTHON) scripts/approve_library.py "$(LIB)"
+
+tool-agent:
+	@test -n "$(TASK)" || (echo "Set TASK, e.g. make tool-agent TASK='inspect src/main.rs'" && exit 1)
+	$(PYTHON) scripts/run_tool_agent.py "$(TASK)" --provider "$(TOOL_AGENT)" --repo-root "$(REPO_ROOT)"
 
 ollama-smoke:
 	$(PYTHON) -c "from benchmarker import build_ollama_controller; controller = build_ollama_controller(debug=True); print(controller.name)"

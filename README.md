@@ -128,6 +128,14 @@ spec-sheet components provide a validated local contract queue and execution
 continues with a warning. Execution only stops when neither source can produce
 a contract queue.
 
+The main output pane follows the newest event while a run is active. Use
+`Up`/`Down`, `PageUp`/`PageDown`, or the mouse wheel to inspect earlier output;
+`Home` jumps to the beginning and `End` resumes live following. After every
+successfully completed engine and integration-validation pass, the TUI opens a
+line-numbered validated-code view. That view supports vertical and horizontal
+arrow scrolling, `PageUp`/`PageDown`, and `v`/`Esc` to close; press `v` from the
+main view to reopen the latest validated source.
+
 The context panel reports whether DeepSeek was configured from the environment
 or repository `.env`; it never displays the key. Explicit phrases such as
 `/remember keep responses concise`, `remember that ...`, or `I prefer ...`
@@ -273,6 +281,35 @@ same parse and validation path as local-worker output. Algorithmic profiling is
 also opt-in: a caller supplies a profiling runner with equivalent variants.
 When enabled, it participates in the same retry/manual-review path and its
 results persist beside behavior and formal evidence.
+
+### Repository tool-calling agent
+
+The typed registry also exposes four repository-scoped model tools:
+
+- `search_directory` performs bounded glob/substring file discovery while
+  skipping generated and dependency directories.
+- `read_file` returns bounded repository-relative file content with an explicit
+  truncation marker.
+- `apply_search_replace` prepares a unified diff and proposed content but never
+  writes it; `applied` remains false until a separate human approval path is
+  invoked. The approval helper verifies the file hash again before writing, so
+  an approved but stale diff is rejected.
+- `execute_script` runs bounded Python in the disposable local runner. It uses
+  an import allowlist and rejects direct file, dynamic-code, and input calls
+  before execution.
+
+All filesystem requests pass through one resolved-root guard that rejects
+absolute, traversal, and symlink escapes. A bounded model→tool→result loop lets
+Qwen or DeepSeek inspect results and choose another tool without granting the
+model direct filesystem mutation.
+
+```bash
+make tool-agent TASK="inspect the structured-spec integration failure"
+make tool-agent TASK="prepare a diff for README.md" TOOL_AGENT=deepseek
+```
+
+The returned JSON contains the final answer and every typed call/result. Diffs
+remain review-only; this command cannot approve or apply them.
 
 ### What Each Engine Traverses
 
@@ -631,6 +668,8 @@ make approve-library LIB=clang.cindex
   remain authoritative.
 - [x] Uniform typed dispatch for lint, sandbox execution, both model backends,
   and Deal/CrossHair formal verification.
+- [x] Repository-scoped search/read/diff/script tools plus a bounded Qwen or
+  DeepSeek tool-calling loop; generated diffs remain unapplied for review.
 - [x] Formal CI dependencies installed on every run so Deal/CrossHair coverage
   does not silently remain skipped.
 - [x] Durable repeated paired comparisons that retain raw drafts, repaired

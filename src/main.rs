@@ -10,7 +10,10 @@ use std::time::Duration;
 use anyhow::{Context, Result};
 use crossterm::{
     cursor::Show,
-    event::{DisableMouseCapture, EnableMouseCapture, Event as CtEvent, EventStream, KeyCode},
+    event::{
+        DisableMouseCapture, EnableMouseCapture, Event as CtEvent, EventStream, KeyCode,
+        MouseEventKind,
+    },
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -59,6 +62,7 @@ impl AppMode {
 struct AppState {
     mode: AppMode,
     logs: Vec<String>,
+    log_scroll: usize,
     engine: String,
     pct: u16,
     running: bool,
@@ -87,13 +91,23 @@ struct AppState {
     deepseek_source: String,
     memory_path: String,
     preference_count: u32,
+    validated_source: Option<String>,
+    validated_language: String,
+    validated_artifact_path: String,
+    validated_source_visible: bool,
+    code_scroll_y: usize,
+    code_scroll_x: usize,
 }
 
 impl Default for AppState {
     fn default() -> Self {
         Self {
             mode: AppMode::Chat,
-            logs: vec!["c/p: chat  s: draft spec  m: repository map  d: history  q: quit".into()],
+            logs: vec![
+                "c/p: chat  s: draft spec  m: repository map  d: history  v: validated code  q: quit"
+                    .into(),
+            ],
+            log_scroll: 0,
             engine: "idle".into(),
             pct: 0,
             running: false,
@@ -122,12 +136,19 @@ impl Default for AppState {
             deepseek_source: "checking".into(),
             memory_path: ".tui_memory.json".into(),
             preference_count: 0,
+            validated_source: None,
+            validated_language: String::new(),
+            validated_artifact_path: String::new(),
+            validated_source_visible: false,
+            code_scroll_y: 0,
+            code_scroll_x: 0,
         }
     }
 }
 
 impl AppState {
     fn apply(&mut self, event: HarnessEvent) {
+        let previous_log_count = self.logs.len();
         match event {
             HarnessEvent::Ready { protocol_version } => {
                 self.logs
@@ -312,6 +333,20 @@ impl AppState {
             HarnessEvent::Result { status, .. } => {
                 self.logs.push(format!("result: {status}"));
             }
+            HarnessEvent::ValidatedSource {
+                language,
+                source,
+                artifact_path,
+            } => {
+                self.validated_language = language;
+                self.validated_source = Some(source);
+                self.validated_artifact_path = artifact_path;
+                self.validated_source_visible = true;
+                self.code_scroll_y = 0;
+                self.code_scroll_x = 0;
+                self.logs
+                    .push("validated source ready · press v to view it again".into());
+            }
             HarnessEvent::ProtocolError { line, error } => {
                 self.logs
                     .push(format!("[protocol warning] {error}: {line}"));
@@ -326,10 +361,34 @@ impl AppState {
                 self.logs.push(format!("harness finished: {status}"));
             }
         }
+        if self.log_scroll > 0 {
+            self.log_scroll = self
+                .log_scroll
+                .saturating_add(self.logs.len().saturating_sub(previous_log_count));
+        }
         const MAX_LOGS: usize = 2_000;
         if self.logs.len() > MAX_LOGS {
             self.logs.drain(..self.logs.len() - MAX_LOGS);
         }
+    }
+
+    fn main_output_active(&self) -> bool {
+        !self.prompt_active
+            && !self.repo_focused
+            && !self.history_visible
+            && !self.validated_source_visible
+            && !matches!(
+                self.mode,
+                AppMode::Questionnaire | AppMode::SpecReview { .. }
+            )
+    }
+
+    fn scroll_logs_up(&mut self, amount: usize) {
+        self.log_scroll = self.log_scroll.saturating_add(amount);
+    }
+
+    fn scroll_logs_down(&mut self, amount: usize) {
+        self.log_scroll = self.log_scroll.saturating_sub(amount);
     }
 
     fn clamp_repo_selection(&mut self) {
@@ -550,7 +609,28 @@ async fn run_loop(
     loop {
         tokio::select! {
             maybe_event = term_events.next().fuse() => {
-                if let Some(Ok(CtEvent::Key(key))) = maybe_event {
+                if let Some(Ok(event)) = maybe_event {
+                    if let CtEvent::Mouse(mouse) = event {
+                        match mouse.kind {
+                            MouseEventKind::ScrollUp if state.validated_source_visible => {
+                                state.code_scroll_y = state.code_scroll_y.saturating_sub(3);
+                            }
+                            MouseEventKind::ScrollDown if state.validated_source_visible => {
+                                state.code_scroll_y = state.code_scroll_y.saturating_add(3);
+                            }
+                            MouseEventKind::ScrollUp if state.main_output_active() => {
+                                state.scroll_logs_up(3);
+                            }
+                            MouseEventKind::ScrollDown if state.main_output_active() => {
+                                state.scroll_logs_down(3);
+                            }
+                            _ => {}
+                        }
+                        continue;
+                    }
+                    let CtEvent::Key(key) = event else {
+                        continue;
+                    };
                     if state.prompt_active {
                         match key.code {
                             KeyCode::Esc => {
@@ -586,6 +666,37 @@ async fn run_loop(
                                 if state.prompt.is_empty()
                                     && state.select_numbered_option(digit) => {}
                             KeyCode::Char(character) => state.prompt.push(character),
+                            _ => {}
+                        }
+                        continue;
+                    }
+                    if state.validated_source_visible {
+                        match key.code {
+                            KeyCode::Esc | KeyCode::Char('v') => {
+                                state.validated_source_visible = false;
+                            }
+                            KeyCode::Up => {
+                                state.code_scroll_y = state.code_scroll_y.saturating_sub(1);
+                            }
+                            KeyCode::Down => {
+                                state.code_scroll_y = state.code_scroll_y.saturating_add(1);
+                            }
+                            KeyCode::PageUp => {
+                                state.code_scroll_y = state.code_scroll_y.saturating_sub(20);
+                            }
+                            KeyCode::PageDown => {
+                                state.code_scroll_y = state.code_scroll_y.saturating_add(20);
+                            }
+                            KeyCode::Left => {
+                                state.code_scroll_x = state.code_scroll_x.saturating_sub(4);
+                            }
+                            KeyCode::Right => {
+                                state.code_scroll_x = state.code_scroll_x.saturating_add(4);
+                            }
+                            KeyCode::Home => {
+                                state.code_scroll_y = 0;
+                                state.code_scroll_x = 0;
+                            }
                             _ => {}
                         }
                         continue;
@@ -630,6 +741,10 @@ async fn run_loop(
                             .await?;
                             state.mode = AppMode::Executing;
                             state.running = true;
+                            state.validated_source = None;
+                            state.validated_source_visible = false;
+                            state.code_scroll_y = 0;
+                            state.code_scroll_x = 0;
                             state
                                 .logs
                                 .push("approved spec sent to the execution pipeline".into());
@@ -736,6 +851,29 @@ async fn run_loop(
                             }
                             state.history_detail = None;
                         }
+                        KeyCode::Char('v') if state.validated_source.is_some() => {
+                            state.validated_source_visible = true;
+                            state.code_scroll_y = 0;
+                            state.code_scroll_x = 0;
+                        }
+                        KeyCode::Up if state.main_output_active() => {
+                            state.scroll_logs_up(1);
+                        }
+                        KeyCode::Down if state.main_output_active() => {
+                            state.scroll_logs_down(1);
+                        }
+                        KeyCode::PageUp if state.main_output_active() => {
+                            state.scroll_logs_up(20);
+                        }
+                        KeyCode::PageDown if state.main_output_active() => {
+                            state.scroll_logs_down(20);
+                        }
+                        KeyCode::Home if state.main_output_active() => {
+                            state.log_scroll = usize::MAX;
+                        }
+                        KeyCode::End if state.main_output_active() => {
+                            state.log_scroll = 0;
+                        }
                         KeyCode::Enter if state.history_visible => {
                             let run_id = state
                                 .history_runs
@@ -823,26 +961,33 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState, mermaid: &mut MermaidView)
 
     frame.render_widget(activity_status_line(state), rows[0]);
 
-    let items: Vec<ListItem> = state
+    let log_lines: Vec<Line> = state
         .logs
         .iter()
-        .rev()
-        .take(200)
-        .rev()
-        .map(|line| styled_log_item(line))
+        .flat_map(|line| styled_log_lines(line))
         .collect();
-    let main_active = !state.prompt_active
-        && !state.repo_focused
-        && !state.history_visible
-        && !matches!(
-            state.mode,
-            AppMode::Questionnaire | AppMode::SpecReview { .. }
-        );
+    let viewport_height = usize::from(top[0].height.saturating_sub(2));
+    let max_log_offset = log_lines.len().saturating_sub(viewport_height);
+    let from_bottom = state.log_scroll.min(max_log_offset);
+    let log_offset = max_log_offset
+        .saturating_sub(from_bottom)
+        .min(u16::MAX as usize) as u16;
+    let main_active = state.main_output_active();
+    let scroll_status = if from_bottom == 0 {
+        "follow".to_owned()
+    } else {
+        format!("{from_bottom} line(s) back")
+    };
     frame.render_widget(
-        List::new(items).block(pane_block(
-            format!(" main output · {} · {}% ", state.engine, state.pct),
-            main_active,
-        )),
+        Paragraph::new(Text::from(log_lines))
+            .scroll((log_offset, 0))
+            .block(pane_block(
+                format!(
+                    " main output · {} · {}% · {scroll_status} · Up/Down/PgUp/PgDn · End follow ",
+                    state.engine, state.pct
+                ),
+                main_active,
+            )),
         top[0],
     );
     let repo_title = format!(
@@ -986,6 +1131,10 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState, mermaid: &mut MermaidView)
             frame.render_widget(List::new(items), inner);
         }
     }
+
+    if state.validated_source_visible {
+        draw_validated_source(frame, state);
+    }
 }
 
 fn draw_questionnaire(frame: &mut ratatui::Frame, state: &AppState) {
@@ -1102,7 +1251,7 @@ fn pane_block<'a>(title: impl Into<Line<'a>>, active: bool) -> Block<'a> {
         }))
 }
 
-fn styled_log_item(line: &str) -> ListItem<'static> {
+fn styled_log_lines(line: &str) -> Vec<Line<'static>> {
     let role = [
         ("[you] ", Color::Green, Color::White),
         ("[assistant] ", Color::Cyan, Color::LightCyan),
@@ -1115,7 +1264,10 @@ fn styled_log_item(line: &str) -> ListItem<'static> {
     .find(|(prefix, _, _)| line.starts_with(prefix));
 
     let Some((prefix, prefix_color, content_color)) = role else {
-        return ListItem::new(line.to_owned());
+        return line
+            .lines()
+            .map(|value| Line::raw(value.to_owned()))
+            .collect();
     };
     let content = &line[prefix.len()..];
     let mut source_lines = content.lines();
@@ -1136,7 +1288,56 @@ fn styled_log_item(line: &str) -> ListItem<'static> {
             Span::styled(continuation.to_owned(), Style::default().fg(content_color)),
         ])
     }));
-    ListItem::new(Text::from(rendered))
+    rendered
+}
+
+fn draw_validated_source(frame: &mut ratatui::Frame, state: &AppState) {
+    let Some(source) = state.validated_source.as_deref() else {
+        return;
+    };
+    let area = centered_rect(92, 90, frame.area());
+    frame.render_widget(Clear, area);
+    let artifact = if state.validated_artifact_path.is_empty() {
+        String::new()
+    } else {
+        format!(" · {}", state.validated_artifact_path)
+    };
+    frame.render_widget(
+        pane_block(
+            format!(
+                " Validated code · {}{artifact} · arrows/PgUp/PgDn scroll · v/Esc close ",
+                state.validated_language
+            ),
+            true,
+        ),
+        area,
+    );
+    let inner = Rect {
+        x: area.x + 1,
+        y: area.y + 1,
+        width: area.width.saturating_sub(2),
+        height: area.height.saturating_sub(2),
+    };
+    let source_lines: Vec<Line> = source
+        .lines()
+        .enumerate()
+        .map(|(index, line)| {
+            Line::from(vec![
+                Span::styled(
+                    format!("{:>4} ", index + 1),
+                    Style::default().fg(Color::DarkGray),
+                ),
+                Span::styled(line.to_owned(), Style::default().fg(Color::White)),
+            ])
+        })
+        .collect();
+    let max_y = source_lines.len().saturating_sub(usize::from(inner.height));
+    let scroll_y = state.code_scroll_y.min(max_y).min(u16::MAX as usize) as u16;
+    let scroll_x = state.code_scroll_x.min(u16::MAX as usize) as u16;
+    frame.render_widget(
+        Paragraph::new(Text::from(source_lines)).scroll((scroll_y, scroll_x)),
+        inner,
+    );
 }
 
 fn draw_spec_review(frame: &mut ratatui::Frame, spec_text: &str) {
@@ -1272,6 +1473,37 @@ mod tests {
         });
         assert_eq!(state.mode, AppMode::Chat);
         assert!(!state.running);
+    }
+
+    #[test]
+    fn validated_source_opens_a_reusable_code_view() {
+        let mut state = AppState::default();
+        state.apply(HarnessEvent::ValidatedSource {
+            language: "python".into(),
+            source: "def main():\n    return 0\n".into(),
+            artifact_path: "artifacts/runs/example".into(),
+        });
+
+        assert!(state.validated_source_visible);
+        assert_eq!(
+            state.validated_source.as_deref(),
+            Some("def main():\n    return 0\n")
+        );
+        assert_eq!(state.validated_language, "python");
+        assert!(state.logs.last().unwrap().contains("press v"));
+    }
+
+    #[test]
+    fn output_scroll_is_saturating_and_new_logs_preserve_history_position() {
+        let mut state = AppState::default();
+        state.scroll_logs_up(12);
+        state.apply(HarnessEvent::Log {
+            level: "info".into(),
+            msg: "new output".into(),
+        });
+        assert_eq!(state.log_scroll, 13);
+        state.scroll_logs_down(50);
+        assert_eq!(state.log_scroll, 0);
     }
 
     #[test]

@@ -22,11 +22,27 @@ from scripts.run_structured_spec import (
     _single_contract_prompt,
     _validate_contract_source,
     _validate_structured_spec_output,
+    _validated_source_event,
 )
 from harness_kernel.function_contracts import ContractQueue, ContractQueuePlan, DealExample, FunctionContract
 
 
 class StructuredSpecRunnerTests(unittest.TestCase):
+    def test_validated_source_event_requires_completed_final_status(self) -> None:
+        source = "def main():\n    return 0\n"
+        self.assertEqual(
+            _validated_source_event(source, "python", "completed", "artifacts/run-1"),
+            {
+                "type": "validated_source",
+                "language": "python",
+                "source": source,
+                "artifact_path": "artifacts/run-1",
+            },
+        )
+        self.assertIsNone(
+            _validated_source_event(source, "python", "manual_review_required", "")
+        )
+
     def test_plan_mode_extracts_markdown_structured_spec(self) -> None:
         prompt = """
 ## App Spec
