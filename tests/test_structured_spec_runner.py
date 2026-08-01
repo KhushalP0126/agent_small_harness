@@ -1,3 +1,4 @@
+import os
 import unittest
 from unittest.mock import PropertyMock, patch
 
@@ -156,6 +157,19 @@ class StructuredSpecRunnerTests(unittest.TestCase):
         self.assertEqual(issues[0]["kind"], "contract_missing_import_symbol")
         self.assertEqual(issues[0]["details"], "os.nonexistent_api")
 
+    def test_contract_examples_do_not_receive_parent_api_keys(self) -> None:
+        contract = FunctionContract(
+            name="read_secret",
+            signature="def read_secret()",
+            examples=[DealExample("read_secret()", "None")],
+        )
+        source = "import os\n\ndef read_secret():\n    return os.environ.get('DEEPSEEK_API_KEY')\n"
+
+        with patch.dict(os.environ, {"DEEPSEEK_API_KEY": "must-not-leak"}):
+            issues = _validate_contract_source(source, contract)
+
+        self.assertEqual(issues, [])
+
     def test_downstream_prompt_includes_accepted_immutable_field_types(self) -> None:
         accepted = """
 class Ball:
@@ -264,6 +278,31 @@ if __name__ == "__main__":
 
         self.assertTrue(result["is_compliant"])
         self.assertEqual(result["status"], "running_after_smoke_window")
+
+    def test_integration_smoke_does_not_receive_parent_api_keys(self) -> None:
+        plan = PlanModeAgent().plan(
+            """
+## App Spec
+
+- language: python
+
+## Entrypoint
+
+- `main()`
+"""
+        )
+        source = """
+import os
+
+if os.environ.get("DEEPSEEK_API_KEY"):
+    raise RuntimeError("secret leaked")
+"""
+
+        with patch.dict(os.environ, {"DEEPSEEK_API_KEY": "must-not-leak"}):
+            result = _run_integration_smoke_test(source, plan, timeout_seconds=0.5)
+
+        self.assertTrue(result["is_compliant"])
+        self.assertEqual(result["status"], "exited_cleanly")
 
     def test_structured_spec_gets_generic_fallback_contract_queue(self) -> None:
         plan = PlanModeAgent().plan(

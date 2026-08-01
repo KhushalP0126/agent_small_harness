@@ -4,12 +4,17 @@ import ast
 import contextlib
 import io
 import multiprocessing as mp
+import os
 import queue
+import tempfile
 import time
 import traceback
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field
+from pathlib import Path
 from typing import Any
+
+from harness_kernel.local_sandbox import sanitized_environment
 
 
 DEFAULT_BEHAVIOR_TIMEOUT_SECONDS = 1.0
@@ -275,7 +280,13 @@ def _multiprocessing_context() -> mp.context.BaseContext:
 
 
 def _trace_worker(source: str, spec: FunctionBehaviorSpec, result_queue: Any) -> None:
-    result_queue.put(serialize_execution_trace(_execute_behavior_trace_inline(source, spec)))
+    with tempfile.TemporaryDirectory(prefix="agent-harness-behavior-") as temp_dir:
+        scratch_dir = Path(temp_dir)
+        child_environment = sanitized_environment(scratch_dir)
+        os.environ.clear()
+        os.environ.update(child_environment)
+        os.chdir(scratch_dir)
+        result_queue.put(serialize_execution_trace(_execute_behavior_trace_inline(source, spec)))
 
 
 def _deserialize_execution_trace(payload: dict[str, Any]) -> ExecutionTrace:

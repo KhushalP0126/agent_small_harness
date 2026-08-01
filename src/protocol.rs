@@ -18,6 +18,9 @@ pub enum HarnessCommand {
     Chat {
         text: String,
     },
+    QuestionnaireComplete {
+        answers: Vec<QuestionnaireAnswer>,
+    },
     DraftSpec,
     ExecuteSpec {
         text: String,
@@ -99,6 +102,24 @@ pub struct VariableEntry {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct QuestionOption {
+    pub id: u8,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ClarificationQuestion {
+    pub question_text: String,
+    pub options: Vec<QuestionOption>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct QuestionnaireAnswer {
+    pub question_text: String,
+    pub answer: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum HarnessEvent {
     Ready {
@@ -125,6 +146,9 @@ pub enum HarnessEvent {
     ChatMessage {
         role: String,
         content: String,
+    },
+    Questionnaire {
+        questions: Vec<ClarificationQuestion>,
     },
     ChatError {
         stage: String,
@@ -256,6 +280,21 @@ mod tests {
                 role: "assistant".into(),
                 content: "What should we build?".into(),
             },
+            HarnessEvent::Questionnaire {
+                questions: vec![ClarificationQuestion {
+                    question_text: "Choose a target".into(),
+                    options: vec![
+                        QuestionOption {
+                            id: 1,
+                            text: "CLI".into(),
+                        },
+                        QuestionOption {
+                            id: 2,
+                            text: "Other".into(),
+                        },
+                    ],
+                }],
+            },
             HarnessEvent::ChatError {
                 stage: "chat".into(),
                 message: "offline".into(),
@@ -363,6 +402,12 @@ mod tests {
             },
             HarnessCommand::Chat {
                 text: "Help me plan a parser".into(),
+            },
+            HarnessCommand::QuestionnaireComplete {
+                answers: vec![QuestionnaireAnswer {
+                    question_text: "Choose a target".into(),
+                    answer: "CLI".into(),
+                }],
             },
             HarnessCommand::DraftSpec,
             HarnessCommand::ExecuteSpec {

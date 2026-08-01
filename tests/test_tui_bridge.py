@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from agents.artifact_manager import ArtifactManager
+from agents.plan_mode import PlanModeAgent
 from harness_kernel.event_stream import EVENT_FD_ENV, event_sink_from_env
 from harness_kernel.tui_bridge import (
     Bridge,
@@ -15,8 +16,33 @@ from harness_kernel.tui_bridge import (
     _architect_error_event,
     _contract_event_from_line,
     _dotenv_values,
+    _parse_questionnaire_response,
+    _render_spec_sheet,
     _validated_args,
 )
+
+
+def completed_spec_sheet() -> str:
+    return json.dumps(
+        {
+            "app_spec": {
+                "name": "task_manager",
+                "language": "python",
+                "libraries": ["sqlite3"],
+                "kernel_mode": "generate_from_spec",
+            },
+            "goal": "Build a terminal task manager.",
+            "files": ["task_manager.py"],
+            "required_components": ["Task", "TaskStore", "main()"],
+            "entrypoints": ["main()"],
+            "dependency_graph": ["Task -> TaskStore", "TaskStore -> main"],
+            "state_rules": ["Completed tasks remain persisted."],
+            "interfaces": ["Read commands from the terminal."],
+            "constraints": ["Use sqlite3 from the standard library."],
+            "acceptance_examples": ["Adding a task shows it in the pending list."],
+            "validation": ["Run the unit test suite."],
+        }
+    )
 
 
 class TuiBridgeTests(unittest.TestCase):
@@ -196,6 +222,17 @@ class TuiBridgeTests(unittest.TestCase):
         self.assertIn("planner error", event["msg"])
         self.assertNotIn("DEEPSEEK_API_KEY", event["msg"])
 
+    def test_invalid_planner_response_warns_when_spec_queue_is_used(self) -> None:
+        event = _architect_error_event(
+            {
+                "architect_contract_error_code": "architect_contract_plan_invalid_json",
+                "architect_contract_error": "plan must contain an order",
+                "architect_contracts_fallback_used": True,
+            }
+        )
+        self.assertEqual(event["level"], "warning")
+        self.assertIn("validated spec-sheet contract queue", event["msg"])
+
     def test_forward_run_surfaces_error_from_multiline_json_summary(self) -> None:
         process = MagicMock()
         process.stdout = io.StringIO(
@@ -241,9 +278,85 @@ class TuiBridgeTests(unittest.TestCase):
         self.assertEqual(messages[-1]["role"], "assistant")
         self.assertIsNone(bridge._process)
 
+    def test_questionnaire_response_is_normalized_with_other_fallback(self) -> None:
+        message, questions = _parse_questionnaire_response(
+            json.dumps(
+                {
+                    "kind": "questionnaire",
+                    "message": "A few choices first.",
+                    "questions": [
+                        {
+                            "question_text": "Choose a surface",
+                            "options": ["CLI", "TUI", "Other", "TUI"],
+                        },
+                        {
+                            "question_text": "Choose storage",
+                            "options": ["JSON", "SQLite"],
+                        },
+                    ],
+                }
+            )
+        )
+
+        self.assertEqual(message, "A few choices first.")
+        self.assertEqual(len(questions), 2)
+        self.assertEqual(
+            [option["text"] for option in questions[0]["options"]],
+            ["CLI", "TUI", "Other"],
+        )
+        self.assertEqual(questions[1]["options"][-1]["text"], "Other")
+
+    def test_project_chat_emits_typed_questionnaire(self) -> None:
+        client = MagicMock()
+        client.generate.return_value = json.dumps(
+            {
+                "kind": "questionnaire",
+                "message": "Let me clarify the project.",
+                "questions": [
+                    {"question_text": "Target?", "options": ["CLI", "Web"]},
+                    {"question_text": "Storage?", "options": ["JSON", "SQLite"]},
+                ],
+            }
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bridge = Bridge(
+                EventWriter(self.output),
+                memory_path=Path(tmpdir) / "memory.json",
+                architect_client=client,
+            )
+            bridge.start_chat("Build a task manager")
+            event = self.wait_for_event("questionnaire")
+
+        self.assertEqual(len(event["questions"]), 2)
+        self.assertEqual(event["questions"][0]["options"][-1]["text"], "Other")
+        self.assertIsNone(bridge._process)
+
+    def test_questionnaire_completion_drafts_spec_without_execution(self) -> None:
+        client = MagicMock()
+        client.generate.return_value = completed_spec_sheet()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bridge = Bridge(
+                EventWriter(self.output),
+                memory_path=Path(tmpdir) / "memory.json",
+                architect_client=client,
+            )
+            bridge.complete_questionnaire(
+                [
+                    {"question_text": "Target?", "answer": "TUI"},
+                    {"question_text": "Storage?", "answer": "SQLite"},
+                ]
+            )
+            event = self.wait_for_event("spec_draft")
+
+        self.assertTrue(event["text"].startswith("# Execution Spec Sheet"))
+        self.assertIn("## Required Components\n\n- `Task`", event["text"])
+        self.assertIn("QUESTIONNAIRE ANSWERS", client.generate.call_args.args[0])
+        self.assertIn("Fill every field", client.generate.call_args.args[0])
+        self.assertIsNone(bridge._process)
+
     def test_draft_spec_uses_chat_history_without_executing(self) -> None:
         client = MagicMock()
-        client.generate.side_effect = ["Let's plan it.", "# Spec\n\nBuild a parser."]
+        client.generate.side_effect = ["Let's plan it.", completed_spec_sheet()]
         with tempfile.TemporaryDirectory() as tmpdir:
             bridge = Bridge(
                 EventWriter(self.output),
@@ -257,8 +370,32 @@ class TuiBridgeTests(unittest.TestCase):
                 time.sleep(0.01)
             bridge.start_spec_draft()
             event = self.wait_for_event("spec_draft")
-        self.assertTrue(event["text"].startswith("# Spec"))
+        self.assertTrue(event["text"].startswith("# Execution Spec Sheet"))
         self.assertIsNone(bridge._process)
+
+    def test_completed_spec_sheet_is_parseable_by_plan_mode(self) -> None:
+        rendered = _render_spec_sheet(completed_spec_sheet())
+        plan = PlanModeAgent().plan(rendered)
+
+        self.assertEqual(plan.app_name, "task_manager")
+        self.assertEqual(plan.files, ["task_manager.py"])
+        self.assertEqual(plan.components, ["`Task`", "`TaskStore`", "`main()`"])
+        self.assertEqual(plan.entrypoints, ["`main()`"])
+        self.assertEqual(
+            plan.dependency_graph_context,
+            ["Task -> TaskStore", "TaskStore -> main"],
+        )
+
+    def test_invalid_spec_sheet_is_rejected_before_review(self) -> None:
+        with self.assertRaisesRegex(ValueError, "required_components"):
+            _render_spec_sheet(
+                json.dumps(
+                    {
+                        **json.loads(completed_spec_sheet()),
+                        "required_components": [],
+                    }
+                )
+            )
 
     def test_execute_spec_is_the_only_command_that_starts_structured_run(self) -> None:
         with patch.object(self.bridge, "start_run") as start_run:

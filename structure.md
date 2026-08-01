@@ -72,7 +72,7 @@ agents; they prepare, route, validate, and record work.
 - `agents/parse_contract.py` - Language detection and parser gate.
 - `agents/engine_registry.py` - Routes parseable source to the registered engine set and dispatches lint through the typed tool registry when one is configured.
 - `agents/generation_controller.py` - Main loop for drafting, validation, repair, branch-loop detection, architect fallback, resumable checkpoint state, bounded advisory history injection, prompt summarization, and final status. It runs behavior execution after parsing, emits compilation events, invokes an optional profiling runner, records trace/profile evidence per attempt, and dispatches formal checks through the typed tool registry.
-- `agents/execution_agent.py` - Runs a parsed draft against its behavior examples in the isolated sandbox and returns an `ExecutionTrace` for the behavior gate and debugger hook.
+- `agents/execution_agent.py` - Runs a parsed draft against its behavior examples in the sanitized, disposable local subprocess boundary and returns an `ExecutionTrace` for the behavior gate and debugger hook.
 - `agents/repair_strategy.py` - Turns validation failures into targeted repair directives.
 - `agents/behavior_spec.py` - Loads behavior specs from `data/behavior_cases.json`.
 - `agents/historian.py` - Records raw runs, aggregates route statistics, and retrieves a bounded set of lexically similar past attempts for optional advisory prompt context.
@@ -116,7 +116,8 @@ instead of replacing it.
 - `harness_kernel/execution_kernel.py` - Thin wrapper that delegates `TaskIR` execution to `GenerationController`.
 - `harness_kernel/tool_registry.py` - Typed named-tool dispatch boundary with uniform success and failure results.
 - `harness_kernel/tool_handlers.py` - Typed lint, execution-sandbox, Ollama-generation, architect-generation, and Deal/CrossHair formal-verification handlers wrapping the existing implementations.
-- `harness_kernel/tui_bridge.py` - Versioned JSON-lines subprocess bridge used by the Rust TUI; allowlists CLI launches and emits typed repo-map, compilation, profiling, and Compute Shield events.
+- `harness_kernel/local_sandbox.py` - Sanitized, disposable, resource-limited local Python subprocess boundary used by generated-code validation and smoke execution; explicitly not a replacement for container/OS isolation.
+- `harness_kernel/tui_bridge.py` - Versioned JSON-lines subprocess bridge used by the Rust TUI; owns questionnaire normalization, chat/spec model calls, allowlisted CLI launches, and typed repo-map, compilation, profiling, and Compute Shield events.
 - `harness_kernel/event_stream.py` - Optional inherited file-descriptor event sink that keeps controller JSON events separate from human-readable CLI stdout.
 - `harness_kernel/profiling.py` - Opt-in repeated behavioral profiler with median/spread evidence, optional cache counters, a noise floor, and slower-selection findings.
 - `harness_kernel/compute_shield.py` - Exact per-task and aggregate baseline-versus-shielded token accounting; evaluation evidence rather than a validation gate.

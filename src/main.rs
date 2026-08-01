@@ -17,12 +17,14 @@ use crossterm::{
 use futures::{FutureExt, StreamExt};
 use mermaid_view::MermaidView;
 use protocol::{
-    read_harness_events, FileEntry, HarnessCommand, HarnessEvent, RunSummary, VariableEntry,
+    read_harness_events, ClarificationQuestion, FileEntry, HarnessCommand, HarnessEvent,
+    QuestionnaireAnswer, RunSummary, VariableEntry,
 };
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
+    text::{Line, Span, Text},
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap},
     Terminal,
 };
@@ -35,6 +37,7 @@ use tokio::{
 #[derive(Debug, Clone, PartialEq)]
 enum AppMode {
     Chat,
+    Questionnaire,
     DraftingSpec,
     SpecReview { spec_text: String },
     Executing,
@@ -44,6 +47,7 @@ impl AppMode {
     fn label(&self) -> &'static str {
         match self {
             Self::Chat => "chat",
+            Self::Questionnaire => "questionnaire",
             Self::DraftingSpec => "drafting spec",
             Self::SpecReview { .. } => "spec review",
             Self::Executing => "executing",
@@ -73,6 +77,12 @@ struct AppState {
     prompt: String,
     prompt_active: bool,
     assistant_busy: bool,
+    numbered_options_available: bool,
+    clarification_questions: Vec<ClarificationQuestion>,
+    clarification_index: usize,
+    clarification_answers: Vec<QuestionnaireAnswer>,
+    questionnaire_other_active: bool,
+    activity_tick: usize,
     deepseek_configured: bool,
     deepseek_source: String,
     memory_path: String,
@@ -102,6 +112,12 @@ impl Default for AppState {
             prompt: String::new(),
             prompt_active: false,
             assistant_busy: false,
+            numbered_options_available: false,
+            clarification_questions: Vec::new(),
+            clarification_index: 0,
+            clarification_answers: Vec::new(),
+            questionnaire_other_active: false,
+            activity_tick: 0,
             deepseek_configured: false,
             deepseek_source: "checking".into(),
             memory_path: ".tui_memory.json".into(),
@@ -151,7 +167,29 @@ impl AppState {
             }
             HarnessEvent::ChatMessage { role, content } => {
                 let label = if role == "user" { "you" } else { "assistant" };
+                if role == "assistant" {
+                    self.numbered_options_available = contains_numbered_options(&content);
+                } else {
+                    self.numbered_options_available = false;
+                }
                 self.logs.push(format!("[{label}] {content}"));
+            }
+            HarnessEvent::Questionnaire { questions } => {
+                if questions.is_empty() {
+                    self.logs
+                        .push("[protocol warning] questionnaire contained no questions".into());
+                    return;
+                }
+                self.clarification_questions = questions;
+                self.clarification_index = 0;
+                self.clarification_answers.clear();
+                self.questionnaire_other_active = false;
+                self.numbered_options_available = false;
+                self.mode = AppMode::Questionnaire;
+                self.logs.push(format!(
+                    "[assistant] questionnaire ready · {} clarification question(s)",
+                    self.clarification_questions.len()
+                ));
             }
             HarnessEvent::ChatError { stage, message } => {
                 self.assistant_busy = false;
@@ -163,6 +201,9 @@ impl AppState {
                 self.assistant_busy = false;
                 self.engine = "idle".into();
                 self.mode = AppMode::SpecReview { spec_text: text };
+                self.clarification_questions.clear();
+                self.clarification_answers.clear();
+                self.questionnaire_other_active = false;
                 self.logs
                     .push("spec draft ready; review it and press y to execute or n to revise".into());
             }
@@ -334,6 +375,84 @@ impl AppState {
             _ => self.repo_content.clone(),
         }
     }
+
+    fn select_numbered_option(&mut self, digit: char) -> bool {
+        if !self.numbered_options_available
+            || self.mode != AppMode::Chat
+            || self.assistant_busy
+            || !(('1'..='5').contains(&digit))
+        {
+            return false;
+        }
+        self.prompt = format!("{digit}. ");
+        self.prompt_active = true;
+        true
+    }
+
+    fn choose_questionnaire_option(&mut self, digit: char) -> QuestionnaireAction {
+        if self.mode != AppMode::Questionnaire || self.assistant_busy {
+            return QuestionnaireAction::Ignored;
+        }
+        let Some(question) = self.clarification_questions.get(self.clarification_index) else {
+            return QuestionnaireAction::Ignored;
+        };
+        let Some(option) = question
+            .options
+            .iter()
+            .find(|option| char::from_digit(u32::from(option.id), 10) == Some(digit))
+        else {
+            return QuestionnaireAction::Ignored;
+        };
+        if option.text.eq_ignore_ascii_case("other") {
+            self.prompt.clear();
+            self.prompt_active = true;
+            self.questionnaire_other_active = true;
+            return QuestionnaireAction::AwaitingOther;
+        }
+        self.record_questionnaire_answer(option.text.clone())
+    }
+
+    fn record_questionnaire_answer(&mut self, answer: String) -> QuestionnaireAction {
+        let Some(question) = self.clarification_questions.get(self.clarification_index) else {
+            return QuestionnaireAction::Ignored;
+        };
+        self.clarification_answers.push(QuestionnaireAnswer {
+            question_text: question.question_text.clone(),
+            answer,
+        });
+        self.clarification_index += 1;
+        self.questionnaire_other_active = false;
+        self.prompt_active = false;
+        self.prompt.clear();
+        if self.clarification_index >= self.clarification_questions.len() {
+            QuestionnaireAction::Complete(self.clarification_answers.clone())
+        } else {
+            QuestionnaireAction::Advanced
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+enum QuestionnaireAction {
+    Ignored,
+    AwaitingOther,
+    Advanced,
+    Complete(Vec<QuestionnaireAnswer>),
+}
+
+fn contains_numbered_options(content: &str) -> bool {
+    let mut seen = [false; 5];
+    for line in content.lines() {
+        let mut chars = line.trim_start().chars();
+        let Some(digit @ '1'..='5') = chars.next() else {
+            continue;
+        };
+        if !matches!(chars.next(), Some('.' | ')' | ':')) {
+            continue;
+        }
+        seen[(digit as u8 - b'1') as usize] = true;
+    }
+    seen.into_iter().filter(|present| *present).count() >= 2
 }
 
 fn indented_or_none(values: &[String]) -> String {
@@ -434,21 +553,67 @@ async fn run_loop(
                 if let Some(Ok(CtEvent::Key(key))) = maybe_event {
                     if state.prompt_active {
                         match key.code {
-                            KeyCode::Esc => state.prompt_active = false,
+                            KeyCode::Esc => {
+                                state.prompt_active = false;
+                                state.questionnaire_other_active = false;
+                                state.prompt.clear();
+                            }
                             KeyCode::Backspace => {
                                 state.prompt.pop();
+                            }
+                            KeyCode::Enter
+                                if state.questionnaire_other_active
+                                    && !state.prompt.trim().is_empty() =>
+                            {
+                                let answer = state.prompt.trim().to_owned();
+                                if let QuestionnaireAction::Complete(answers) =
+                                    state.record_questionnaire_answer(answer)
+                                {
+                                    send_command(
+                                        child_stdin,
+                                        &HarnessCommand::QuestionnaireComplete { answers },
+                                    )
+                                    .await?;
+                                    state.mode = AppMode::DraftingSpec;
+                                }
                             }
                             KeyCode::Enter if !state.prompt.trim().is_empty() && !state.assistant_busy => {
                                 let text = std::mem::take(&mut state.prompt);
                                 send_command(child_stdin, &HarnessCommand::Chat { text }).await?;
                                 state.prompt_active = false;
                             }
+                            KeyCode::Char(digit @ '1'..='5')
+                                if state.prompt.is_empty()
+                                    && state.select_numbered_option(digit) => {}
                             KeyCode::Char(character) => state.prompt.push(character),
                             _ => {}
                         }
                         continue;
                     }
                     match key.code {
+                        KeyCode::Char(digit @ '1'..='5')
+                            if state.mode == AppMode::Questionnaire =>
+                        {
+                            if let QuestionnaireAction::Complete(answers) =
+                                state.choose_questionnaire_option(digit)
+                            {
+                                send_command(
+                                    child_stdin,
+                                    &HarnessCommand::QuestionnaireComplete { answers },
+                                )
+                                .await?;
+                                state.mode = AppMode::DraftingSpec;
+                            }
+                        }
+                        KeyCode::Esc if state.mode == AppMode::Questionnaire => {
+                            state.mode = AppMode::Chat;
+                            state.clarification_questions.clear();
+                            state.clarification_answers.clear();
+                            state.logs.push(
+                                "questionnaire cancelled; continue refining the idea in chat"
+                                    .into(),
+                            );
+                        }
                         KeyCode::Char('q') => {
                             send_command(child_stdin, &HarnessCommand::Cancel).await?;
                             break;
@@ -515,6 +680,8 @@ async fn run_loop(
                         {
                             state.prompt_active = true;
                         }
+                        KeyCode::Char(digit @ '1'..='5')
+                            if state.select_numbered_option(digit) => {}
                         KeyCode::Char('m') => {
                             state.repo_focused = true;
                             state.repo_mode = "diagram".into();
@@ -619,6 +786,7 @@ async fn run_loop(
                 }
             }
             _ = tick.tick() => {
+                state.activity_tick = state.activity_tick.wrapping_add(1);
                 terminal.draw(|frame| draw(frame, &state, mermaid))?;
                 mermaid.write_protocol(terminal.backend_mut())?;
             }
@@ -638,16 +806,22 @@ async fn send_command(stdin: &mut ChildStdin, command: &HarnessCommand) -> Resul
 fn draw(frame: &mut ratatui::Frame, state: &AppState, mermaid: &mut MermaidView) {
     let rows = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(0), Constraint::Length(7)])
+        .constraints([
+            Constraint::Length(1),
+            Constraint::Min(0),
+            Constraint::Length(7),
+        ])
         .split(frame.area());
     let top =
-        Layout::horizontal([Constraint::Percentage(75), Constraint::Percentage(25)]).split(rows[0]);
+        Layout::horizontal([Constraint::Percentage(75), Constraint::Percentage(25)]).split(rows[1]);
     let bottom = Layout::horizontal([
         Constraint::Percentage(20),
         Constraint::Percentage(55),
         Constraint::Percentage(25),
     ])
-    .split(rows[1]);
+    .split(rows[2]);
+
+    frame.render_widget(activity_status_line(state), rows[0]);
 
     let items: Vec<ListItem> = state
         .logs
@@ -655,27 +829,20 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState, mermaid: &mut MermaidView)
         .rev()
         .take(200)
         .rev()
-        .map(|line| {
-            let style = if line.starts_with("[error]") {
-                Style::default()
-                    .fg(Color::LightRed)
-                    .add_modifier(Modifier::BOLD)
-            } else if line.starts_with("[warning]") || line.starts_with("[protocol warning]") {
-                Style::default()
-                    .fg(Color::Yellow)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default()
-            };
-            ListItem::new(line.as_str()).style(style)
-        })
+        .map(|line| styled_log_item(line))
         .collect();
+    let main_active = !state.prompt_active
+        && !state.repo_focused
+        && !state.history_visible
+        && !matches!(
+            state.mode,
+            AppMode::Questionnaire | AppMode::SpecReview { .. }
+        );
     frame.render_widget(
-        List::new(items).block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(format!("main output · {} · {}%", state.engine, state.pct)),
-        ),
+        List::new(items).block(pane_block(
+            format!(" main output · {} · {}% ", state.engine, state.pct),
+            main_active,
+        )),
         top[0],
     );
     let repo_title = format!(
@@ -686,7 +853,7 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState, mermaid: &mut MermaidView)
     frame.render_widget(
         Paragraph::new(state.selected_repo_detail())
             .wrap(Wrap { trim: false })
-            .block(Block::default().borders(Borders::ALL).title(repo_title)),
+            .block(pane_block(repo_title, state.repo_focused)),
         top[1],
     );
 
@@ -704,10 +871,12 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState, mermaid: &mut MermaidView)
         state.context_content
     );
     frame.render_widget(
-        Paragraph::new(context).block(Block::default().borders(Borders::ALL).title("context")),
+        Paragraph::new(context).block(pane_block(" context ", false)),
         bottom[0],
     );
-    let prompt_title = if state.prompt_active {
+    let prompt_title = if state.questionnaire_other_active {
+        " Other answer · type a custom response · Enter confirm · Esc options "
+    } else if state.prompt_active {
         "Chat · Enter sends message only · Esc cancels input"
     } else if state.assistant_busy {
         "Chat · DeepSeek is responding"
@@ -726,8 +895,7 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState, mermaid: &mut MermaidView)
         state.prompt.as_str()
     };
     frame.render_widget(
-        Paragraph::new(prompt_text)
-            .block(Block::default().borders(Borders::ALL).title(prompt_title)),
+        Paragraph::new(prompt_text).block(pane_block(prompt_title, state.prompt_active)),
         bottom[1],
     );
     frame.render_widget(
@@ -736,7 +904,7 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState, mermaid: &mut MermaidView)
             state.memory_path, state.preference_count
         ))
         .wrap(Wrap { trim: true })
-        .block(Block::default().borders(Borders::ALL).title("settings")),
+        .block(pane_block(" settings ", false)),
         bottom[2],
     );
 
@@ -747,7 +915,7 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState, mermaid: &mut MermaidView)
             "Repository diagram · {} · Esc/m to close",
             mermaid.status_label()
         );
-        frame.render_widget(Block::default().borders(Borders::ALL).title(title), area);
+        frame.render_widget(pane_block(title, true), area);
         let inner = Rect {
             x: area.x + 1,
             y: area.y + 1,
@@ -769,6 +937,10 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState, mermaid: &mut MermaidView)
         draw_spec_review(frame, spec_text);
     }
 
+    if state.mode == AppMode::Questionnaire {
+        draw_questionnaire(frame, state);
+    }
+
     if state.history_visible {
         let area = centered_rect(86, 86, frame.area());
         frame.render_widget(Clear, area);
@@ -777,7 +949,7 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState, mermaid: &mut MermaidView)
         } else {
             "Run history · Up/Down select · Enter detail · Esc/d to close"
         };
-        frame.render_widget(Block::default().borders(Borders::ALL).title(title), area);
+        frame.render_widget(pane_block(title, true), area);
         let inner = Rect {
             x: area.x + 1,
             y: area.y + 1,
@@ -816,13 +988,165 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState, mermaid: &mut MermaidView)
     }
 }
 
+fn draw_questionnaire(frame: &mut ratatui::Frame, state: &AppState) {
+    let area = centered_rect(78, 72, frame.area());
+    frame.render_widget(Clear, area);
+    let total = state.clarification_questions.len();
+    let current = state.clarification_index.saturating_add(1).min(total);
+    frame.render_widget(
+        pane_block(
+            format!(" Clarify the project · question {current}/{total} · 1-5 choose · Esc cancel "),
+            true,
+        ),
+        area,
+    );
+    let inner = Rect {
+        x: area.x + 2,
+        y: area.y + 2,
+        width: area.width.saturating_sub(4),
+        height: area.height.saturating_sub(4),
+    };
+    let Some(question) = state.clarification_questions.get(state.clarification_index) else {
+        frame.render_widget(
+            Paragraph::new("No clarification question available."),
+            inner,
+        );
+        return;
+    };
+    let mut lines = vec![
+        Line::styled(
+            question.question_text.clone(),
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Line::raw(""),
+    ];
+    for option in &question.options {
+        lines.push(Line::from(vec![
+            Span::styled(
+                format!(" {} ", option.id),
+                Style::default()
+                    .fg(Color::Black)
+                    .bg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                format!("  {}", option.text),
+                Style::default().fg(if option.text.eq_ignore_ascii_case("other") {
+                    Color::Magenta
+                } else {
+                    Color::White
+                }),
+            ),
+        ]));
+        lines.push(Line::raw(""));
+    }
+    lines.push(Line::styled(
+        format!(
+            "{} answer(s) recorded · the final answer drafts a spec for review",
+            state.clarification_answers.len()
+        ),
+        Style::default().fg(Color::DarkGray),
+    ));
+    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
+}
+
+fn activity_status_line(state: &AppState) -> Paragraph<'static> {
+    let busy = state.assistant_busy || state.running;
+    let spinner = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+    let marker = if busy {
+        spinner[(state.activity_tick / 3) % spinner.len()]
+    } else {
+        "●"
+    };
+    let status = if state.assistant_busy {
+        format!("{} in progress", state.engine)
+    } else if state.running {
+        format!("{} · {}%", state.engine, state.pct)
+    } else {
+        format!("{} · ready", state.mode.label())
+    };
+    let shortcut = if state.mode == AppMode::Questionnaire {
+        " · press 1-5 to choose · Esc cancel"
+    } else if state.numbered_options_available {
+        " · 1-5 quick-select available"
+    } else {
+        ""
+    };
+    Paragraph::new(Line::from(vec![
+        Span::styled(
+            format!(" {marker} "),
+            Style::default()
+                .fg(if busy { Color::Black } else { Color::Cyan })
+                .bg(if busy { Color::Cyan } else { Color::Reset })
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            format!(" {status}{shortcut} "),
+            Style::default().fg(if busy { Color::LightCyan } else { Color::Gray }),
+        ),
+    ]))
+}
+
+fn pane_block<'a>(title: impl Into<Line<'a>>, active: bool) -> Block<'a> {
+    let color = if active { Color::Cyan } else { Color::DarkGray };
+    Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(color))
+        .title(title)
+        .title_style(Style::default().fg(color).add_modifier(if active {
+            Modifier::BOLD
+        } else {
+            Modifier::empty()
+        }))
+}
+
+fn styled_log_item(line: &str) -> ListItem<'static> {
+    let role = [
+        ("[you] ", Color::Green, Color::White),
+        ("[assistant] ", Color::Cyan, Color::LightCyan),
+        ("[memory] ", Color::Magenta, Color::White),
+        ("[error] ", Color::LightRed, Color::LightRed),
+        ("[warning] ", Color::Yellow, Color::Yellow),
+        ("[protocol warning] ", Color::Yellow, Color::Yellow),
+    ]
+    .into_iter()
+    .find(|(prefix, _, _)| line.starts_with(prefix));
+
+    let Some((prefix, prefix_color, content_color)) = role else {
+        return ListItem::new(line.to_owned());
+    };
+    let content = &line[prefix.len()..];
+    let mut source_lines = content.lines();
+    let first = source_lines.next().unwrap_or_default();
+    let mut rendered = vec![Line::from(vec![
+        Span::styled(
+            prefix.to_owned(),
+            Style::default()
+                .fg(prefix_color)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(first.to_owned(), Style::default().fg(content_color)),
+    ])];
+    let indent = " ".repeat(prefix.chars().count());
+    rendered.extend(source_lines.map(|continuation| {
+        Line::from(vec![
+            Span::raw(indent.clone()),
+            Span::styled(continuation.to_owned(), Style::default().fg(content_color)),
+        ])
+    }));
+    ListItem::new(Text::from(rendered))
+}
+
 fn draw_spec_review(frame: &mut ratatui::Frame, spec_text: &str) {
     let area = centered_rect(90, 90, frame.area());
     frame.render_widget(Clear, area);
     frame.render_widget(
-        Block::default()
-            .borders(Borders::ALL)
-            .title("Spec draft ready · review carefully · y execute · n/Esc revise"),
+        pane_block(
+            " Spec draft ready · review carefully · y execute · n/Esc revise ",
+            true,
+        ),
         area,
     );
     let inner = Rect {
@@ -838,9 +1162,10 @@ fn draw_repo_browser(frame: &mut ratatui::Frame, state: &AppState) {
     let area = centered_rect(86, 86, frame.area());
     frame.render_widget(Clear, area);
     frame.render_widget(
-        Block::default()
-            .borders(Borders::ALL)
-            .title("Repository files · Up/Down select · t summary · r variables · Esc close"),
+        pane_block(
+            " Repository files · Up/Down select · t summary · r variables · Esc close ",
+            true,
+        ),
         area,
     );
     let inner = Rect {
@@ -967,6 +1292,93 @@ mod tests {
             count: 4,
         });
         assert_eq!(state.preference_count, 4);
+    }
+
+    #[test]
+    fn numbered_assistant_choices_enable_quick_selection() {
+        let mut state = AppState::default();
+        state.apply(HarnessEvent::ChatMessage {
+            role: "assistant".into(),
+            content: "Choose one:\n1. Parser\n2. Compiler\n3. Both".into(),
+        });
+        assert!(state.numbered_options_available);
+        assert!(state.select_numbered_option('2'));
+        assert!(state.prompt_active);
+        assert_eq!(state.prompt, "2. ");
+
+        state.apply(HarnessEvent::ChatMessage {
+            role: "user".into(),
+            content: "2. Compiler".into(),
+        });
+        assert!(!state.numbered_options_available);
+    }
+
+    #[test]
+    fn ordinary_numbers_do_not_enable_quick_selection() {
+        let mut state = AppState::default();
+        state.apply(HarnessEvent::ChatMessage {
+            role: "assistant".into(),
+            content: "The 2026 build has 5 modules.".into(),
+        });
+        assert!(!state.numbered_options_available);
+        assert!(!state.select_numbered_option('5'));
+        assert!(!state.prompt_active);
+    }
+
+    #[test]
+    fn questionnaire_collects_choices_and_other_before_drafting() {
+        let mut state = AppState::default();
+        state.apply(HarnessEvent::Questionnaire {
+            questions: vec![
+                ClarificationQuestion {
+                    question_text: "Choose a surface".into(),
+                    options: vec![
+                        protocol::QuestionOption {
+                            id: 1,
+                            text: "CLI".into(),
+                        },
+                        protocol::QuestionOption {
+                            id: 2,
+                            text: "Other".into(),
+                        },
+                    ],
+                },
+                ClarificationQuestion {
+                    question_text: "Choose storage".into(),
+                    options: vec![
+                        protocol::QuestionOption {
+                            id: 1,
+                            text: "JSON".into(),
+                        },
+                        protocol::QuestionOption {
+                            id: 2,
+                            text: "Other".into(),
+                        },
+                    ],
+                },
+            ],
+        });
+
+        assert_eq!(state.mode, AppMode::Questionnaire);
+        assert_eq!(
+            state.choose_questionnaire_option('1'),
+            QuestionnaireAction::Advanced
+        );
+        assert_eq!(state.clarification_index, 1);
+        assert_eq!(
+            state.choose_questionnaire_option('2'),
+            QuestionnaireAction::AwaitingOther
+        );
+        assert!(state.questionnaire_other_active);
+        let QuestionnaireAction::Complete(answers) =
+            state.record_questionnaire_answer("SQLite".into())
+        else {
+            panic!("final questionnaire answer should complete the questionnaire");
+        };
+        assert_eq!(answers.len(), 2);
+        assert_eq!(answers[0].answer, "CLI");
+        assert_eq!(answers[1].answer, "SQLite");
+        assert!(!state.prompt_active);
     }
 
     #[test]

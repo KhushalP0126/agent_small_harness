@@ -25,9 +25,10 @@ Implemented in this tree with two architecture-grounded clarifications:
 - Compute Shield consumes paired `ArtifactManager` telemetry through
   `scripts/run_compute_shield.py`; it does not rerun models or become an
   acceptance gate.
-- The Rust prompt surface is a four-state workflow: `Chat`, `DraftingSpec`,
-  `SpecReview`, and `Executing`. Chat is non-mutating, drafting produces a
-  reviewable markdown spec, and only explicit `y` approval can launch workers.
+- The Rust prompt surface is a five-state workflow: `Chat`, `Questionnaire`,
+  `DraftingSpec`, `SpecReview`, and `Executing`. Chat and clarification are
+  non-mutating, drafting produces a reviewable markdown spec, and only explicit
+  `y` approval can launch workers.
   A bounded ignored JSON file stores only explicit non-secret preferences.
 - Terminal raw mode and alternate-screen ownership are protected by an RAII
   drop guard plus panic hook, so both ordinary errors and unwinding panics
@@ -106,17 +107,44 @@ the others:
 
 - `Chat`: `c`/`p` opens input and Enter sends a conversational architect
   request. No subprocess execution is reachable from this transition.
-- `DraftingSpec`: `s` asks the architect to convert the bounded conversation
-  and saved preferences into an executable markdown specification.
+- `Questionnaire`: a project-concept response carries 2–4 typed clarification
+  questions. Each contains 2–4 worker-provided choices plus an application-added
+  `Other` option. `1`–`5` records answers in Rust; `Other` accepts free text.
+  Completing the last question sends all answers once and automatically enters
+  `DraftingSpec` without starting the execution pipeline.
+- `DraftingSpec`: `s` asks the architect to fill a strict JSON execution sheet
+  from the bounded conversation, questionnaire answers, and saved preferences.
+  The bridge validates every required field and renders canonical Markdown
+  sections for files, components, entrypoints, dependencies, state rules,
+  interfaces, constraints, acceptance examples, and validation. Model-authored
+  free-form Markdown never crosses into the planner. This mode is also entered
+  automatically after questionnaire completion.
 - `SpecReview`: the generated specification is shown in a blocking overlay.
   `y` approves it; `n`/`Esc` returns to chat without executing.
 - `Executing`: the approved spec alone is written to the temporary spec file
   and passed to `run_structured_spec.py`.
 
+The primary output pane preserves typed role prefixes and renders user,
+assistant, memory, warning, and error traffic with separate colors. Active panes
+use a cyan border/title accent; inactive utility panes are dimmed. The 33 ms UI
+tick advances a status-strip spinner while asynchronous chat, drafting, or
+execution work is active, so backend work never blocks terminal input.
+
+Typed questionnaire options use `1`–`5` as direct local selections; only the
+final answer crosses the JSONL boundary. Plain assistant responses expose
+quick-reference selection only when at least two lines use an explicit numbered
+prefix (`1.`, `2)`, etc.). Numbers remain ordinary characters for all other
+responses and while typing general chat text.
+
 Bridge startup emits a typed configuration status naming the environment or
 `.env` key source without its value. Local `.tui_memory.json` contains at most
 50 explicit preferences and is excluded from git. Conversation history is
 bounded to 24 messages and remains process-local.
+
+The rendered sheet guarantees that `PlanModeAgent` can derive a local contract
+queue before approval. DeepSeek may refine its ordering and dependency notes;
+if that optional compact planner response is invalid, the harness retains the
+validated sheet-derived queue and reports a warning instead of failing the run.
 
 ### 2.6 Deliverables from this repo turn
 
@@ -137,6 +165,19 @@ verified `render(&str) -> Result<String>` API.
 All three live in `harness_kernel`'s `EngineRegistry`, independent of the
 TUI. Each reports results as a new JSON-lines event type so either TUI
 (Textual now, Rust later) can consume them.
+
+### 3.0 Local Generated-Code Boundary
+
+- Generated Python never receives the parent shell environment or repository
+  `.env`; the child receives a small allowlist plus explicit smoke-test flags.
+- Behavior cases, structured-contract examples, and assembled-program smoke
+  tests use disposable working directories rather than the repository root.
+- The local runner uses Python isolated mode, bounded stdout/stderr capture,
+  wall-clock and process-group termination, and POSIX CPU/file/core/address-space
+  limits when supported.
+- This is defense in depth for trusted local generation, not a hardened boundary:
+  a container or OS sandbox is still required to deny absolute host filesystem
+  and network access for adversarial code.
 
 ### 3.1 C/C++ Compilation Gate
 

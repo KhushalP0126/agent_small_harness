@@ -55,10 +55,10 @@ definition of the product or controller behavior.
 | Structured planning | `PlanModeAgent` builds `TaskIR`, behavior examples, state rules, graph context, adapter constraints, and compact worker packets. Repo context is opt-in through a supplied root or graph. |
 | Local model generation | Ollama workers use configurable Qwen model profiles; harder failures can escalate to a separately configured architect model. |
 | Deterministic validation | Parsing, seven Python engine checks, policy evaluation, required Pylint, behavior checks, optional Deal examples, and optional CrossHair decide acceptance. |
-| Runtime tracing | `ExecutionAgent` runs parsed drafts against behavior cases in the isolated subprocess and captures returns, stdout, stderr, exceptions, timing, and match status in an `ExecutionTrace`. |
+| Runtime tracing | `ExecutionAgent` runs parsed drafts against behavior cases in a timeout-bound child with a disposable working directory and sanitized environment, then captures returns, stdout, stderr, exceptions, timing, and match status in an `ExecutionTrace`. |
 | Debugger hints | The opt-in debugger hook converts trace/spec differences into bounded repair instructions instead of returning only a generic behavior failure. |
 | Bounded repair | Retry prompts preserve current failures and drafts under a prompt budget, detect stagnation/branch loops, and validate every worker or architect revision again. |
-| Structured-spec applications | Architect-ordered contract queues carry accepted field types and method arities forward, validate imports per contract, assemble one Python program, and run a bounded headless smoke test. |
+| Structured-spec applications | Architect-ordered contract queues carry accepted field types and method arities forward, validate imports per contract, assemble one Python program, and run contract examples plus the headless smoke test outside the harness process with sanitized environments and disposable working directories. |
 | Review evidence | Optional run artifacts preserve prompts, attempts, diffs, findings, execution traces, validation results, token estimates, and timelines. |
 | Human review TUI | The existing Textual process remains the stable interface. A Rust `ratatui` client now provides a non-blocking JSONL subprocess bridge and an in-process Mermaid-to-terminal-image modal; it is an additive preview until parity is verified. |
 | C/C++ compilation gate | Registered C/C++ drafts run a strict, timeout-bounded compiler pass (`-Wall -Wextra -Werror -fsyntax-only`) before later validation. Optional tree-sitter engines add structural checks when installed. |
@@ -109,11 +109,24 @@ make test-rust
 
 The primary view keeps main output and repository context above persistent
 context, chat, and settings panels. Press `c` or `p` to chat with the architect
-without executing anything. When the idea is ready, press `s` to generate a
-markdown specification from the bounded conversation. The TUI opens a review
-gate: `y` explicitly sends that spec through DeepSeek contract planning and the
-small-worker queue, while `n` or `Esc` returns to chat for revision. Ordinary
-chat text—including greetings—can never start workers.
+without executing anything. New project ideas automatically open a typed 2–4
+question clarification flow. Each question has numbered choices plus a mandatory
+`Other` option; `1`–`5` answers locally, while `Other` opens free-text input.
+Completing the final question asks DeepSeek to fill a strict JSON execution
+sheet from the conversation and answers. The bridge validates that sheet and
+renders deterministic planner-compatible Markdown with explicit files,
+components, entrypoints, dependencies, rules, examples, and checks. An invalid
+or incomplete sheet returns to chat as an error instead of reaching execution.
+`s` remains available to draft directly when no more
+clarification is needed. The TUI then opens a review gate: `y` explicitly sends
+that spec through DeepSeek contract planning and the small-worker queue, while
+`n` or `Esc` returns to chat for revision. Greetings, chat, and questionnaire
+answers can never start workers.
+
+If DeepSeek's optional queue-ordering response is malformed, the approved
+spec-sheet components provide a validated local contract queue and execution
+continues with a warning. Execution only stops when neither source can produce
+a contract queue.
 
 The context panel reports whether DeepSeek was configured from the environment
 or repository `.env`; it never displays the key. Explicit phrases such as
@@ -122,6 +135,16 @@ store a bounded preference in ignored `.tui_memory.json`. Those preferences are
 injected into later chat and spec-drafting prompts. Session conversation stays
 in memory and is not written to disk; messages containing credential-like
 preferences are refused by the memory extractor.
+
+Chat roles are visually distinct: user labels are green, assistant labels and
+responses are cyan, saved-memory notices are magenta, and warnings/errors keep
+their yellow/red emphasis. The focused pane uses a cyan accent while inactive
+context and settings panes use subdued borders. A one-line status strip animates
+while DeepSeek or an approved harness run is active without blocking keyboard
+input. Typed questionnaire events use immediate `1`–`5` selection without an
+IPC request per answer. Plain assistant messages that contain at least two
+numbered choices retain the lighter quick-reference behavior. Ordinary numbers
+retain their normal typing behavior everywhere else.
 
 `m` focuses/refreshes the repository panel and eagerly loads its
 typed file, summary, symbol, import, and variable records. `Up`/`Down` then
@@ -643,8 +666,9 @@ make approve-library LIB=clang.cindex
   cross-contract failure localization, and reproducible minimal failing cases.
 - [ ] Add multi-file generation with explicit file ownership, cross-file symbol
   and type contracts, dependency ordering, and whole-project integration tests.
-- [ ] Add adversarial runtime isolation beyond the current timeout-bound Python
-  subprocess before accepting untrusted code in a shared or hosted deployment.
+- [ ] Add a mandatory container/OS policy with network denial and filesystem
+  allowlisting beyond the current sanitized, resource-limited local subprocess
+  before accepting adversarial code in a shared or hosted deployment.
 - [ ] Extend the repeated paired benchmark beyond Qwen 1.5B and publish
   confidence intervals across models and larger task sets.
 - [ ] Add authentication, authorization, rate limits, and production-grade job

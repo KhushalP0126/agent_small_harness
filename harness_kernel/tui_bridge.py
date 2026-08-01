@@ -30,11 +30,37 @@ from TUI.mermaid_renderer import render_repo_architecture_mermaid
 from TUI.mermaid_renderer import render_repo_architecture
 
 
-PROTOCOL_VERSION = 1
+PROTOCOL_VERSION = 2
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MEMORY_PATH = REPO_ROOT / ".tui_memory.json"
 MAX_CHAT_MESSAGES = 24
 MAX_PREFERENCES = 50
+MAX_QUESTIONS = 4
+MAX_OPTIONS_PER_QUESTION = 5
+QUESTIONNAIRE_SYSTEM_PROMPT = """You are an autonomous planning worker and software architect.
+When the latest user message introduces or materially changes a software project idea, do not write code and do not claim to execute anything. Return JSON only in this shape:
+{"kind":"questionnaire","message":"short introduction","questions":[{"question_text":"...","options":["...","..."]}]}
+Ask 2 to 4 high-impact clarification questions. Give each question 2 to 4 concise, mutually distinct choices. Do not include Other; the application adds it. Focus on behavior, scope, constraints, data, interfaces, and acceptance criteria.
+For greetings, ordinary conversation, preference updates, or answers that do not require a new questionnaire, return:
+{"kind":"chat","message":"your concise response"}
+Never return markdown fences around the JSON. The application creates a formal spec only after the questionnaire is completed or the user explicitly requests a draft."""
+SPEC_SHEET_SYSTEM_PROMPT = """You are a software specification architect.
+Fill out the supplied execution spec sheet from the conversation and questionnaire answers.
+Return JSON only, with no markdown fence and no commentary, using exactly this shape:
+{
+  "app_spec": {"name":"snake_game","language":"python","libraries":[],"kernel_mode":"generate_from_spec"},
+  "goal":"one concrete implementation goal",
+  "files":["relative/path.py"],
+  "required_components":["GameConfig","SnakeState","SnakeGame","main()"],
+  "entrypoints":["main()"],
+  "dependency_graph":["GameConfig -> SnakeState","SnakeState -> SnakeGame","SnakeGame -> main"],
+  "state_rules":["explicit state transition rule"],
+  "interfaces":["input or output interface"],
+  "constraints":["implementation constraint"],
+  "acceptance_examples":["concrete observable example"],
+  "validation":["command or check proving acceptance"]
+}
+Every field is required. Use identifier-only names in required_components and entrypoints; a function may end in (). Use relative paths only. The dependency graph must use only required component or entrypoint names, with prerequisites on the left and dependents on the right. Preserve every user answer. Make the sheet sufficiently concrete for another worker to implement without asking follow-up questions. Do not implement the project."""
 ENTRYPOINTS = {
     "coding_capability": REPO_ROOT / "scripts" / "run_coding_capability.py",
     "worker_limit": REPO_ROOT / "scripts" / "run_worker_limit.py",
@@ -132,6 +158,8 @@ class Bridge:
             self.start_chat(str(command.get("text") or ""))
         elif kind == "draft_spec":
             self.start_spec_draft()
+        elif kind == "questionnaire_complete":
+            self.complete_questionnaire(command.get("answers"))
         elif kind == "execute_spec":
             self.start_spec_execution(str(command.get("text") or ""))
         elif kind == "cancel":
@@ -195,6 +223,36 @@ class Bridge:
             return
         self._start_assistant_task("drafting_spec", self._run_spec_draft)
 
+    def complete_questionnaire(self, answers: Any) -> None:
+        if self._assistant_busy:
+            self.writer.emit("log", level="warning", msg="DeepSeek is already responding")
+            return
+        normalized: list[dict[str, str]] = []
+        if isinstance(answers, list):
+            for answer in answers[:MAX_QUESTIONS]:
+                if not isinstance(answer, dict):
+                    continue
+                question_text = str(answer.get("question_text") or "").strip()
+                value = str(answer.get("answer") or "").strip()
+                if question_text and value:
+                    normalized.append(
+                        {"question_text": question_text, "answer": value}
+                    )
+        if not normalized:
+            self.writer.emit(
+                "log",
+                level="warning",
+                msg="questionnaire completion requires at least one answer",
+            )
+            return
+        transcript = "QUESTIONNAIRE ANSWERS:\n" + "\n".join(
+            f"- {item['question_text']}: {item['answer']}" for item in normalized
+        )
+        self._chat_history.append({"role": "user", "content": transcript})
+        self._chat_history = self._chat_history[-MAX_CHAT_MESSAGES:]
+        self.writer.emit("chat_message", role="user", content=transcript)
+        self._start_assistant_task("drafting_spec", self._run_spec_draft)
+
     def start_spec_execution(self, text: str) -> None:
         if not text.strip():
             self.writer.emit("log", level="warning", msg="approved spec cannot be empty")
@@ -239,28 +297,24 @@ class Bridge:
     def _run_chat(self) -> None:
         response = self._client().generate(
             self._chat_prompt(),
-            system=(
-                "You are a privacy-focused terminal planning assistant. Converse "
-                "naturally, ask concise clarifying questions, and help refine software "
-                "ideas. Do not claim to have executed commands or changed files. When "
-                "the idea is ready, tell the user they can press s to draft a spec."
-            ),
+            system=QUESTIONNAIRE_SYSTEM_PROMPT,
         ).strip()
-        self._chat_history.append({"role": "assistant", "content": response})
+        message, questions = _parse_questionnaire_response(response)
+        history_content = (
+            _questionnaire_transcript(message, questions) if questions else message
+        )
+        self._chat_history.append({"role": "assistant", "content": history_content})
         self._chat_history = self._chat_history[-MAX_CHAT_MESSAGES:]
-        self.writer.emit("chat_message", role="assistant", content=response)
+        self.writer.emit("chat_message", role="assistant", content=message)
+        if questions:
+            self.writer.emit("questionnaire", questions=questions)
 
     def _run_spec_draft(self) -> None:
         response = self._client().generate(
             self._spec_prompt(),
-            system=(
-                "You turn a software planning conversation into an executable markdown "
-                "specification. Return markdown only. Include goal, files, behavior, "
-                "interfaces, constraints, acceptance examples, and validation. Do not "
-                "execute anything and do not wrap the markdown in a code fence."
-            ),
+            system=SPEC_SHEET_SYSTEM_PROMPT,
         ).strip()
-        self.writer.emit("spec_draft", text=response)
+        self.writer.emit("spec_draft", text=_render_spec_sheet(response))
 
     def _client(self) -> ArchitectApiClient:
         if self._architect_client is None:
@@ -283,7 +337,9 @@ class Bridge:
             [
                 _preference_context(self._load_preferences()),
                 "CONVERSATION:\n" + _chat_transcript(self._chat_history),
-                "Draft the concrete implementation specification now.",
+                "Fill every field in the execution spec sheet now. Convert the user's "
+                "choices into explicit files, components, dependencies, rules, examples, "
+                "and validation checks. Return the completed JSON object only.",
             ]
         )
 
@@ -713,6 +769,185 @@ def _preference_context(preferences: list[str]) -> str:
     )
 
 
+def _render_spec_sheet(response: str) -> str:
+    """Validate a model-filled JSON sheet and render planner-owned Markdown."""
+
+    raw = response.strip()
+    if raw.startswith("```") and raw.endswith("```"):
+        lines = raw.splitlines()
+        raw = "\n".join(lines[1:-1]).strip()
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError("DeepSeek returned an invalid execution spec sheet") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("DeepSeek execution spec sheet must be a JSON object")
+
+    app_spec = payload.get("app_spec")
+    if not isinstance(app_spec, dict):
+        raise ValueError("execution spec sheet is missing app_spec")
+    name = _sheet_text(app_spec.get("name"), "app_spec.name")
+    language = _sheet_text(app_spec.get("language"), "app_spec.language")
+    kernel_mode = _sheet_text(
+        app_spec.get("kernel_mode") or "generate_from_spec",
+        "app_spec.kernel_mode",
+    )
+    libraries = _sheet_list(app_spec.get("libraries"), "app_spec.libraries", allow_empty=True)
+    goal = _sheet_text(payload.get("goal"), "goal")
+    files = _sheet_list(payload.get("files"), "files")
+    components = _sheet_symbols(payload.get("required_components"), "required_components")
+    entrypoints = _sheet_symbols(payload.get("entrypoints"), "entrypoints")
+    dependency_graph = _sheet_dependencies(payload.get("dependency_graph"), components, entrypoints)
+
+    sections: list[tuple[str, list[str]]] = [
+        ("Goal", [goal]),
+        ("Files", files),
+        ("Required Components", [f"`{item}`" for item in components]),
+        ("Entrypoint", [f"`{item}`" for item in entrypoints]),
+        ("Dependency Graph", dependency_graph),
+        ("State Rules", _sheet_list(payload.get("state_rules"), "state_rules")),
+        ("Interfaces", _sheet_list(payload.get("interfaces"), "interfaces")),
+        ("Constraints", _sheet_list(payload.get("constraints"), "constraints")),
+        (
+            "Acceptance Examples",
+            _sheet_list(payload.get("acceptance_examples"), "acceptance_examples"),
+        ),
+        ("Validation", _sheet_list(payload.get("validation"), "validation")),
+    ]
+    app_lines = [
+        f"- name: {name}",
+        f"- language: {language}",
+        f"- kernel_mode: {kernel_mode}",
+    ]
+    if libraries:
+        app_lines.append(f"- libraries: {', '.join(libraries)}")
+    lines = ["# Execution Spec Sheet", "", "## App Spec", "", *app_lines]
+    for heading, values in sections:
+        lines.extend(["", f"## {heading}", "", *(f"- {value}" for value in values)])
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _sheet_text(value: Any, field: str) -> str:
+    text = " ".join(str(value or "").split())
+    if not text:
+        raise ValueError(f"execution spec sheet is missing {field}")
+    return text
+
+
+def _sheet_list(value: Any, field: str, *, allow_empty: bool = False) -> list[str]:
+    if not isinstance(value, list):
+        raise ValueError(f"execution spec sheet field {field} must be a list")
+    items = []
+    for raw_item in value:
+        item = " ".join(str(raw_item or "").split())
+        if item and item not in items:
+            items.append(item)
+    if not items and not allow_empty:
+        raise ValueError(f"execution spec sheet field {field} cannot be empty")
+    return items
+
+
+def _sheet_symbols(value: Any, field: str) -> list[str]:
+    items = _sheet_list(value, field)
+    symbols: list[str] = []
+    for item in items:
+        match = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_]*)(\(\))?", item.strip("`"))
+        if match is None:
+            raise ValueError(f"execution spec sheet field {field} contains an invalid symbol: {item}")
+        symbol = match.group(1) + (match.group(2) or "")
+        if symbol not in symbols:
+            symbols.append(symbol)
+    return symbols
+
+
+def _sheet_dependencies(value: Any, components: list[str], entrypoints: list[str]) -> list[str]:
+    items = _sheet_list(value, "dependency_graph", allow_empty=True)
+    known = {item.removesuffix("()") for item in [*components, *entrypoints]}
+    dependencies: list[str] = []
+    for item in items:
+        match = re.fullmatch(
+            r"`?([A-Za-z_][A-Za-z0-9_]*)(?:\(\))?`?\s*->\s*`?([A-Za-z_][A-Za-z0-9_]*)(?:\(\))?`?",
+            item,
+        )
+        if match is None or match.group(1) not in known or match.group(2) not in known:
+            raise ValueError(f"execution spec sheet has an invalid dependency: {item}")
+        dependency = f"{match.group(1)} -> {match.group(2)}"
+        if dependency not in dependencies:
+            dependencies.append(dependency)
+    if dependencies:
+        return dependencies
+    first = components[0].removesuffix("()")
+    last = entrypoints[-1].removesuffix("()")
+    return [f"{first} -> {last}"] if first != last else []
+
+
+def _parse_questionnaire_response(response: str) -> tuple[str, list[dict[str, Any]]]:
+    raw = response.strip()
+    if raw.startswith("```") and raw.endswith("```"):
+        lines = raw.splitlines()
+        raw = "\n".join(lines[1:-1]).strip()
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError:
+        return response.strip(), []
+    if not isinstance(payload, dict):
+        return response.strip(), []
+    message = str(payload.get("message") or "").strip()
+    if str(payload.get("kind") or "").casefold() != "questionnaire":
+        return message or response.strip(), []
+
+    questions: list[dict[str, Any]] = []
+    raw_questions = payload.get("questions")
+    if isinstance(raw_questions, list):
+        for raw_question in raw_questions[:MAX_QUESTIONS]:
+            if not isinstance(raw_question, dict):
+                continue
+            question_text = str(raw_question.get("question_text") or "").strip()
+            raw_options = raw_question.get("options")
+            if not question_text or not isinstance(raw_options, list):
+                continue
+            option_texts: list[str] = []
+            for raw_option in raw_options:
+                option_value = (
+                    raw_option.get("text", "")
+                    if isinstance(raw_option, dict)
+                    else raw_option
+                )
+                option = str(option_value or "").strip()
+                if (
+                    option
+                    and option.casefold() != "other"
+                    and option not in option_texts
+                    and len(option_texts) < MAX_OPTIONS_PER_QUESTION - 1
+                ):
+                    option_texts.append(option)
+            if len(option_texts) < 2:
+                continue
+            option_texts.append("Other")
+            questions.append(
+                {
+                    "question_text": question_text,
+                    "options": [
+                        {"id": index, "text": option}
+                        for index, option in enumerate(option_texts, start=1)
+                    ],
+                }
+            )
+    if len(questions) < 2:
+        return message or "I need a little more context before drafting the spec.", []
+    return message or "Choose the options that best match what you want to build.", questions
+
+
+def _questionnaire_transcript(message: str, questions: list[dict[str, Any]]) -> str:
+    lines = [message]
+    for question in questions:
+        lines.append(str(question["question_text"]))
+        lines.extend(
+            f"{option['id']}. {option['text']}" for option in question["options"]
+        )
+    return "\n".join(lines)
+
+
 def _architect_error_event(payload: Any) -> dict[str, Any] | None:
     if not isinstance(payload, dict):
         return None
@@ -720,7 +955,13 @@ def _architect_error_event(payload: Any) -> dict[str, Any] | None:
     if not error:
         return None
     code = str(payload.get("architect_contract_error_code") or "").strip()
-    if code == "architect_contract_missing_api_key":
+    fallback_used = bool(payload.get("architect_contracts_fallback_used"))
+    if fallback_used:
+        message = (
+            f"DeepSeek contract planner response was unusable ({code or 'unknown'}): "
+            f"{error}. Continuing with the validated spec-sheet contract queue."
+        )
+    elif code == "architect_contract_missing_api_key":
         message = (
             f"DeepSeek is not configured: {error}. Set DEEPSEEK_API_KEY in the "
             "repository .env file or export it in the launching shell."
@@ -729,7 +970,7 @@ def _architect_error_event(payload: Any) -> dict[str, Any] | None:
         message = f"DeepSeek contract planner error ({code or 'unknown'}): {error}"
     return {
         "type": "log",
-        "level": "error",
+        "level": "warning" if fallback_used else "error",
         "msg": message,
     }
 

@@ -5,9 +5,7 @@ import ast
 import json
 import os
 import re
-import subprocess
 import sys
-import tempfile
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Callable
@@ -29,12 +27,15 @@ from backends.architect_client import (
 )
 from backends.ollama_client import DEFAULT_OLLAMA_MODEL, OllamaModelSupplier
 from harness_kernel.function_contracts import ContractQueue, ContractQueuePlan, DealExample, FunctionContract
+from harness_kernel.local_sandbox import run_python_locally_isolated
 from prompt.budget import budget_prompt
 from prompt.summarizer import DefaultPromptSummarizer
 from validation.import_graph import analyze_import_graph, validate_imported_symbols
 
 
 DEFAULT_ARTIFACT_ROOT = Path("artifacts/runs")
+CONTRACT_EXAMPLE_TIMEOUT_SECONDS = 2.0
+SANDBOX_RESULT_PREFIX = "__AGENT_HARNESS_SANDBOX_RESULT__="
 HELPER_SIGNATURE_RE = re.compile(
     r"`?(?P<name>[A-Za-z_][A-Za-z0-9_]*)\((?P<args>[^`]*)\)\s*(?:->|=>)\s*(?P<returns>[^`]+)`?"
 )
@@ -655,34 +656,33 @@ def _validate_contract_source(
         )
     if not contract.examples:
         return issues
-    namespace: dict[str, object] = {}
-    try:
-        for accepted_source in accepted_sources or []:
-            exec(accepted_source, namespace)  # noqa: S102 - generated code is already executed by harness validators.
-        exec(source, namespace)  # noqa: S102 - generated code is already executed by harness validators.
-    except Exception as exc:  # noqa: BLE001 - reported as validation evidence
+    sandbox_result = _run_contract_examples_in_sandbox(
+        source,
+        contract,
+        accepted_sources=accepted_sources or [],
+    )
+    if sandbox_result["status"] != "completed":
         issues.append(
             {
                 "kind": "contract_execution_error",
-                "summary": f"Contract `{contract.name}` crashed during example setup",
-                "details": f"{type(exc).__name__}: {exc}",
+                "summary": f"Contract `{contract.name}` could not run in the local sandbox",
+                "details": sandbox_result["details"],
             }
         )
         return issues
-    for example in contract.examples:
-        expression = f"{example.call} == {example.expected}"
-        try:
-            passed = bool(eval(expression, namespace))  # noqa: S307 - concrete contract examples are test code.
-        except Exception as exc:  # noqa: BLE001 - reported as validation evidence
+    for example_result in sandbox_result["examples"]:
+        expression = example_result["expression"]
+        error = example_result.get("error", "")
+        if error:
             issues.append(
                 {
                     "kind": "contract_example_error",
                     "summary": f"Contract `{contract.name}` example crashed",
-                    "details": f"{expression}: {type(exc).__name__}: {exc}",
+                    "details": f"{expression}: {error}",
                 }
             )
             continue
-        if not passed:
+        if not example_result["passed"]:
             issues.append(
                 {
                     "kind": "contract_example_failed",
@@ -691,6 +691,67 @@ def _validate_contract_source(
                 }
             )
     return issues
+
+
+def _run_contract_examples_in_sandbox(
+    source: str,
+    contract: FunctionContract,
+    *,
+    accepted_sources: list[str],
+) -> dict:
+    payload = {
+        "accepted_sources": accepted_sources,
+        "source": source,
+        "expressions": [
+            f"{example.call} == {example.expected}" for example in contract.examples
+        ],
+    }
+    encoded_payload = json.dumps(payload)
+    driver = f"""
+import json
+
+payload = json.loads({encoded_payload!r})
+namespace = {{}}
+result = {{"status": "completed", "details": "", "examples": []}}
+try:
+    for accepted_source in payload["accepted_sources"]:
+        exec(accepted_source, namespace)
+    exec(payload["source"], namespace)
+except BaseException as exc:
+    result["status"] = "setup_error"
+    result["details"] = f"{{type(exc).__name__}}: {{exc}}"
+else:
+    for expression in payload["expressions"]:
+        record = {{"expression": expression, "passed": False, "error": ""}}
+        try:
+            record["passed"] = bool(eval(expression, namespace))
+        except BaseException as exc:
+            record["error"] = f"{{type(exc).__name__}}: {{exc}}"
+        result["examples"].append(record)
+print({SANDBOX_RESULT_PREFIX!r} + json.dumps(result, separators=(",", ":")))
+""".lstrip()
+    execution = run_python_locally_isolated(
+        driver,
+        timeout_seconds=CONTRACT_EXAMPLE_TIMEOUT_SECONDS,
+    )
+    if execution.timed_out:
+        return {
+            "status": "timeout",
+            "details": f"sandbox timed out after {CONTRACT_EXAMPLE_TIMEOUT_SECONDS:g}s",
+            "examples": [],
+        }
+    for line in reversed(execution.stdout.splitlines()):
+        if line.startswith(SANDBOX_RESULT_PREFIX):
+            try:
+                return json.loads(line.removeprefix(SANDBOX_RESULT_PREFIX))
+            except json.JSONDecodeError:
+                break
+    details = execution.stderr.strip() or execution.stdout.strip() or "sandbox exited without a result"
+    return {
+        "status": "process_error",
+        "details": f"exit={execution.returncode}: {details}",
+        "examples": [],
+    }
 
 
 def _run_contract_queue_sequentially(
@@ -1090,59 +1151,42 @@ def _run_integration_smoke_test(source: str, plan, timeout_seconds: float = 5.0)
     if not getattr(plan, "entrypoints", []):
         return {"is_compliant": True, "status": "skipped_no_entrypoint", "issues": []}
 
-    temp_path: Path | None = None
-    try:
-        with tempfile.NamedTemporaryFile("w", suffix=".py", encoding="utf-8", delete=False) as handle:
-            handle.write(source)
-            temp_path = Path(handle.name)
-        env = os.environ.copy()
-        env.update(
-            {
-                "SDL_VIDEODRIVER": "dummy",
-                "SDL_AUDIODRIVER": "dummy",
-                "PYTHONDONTWRITEBYTECODE": "1",
-                "HARNESS_SMOKE_TEST": "1",
-            }
-        )
-        try:
-            completed = subprocess.run(
-                [sys.executable, str(temp_path)],
-                capture_output=True,
-                text=True,
-                timeout=timeout_seconds,
-                check=False,
-                env=env,
-            )
-        except subprocess.TimeoutExpired:
-            return {
-                "is_compliant": True,
-                "status": "running_after_smoke_window",
-                "timeout_seconds": timeout_seconds,
-                "issues": [],
-            }
-        if completed.returncode == 0:
-            return {
-                "is_compliant": True,
-                "status": "exited_cleanly",
-                "returncode": completed.returncode,
-                "issues": [],
-            }
-        details = (completed.stderr or completed.stdout).strip()[-4000:]
+    completed = run_python_locally_isolated(
+        source,
+        timeout_seconds=timeout_seconds,
+        extra_environment={
+            "SDL_VIDEODRIVER": "dummy",
+            "SDL_AUDIODRIVER": "dummy",
+            "HARNESS_SMOKE_TEST": "1",
+        },
+    )
+    if completed.timed_out:
         return {
-            "is_compliant": False,
-            "status": "crashed",
-            "returncode": completed.returncode,
-            "issues": [
-                {
-                    "kind": "integration_smoke_crash",
-                    "summary": "Generated program crashed during integration smoke execution",
-                    "details": details or f"process exited with status {completed.returncode}",
-                }
-            ],
+            "is_compliant": True,
+            "status": "running_after_smoke_window",
+            "timeout_seconds": timeout_seconds,
+            "issues": [],
         }
-    finally:
-        if temp_path is not None:
-            temp_path.unlink(missing_ok=True)
+    if completed.returncode == 0:
+        return {
+            "is_compliant": True,
+            "status": "exited_cleanly",
+            "returncode": completed.returncode,
+            "issues": [],
+        }
+    details = (completed.stderr or completed.stdout).strip()[-4000:]
+    return {
+        "is_compliant": False,
+        "status": "crashed",
+        "returncode": completed.returncode,
+        "issues": [
+            {
+                "kind": "integration_smoke_crash",
+                "summary": "Generated program crashed during integration smoke execution",
+                "details": details or f"process exited with status {completed.returncode}",
+            }
+        ],
+    }
 
 
 def run_spec(
