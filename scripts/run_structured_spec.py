@@ -1045,14 +1045,21 @@ def _integration_prompt(
     plan_packet: str,
     accepted_sources: list[str],
     results: list[ContractExecutionResult],
+    language: str = "python",
     prompt_summarizer: Callable[[str], str] | None = None,
 ) -> str:
+    selected_language = language.strip().lower() or "python"
+    entrypoint_rule = (
+        '- Keep the main loop guarded by if __name__ == "__main__" when an app entrypoint is required.'
+        if selected_language == "python"
+        else "- Provide the required language-appropriate application entrypoint."
+    )
     return budget_prompt("\n".join(
         [
             "FUNCTIONWISE CONTRACT INTEGRATION",
             "",
             "The small worker implemented function contracts sequentially.",
-            "Build the final complete Python module from the accepted functions and the structured spec.",
+            f"Build the final complete {selected_language} source artifact from the accepted functions and the structured spec.",
             "Return code only. Do not return prose or markdown fences.",
             "",
             "PLAN PACKET:",
@@ -1071,10 +1078,47 @@ def _integration_prompt(
             "- The final module must define every required symbol even when a helper is implemented differently internally.",
             "- Do not use file I/O, network calls, eval, or exec.",
             "- Do not use wildcard imports. Import modules and qualify their names, or import required symbols explicitly.",
-            "- Keep the main loop guarded by if __name__ == \"__main__\" when an app entrypoint is required.",
+            entrypoint_rule,
             "- The final code will be scanned by all engines and formal/Deal gates.",
         ]
     ), summarizer=prompt_summarizer).text
+
+
+def _attempt_issue_count(attempt: dict) -> int:
+    return sum(
+        len(attempt.get(section, {}).get(field, []))
+        for section, field in (
+            ("validation", "violations"),
+            ("behavior_validation", "issues"),
+            ("profiling_validation", "issues"),
+            ("formal_validation", "issues"),
+        )
+    )
+
+
+def _best_attempt(attempts: list[dict]) -> dict:
+    """Select the strongest validated draft instead of assuming the last is best."""
+
+    if not attempts:
+        return {}
+
+    def quality(indexed_attempt: tuple[int, dict]) -> tuple[int, int, int, int, int]:
+        index, attempt = indexed_attempt
+        compliance = [
+            bool(attempt.get("validation", {}).get("is_compliant", False)),
+            bool(attempt.get("behavior_validation", {}).get("is_compliant", False)),
+            bool(attempt.get("profiling_validation", {}).get("is_compliant", True)),
+            bool(attempt.get("formal_validation", {}).get("is_compliant", False)),
+        ]
+        return (
+            int(all(compliance)),
+            sum(compliance),
+            -_attempt_issue_count(attempt),
+            int(bool(str(attempt.get("draft") or "").strip())),
+            index,
+        )
+
+    return max(enumerate(attempts), key=quality)[1]
 
 
 def _normalize_symbol(text: str) -> str:
@@ -1438,6 +1482,7 @@ def run_spec(
                 plan_packet,
                 accepted_sources,
                 contract_execution_results,
+                language=plan.language,
                 prompt_summarizer=active_prompt_summarizer,
             )
             print("[contract-queue] all contracts accepted; sending accepted functions to architect integrator", flush=True)
@@ -1495,7 +1540,7 @@ def run_spec(
         prompt = _initial_prompt(plan_packet, queue)
         result = controller.run(target=spec_text, initial_prompt=prompt)
         session = result.payload
-    final_attempt = session.get("attempts", [{}])[-1] if session.get("attempts") else {}
+    final_attempt = _best_attempt(session.get("attempts", []))
     final_source = final_attempt.get("draft", "")
     spec_issues = _validate_structured_spec_output(final_source, plan)
     import_graph = analyze_import_graph(

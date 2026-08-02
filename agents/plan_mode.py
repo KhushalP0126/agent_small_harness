@@ -22,6 +22,12 @@ FUNCTION_NAME_RE = re.compile(
 )
 DEF_NAME_RE = re.compile(r"\bdef\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*\(")
 CALL_NAME_RE = re.compile(r"\b(?P<name>[a-z_]+[a-z0-9_]*)\s*\(")
+SUPPORTED_STRUCTURED_LANGUAGES = frozenset({"python", "c", "cpp"})
+STRUCTURED_LANGUAGE_ALIASES = {
+    "py": "python",
+    "python3": "python",
+    "c++": "cpp",
+}
 
 
 @dataclass
@@ -93,8 +99,19 @@ class PlanModeAgent(BaseAgent):
     ) -> PlanSpec:
         normalized = self.normalizer.normalize(prompt)
         classification = self.classifier.classify(normalized.normalized_prompt)
-        template_match = self.template_registry.select(normalized.normalized_prompt, classification)
         structured_sections = self._structured_sections(prompt)
+        structured_language = self._structured_meta_field(
+            structured_sections,
+            "language",
+        )
+        if structured_language:
+            classification.language = self._validated_structured_language(
+                structured_language
+            )
+        template_match = self.template_registry.select(
+            normalized.normalized_prompt,
+            classification,
+        )
         target_function = "" if self._is_structured_app_spec(structured_sections) else self._target_function(normalized.normalized_prompt)
         behavior_cases = self._behavior_cases(prompt)
         deal_contracts = self._deal_contracts(
@@ -254,6 +271,18 @@ class PlanModeAgent(BaseAgent):
             if value:
                 return value
         return ""
+
+    @staticmethod
+    def _validated_structured_language(language: str) -> str:
+        normalized = language.strip().casefold()
+        normalized = STRUCTURED_LANGUAGE_ALIASES.get(normalized, normalized)
+        if normalized not in SUPPORTED_STRUCTURED_LANGUAGES:
+            supported = ", ".join(sorted(SUPPORTED_STRUCTURED_LANGUAGES))
+            raise ValueError(
+                f"Unsupported structured-spec language {language!r}; "
+                f"expected one of: {supported}"
+            )
+        return normalized
 
     def _is_structured_app_spec(self, sections: dict[str, list[str]]) -> bool:
         return any(name in sections for name in ("FILES", "REQUIRED COMPONENTS", "ENTRYPOINT"))

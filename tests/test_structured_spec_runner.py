@@ -15,8 +15,10 @@ from backends.architect_client import (
 from scripts.run_structured_spec import (
     _accepted_type_context,
     _apply_contract_plan,
+    _best_attempt,
     _contract_queue_from_architect,
     _fallback_contract_queue,
+    _integration_prompt,
     _run_contract_queue_sequentially,
     _run_integration_smoke_test,
     _single_contract_prompt,
@@ -69,11 +71,63 @@ class StructuredSpecRunnerTests(unittest.TestCase):
         plan = PlanModeAgent().plan(prompt)
 
         self.assertEqual(plan.app_name, "workflow_app")
+        self.assertEqual(plan.language, "python")
         self.assertIn("visualkit", plan.allowed_libraries)
         self.assertIn("`AppConfig`", plan.components)
         self.assertIn("`main()`", plan.components)
         self.assertIn("`main()`", plan.entrypoints)
         self.assertIn("state -> render", plan.dependency_graph_context)
+
+    def test_structured_spec_language_overrides_prompt_classifier(self) -> None:
+        plan = PlanModeAgent().plan(
+            """
+Build the implementation without assuming a programming language.
+
+## App Spec
+
+- language: c++
+"""
+        )
+
+        self.assertEqual(plan.language, "cpp")
+
+    def test_structured_spec_rejects_unsupported_language(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Unsupported structured-spec language"):
+            PlanModeAgent().plan(
+                """
+## App Spec
+
+- language: javascript
+"""
+            )
+
+    def test_integration_prompt_uses_plan_language(self) -> None:
+        prompt = _integration_prompt("plan", [], [], language="cpp")
+
+        self.assertIn("complete cpp source artifact", prompt)
+        self.assertNotIn("Python module", prompt)
+        self.assertIn("language-appropriate application entrypoint", prompt)
+
+    def test_best_attempt_prefers_validation_progress_over_last_retry(self) -> None:
+        stronger = {
+            "draft": "def main():\n    return 1\n",
+            "validation": {"is_compliant": True, "violations": []},
+            "behavior_validation": {"is_compliant": True, "issues": []},
+            "profiling_validation": {"is_compliant": True, "issues": []},
+            "formal_validation": {"is_compliant": False, "issues": [{"kind": "formal"}]},
+        }
+        regressed = {
+            "draft": "pass\n",
+            "validation": {
+                "is_compliant": False,
+                "violations": [{"kind": "missing_component"}],
+            },
+            "behavior_validation": {"is_compliant": False, "issues": [{"case": "main"}]},
+            "profiling_validation": {"is_compliant": True, "issues": []},
+            "formal_validation": {"is_compliant": False, "issues": [{"kind": "formal"}]},
+        }
+
+        self.assertIs(_best_attempt([stronger, regressed]), stronger)
 
     def test_structured_spec_gate_rejects_missing_components(self) -> None:
         plan = PlanModeAgent().plan(
