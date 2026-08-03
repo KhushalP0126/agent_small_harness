@@ -380,7 +380,7 @@ ignored; the runner and this summary are versioned).
 | Wall-clock time | 88.9s | 369.1s |
 
 This is a diagnostic result, not a success claim: the shielded loop currently
-re-sends its growing tool transcript on every turn, and six of its failures
+re-sends its growing tool transcript on every turn, and all nine of its failures
 hit the eight-turn limit. It consumed about 94.2x as many tokens as the
 baseline and took about 4.2x as long. The next optimization is transcript
 compaction plus task-specific turn budgets; the benchmark should be rerun
