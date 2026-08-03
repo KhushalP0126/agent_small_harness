@@ -219,6 +219,21 @@ This boundary reduces accidental repository and secret exposure but remains a
 trusted-local-development control. It is not a hardened kernel, container, or
 network sandbox for adversarial model-generated Python.
 
+### 3.0.2 Hardened Multi-Language Execution
+
+- A typed adapter registry defines the filename, container image, container
+  command, and local-development command for Python, C, C++, Rust, and
+  JavaScript. Unknown languages fail with `unsupported_language`.
+- Container execution mounts only a disposable source directory. The root
+  filesystem is read-only, networking defaults to `none`, capabilities are
+  dropped, `no-new-privileges` is enabled, and CPU, memory, process, temporary
+  storage, output, and wall-clock limits are explicit.
+- Missing Docker/Podman fails as `container_unavailable`. Local execution is a
+  separate mode and fallback from container mode requires an explicit flag.
+- The 20-task paired benchmark compares identical baseline and shielded tasks,
+  recording success, prompt/completion tokens, tool calls, retries, duration,
+  and per-task/aggregate token deltas.
+
 ### 3.1 C/C++ Compilation Gate
 
 - Wires a strict `gcc`/`clang` subprocess pass into the existing gate

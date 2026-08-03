@@ -317,6 +317,43 @@ Read-only tasks finish with an assistant answer. A proposed search/replace opens
 a diff modal; `y` applies it only after the repository path and reviewed file
 hash are checked again, while `n` or `Esc` discards it without writing.
 
+### Hardened execution and language adapters
+
+Generated source can be executed through typed adapters for Python, C, C++,
+Rust, and JavaScript. Container mode is explicit and fail-closed: it requires
+Docker or Podman, disables networking by default, uses a read-only root
+filesystem, drops Linux capabilities, enables `no-new-privileges`, and bounds
+memory, CPU, processes, temporary storage, output, and wall time. It mounts only
+the disposable source directory—not the repository or its `.env` file.
+
+```bash
+make sandbox-run SOURCE=/tmp/candidate.py LANGUAGE=python
+make sandbox-run SOURCE=/tmp/candidate.rs LANGUAGE=rust CONTAINER_RUNTIME=podman
+```
+
+For trusted development only, `SANDBOX_MODE=local` selects the existing
+sanitized subprocess boundary. A missing container runtime never silently
+falls back locally; the CLI requires the separate `--allow-local-fallback`
+flag when that behavior is deliberately requested.
+
+### Paired coding-agent benchmark
+
+`data/agent_benchmark_tasks.json` contains 20 fixed inspection, edit, repair,
+safety, language, and recovery tasks. The paired runner sends identical task
+JSON to baseline and local-agent-shielded commands, which return success,
+prompt/completion tokens, tool calls, and retries. Its report compares outcome
+counts, total and per-task token deltas, reduction ratio, and duration.
+
+```bash
+make agent-benchmark \
+  BASELINE_CMD="./scripts/baseline_runner" \
+  SHIELDED_CMD="./scripts/shielded_runner" \
+  BENCHMARK_OUTPUT=artifacts/agent-benchmark.json
+```
+
+This provides evidence for cloud-token reduction without claiming that extra
+local inference reduces total tokens across every model.
+
 ### What Each Engine Traverses
 
 Every Python engine exposes `scan(source)` and returns `EngineFinding` records.

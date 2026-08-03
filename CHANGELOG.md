@@ -26,6 +26,10 @@ Initial tagged release of the generalized code-generation and repair harness.
   path-escape protection, and stale-diff checks at explicit approval time.
 - Rust TUI integration for repository tool tasks, streamed tool-call status,
   assistant results, and a blocking `y`/`n` diff approval modal.
+- Fail-closed Docker/Podman generated-source execution, typed Python/C/C++/Rust/
+  JavaScript adapters, and an explicit trusted-local fallback.
+- A 20-task paired coding-agent benchmark for measuring outcomes, tool calls,
+  retries, duration, and local-agent versus baseline token consumption.
 - Structured contract planning, sequential small-worker execution, repair and
   architect escalation, checkpoint artifacts, and validation evidence.
 
