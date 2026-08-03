@@ -311,6 +311,12 @@ make tool-agent TASK="prepare a diff for README.md" TOOL_AGENT=deepseek
 The returned JSON contains the final answer and every typed call/result. Diffs
 remain review-only; this command cannot approve or apply them.
 
+The Rust TUI exposes the same loop with `a`. Enter a repository inspection or
+change request and the bridge streams each typed tool call into the main output.
+Read-only tasks finish with an assistant answer. A proposed search/replace opens
+a diff modal; `y` applies it only after the repository path and reviewed file
+hash are checked again, while `n` or `Esc` discards it without writing.
+
 ### What Each Engine Traverses
 
 Every Python engine exposes `scan(source)` and returns `EngineFinding` records.

@@ -209,6 +209,11 @@ TUI. Each reports results as a new JSON-lines event type so either TUI
 - Qwen is the default tool selector and DeepSeek is optional. Both receive the
   same four-tool contract and feed each typed result into the next bounded
   decision turn.
+- In the Rust TUI, `a` captures a repository task and sends `tool_task` through
+  the existing JSONL bridge. Typed `tool_call` and `tool_answer` events stream
+  into the main output. A `tool_diff` event opens a blocking review modal;
+  `apply_tool_diff` is sent only after `y`, while `n`/`Esc` discards the pending
+  proposal. The bridge never exposes the approval operation as a model tool.
 
 This boundary reduces accidental repository and secret exposure but remains a
 trusted-local-development control. It is not a hardened kernel, container, or

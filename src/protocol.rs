@@ -25,6 +25,13 @@ pub enum HarnessCommand {
     ExecuteSpec {
         text: String,
     },
+    ToolTask {
+        text: String,
+        provider: String,
+    },
+    ApplyToolDiff {
+        approved: bool,
+    },
     Cancel,
     RepoMap {
         root: String,
@@ -226,6 +233,28 @@ pub enum HarnessEvent {
         #[serde(default)]
         artifact_path: String,
     },
+    ToolCall {
+        turn: u32,
+        tool: String,
+        ok: bool,
+        #[serde(default)]
+        summary: String,
+    },
+    ToolAnswer {
+        answer: String,
+        exhausted: bool,
+        call_count: u32,
+    },
+    ToolDiff {
+        path: String,
+        diff: String,
+        replacements: u32,
+    },
+    ToolDiffResolved {
+        path: String,
+        applied: bool,
+        message: String,
+    },
     ProtocolError {
         line: String,
         error: String,
@@ -390,6 +419,27 @@ mod tests {
                 source: "def main():\n    return 0\n".into(),
                 artifact_path: "artifacts/runs/run-123".into(),
             },
+            HarnessEvent::ToolCall {
+                turn: 1,
+                tool: "read_file".into(),
+                ok: true,
+                summary: "completed".into(),
+            },
+            HarnessEvent::ToolAnswer {
+                answer: "inspection complete".into(),
+                exhausted: false,
+                call_count: 1,
+            },
+            HarnessEvent::ToolDiff {
+                path: "src/main.rs".into(),
+                diff: "--- a/src/main.rs\n+++ b/src/main.rs\n".into(),
+                replacements: 1,
+            },
+            HarnessEvent::ToolDiffResolved {
+                path: "src/main.rs".into(),
+                applied: true,
+                message: "diff applied".into(),
+            },
             HarnessEvent::ProtocolError {
                 line: "{broken".into(),
                 error: "expected value".into(),
@@ -424,6 +474,11 @@ mod tests {
             HarnessCommand::ExecuteSpec {
                 text: "# Parser spec".into(),
             },
+            HarnessCommand::ToolTask {
+                text: "inspect the parser".into(),
+                provider: "qwen".into(),
+            },
+            HarnessCommand::ApplyToolDiff { approved: true },
             HarnessCommand::RepoMap {
                 root: ".".into(),
                 focus: String::new(),

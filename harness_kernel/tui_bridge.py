@@ -21,16 +21,27 @@ from typing import Any, TextIO
 
 from agents.artifact_manager import ArtifactManager
 from agents.repo_map_agent import RepoMapAgent
+from agents.tool_calling_agent import ToolCallRecord, ToolCallingAgent
 from backends.architect_client import ArchitectApiClient, ArchitectConfig
+from backends.ollama_client import (
+    DEFAULT_OLLAMA_MODEL,
+    OllamaClient,
+    OllamaGenerationConfig,
+)
 from engines.compilation_engine import CompilationEngine
 from harness_kernel.compute_shield import ShieldTaskTokens, compute_shield_metrics
 from harness_kernel.profiling import ProfileResult
 from harness_kernel.event_stream import EVENT_FD_ENV
+from harness_kernel.tool_handlers import (
+    ApplySearchReplaceResponse,
+    apply_reviewed_search_replace,
+    build_default_tool_registry,
+)
 from TUI.mermaid_renderer import render_repo_architecture_mermaid
 from TUI.mermaid_renderer import render_repo_architecture
 
 
-PROTOCOL_VERSION = 3
+PROTOCOL_VERSION = 4
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MEMORY_PATH = REPO_ROOT / ".tui_memory.json"
 MAX_CHAT_MESSAGES = 24
@@ -106,6 +117,8 @@ class Bridge:
         env_file: Path | str | None = None,
         memory_path: Path | str | None = None,
         architect_client: ArchitectApiClient | None = None,
+        tool_generate_text: Any = None,
+        tool_repository_root: Path | str | None = None,
     ) -> None:
         self.writer = writer or EventWriter()
         self.artifact_root = (
@@ -118,6 +131,9 @@ class Bridge:
             Path(memory_path) if memory_path is not None else DEFAULT_MEMORY_PATH
         )
         self._architect_client = architect_client
+        self._tool_generate_text = tool_generate_text
+        self.tool_repository_root = Path(tool_repository_root or REPO_ROOT).resolve()
+        self._pending_tool_diff: ApplySearchReplaceResponse | None = None
         self._chat_history: list[dict[str, str]] = []
         self._assistant_busy = False
         self._process: subprocess.Popen[str] | None = None
@@ -162,6 +178,13 @@ class Bridge:
             self.complete_questionnaire(command.get("answers"))
         elif kind == "execute_spec":
             self.start_spec_execution(str(command.get("text") or ""))
+        elif kind == "tool_task":
+            self.start_tool_task(
+                str(command.get("text") or ""),
+                str(command.get("provider") or "qwen"),
+            )
+        elif kind == "apply_tool_diff":
+            self.resolve_tool_diff(bool(command.get("approved")))
         elif kind == "cancel":
             self.cancel()
         elif kind == "repo_map":
@@ -270,6 +293,120 @@ class Bridge:
             "structured_spec",
             ["--spec", str(spec_path), "--save-artifacts"],
             cleanup_path=spec_path,
+        )
+
+    def start_tool_task(self, text: str, provider: str = "qwen") -> None:
+        task = text.strip()
+        if not task:
+            self.writer.emit("log", level="warning", msg="tool task cannot be empty")
+            return
+        if self._assistant_busy:
+            self.writer.emit("log", level="warning", msg="an assistant task is already running")
+            return
+        selected_provider = provider.strip().lower()
+        if selected_provider not in {"qwen", "deepseek"}:
+            self.writer.emit(
+                "log",
+                level="error",
+                msg=f"unsupported tool provider: {provider}",
+            )
+            return
+        self._pending_tool_diff = None
+        self.writer.emit("chat_message", role="user", content=f"[repository task] {task}")
+        self._start_assistant_task(
+            "repository_tools",
+            lambda: self._run_tool_task(task, selected_provider),
+        )
+
+    def _run_tool_task(self, task: str, provider: str) -> None:
+        proposals: list[ApplySearchReplaceResponse] = []
+
+        def on_tool_result(record: ToolCallRecord, raw_value: Any) -> None:
+            ok = bool(record.result.get("ok"))
+            error = str(record.result.get("error") or "")
+            self.writer.emit(
+                "tool_call",
+                turn=record.turn,
+                tool=record.tool,
+                ok=ok,
+                summary="completed" if ok else error,
+            )
+            if isinstance(raw_value, ApplySearchReplaceResponse):
+                proposals.append(raw_value)
+
+        run = ToolCallingAgent(
+            self._tool_generator(provider),
+            build_default_tool_registry(repository_root=self.tool_repository_root),
+            max_turns=8,
+            on_tool_result=on_tool_result,
+        ).run(task)
+        self.writer.emit(
+            "tool_answer",
+            answer=run.final_answer,
+            exhausted=run.exhausted,
+            call_count=len(run.calls),
+        )
+        if proposals:
+            if len(proposals) > 1:
+                self.writer.emit(
+                    "log",
+                    level="warning",
+                    msg="multiple diffs were proposed; only the latest is pending review",
+                )
+            self._pending_tool_diff = proposals[-1]
+            proposal = self._pending_tool_diff
+            self.writer.emit(
+                "tool_diff",
+                path=proposal.path,
+                diff=proposal.diff,
+                replacements=proposal.replacements,
+            )
+
+    def _tool_generator(self, provider: str):
+        if self._tool_generate_text is not None:
+            return self._tool_generate_text
+        if provider == "deepseek":
+            return lambda prompt: self._client().generate(
+                prompt,
+                system="Return one repository tool-call JSON object only.",
+            )
+        client = OllamaClient()
+        return lambda prompt: client.generate(
+            prompt,
+            model=DEFAULT_OLLAMA_MODEL,
+            config=OllamaGenerationConfig(
+                temperature=0.0,
+                num_predict=1200,
+                num_ctx=8192,
+            ),
+            system="Return one repository tool-call JSON object only.",
+        )
+
+    def resolve_tool_diff(self, approved: bool) -> None:
+        proposal = self._pending_tool_diff
+        if proposal is None:
+            self.writer.emit("log", level="warning", msg="no tool diff is pending review")
+            return
+        try:
+            result = apply_reviewed_search_replace(
+                self.tool_repository_root,
+                proposal,
+                approved=approved,
+            )
+        except Exception as exc:  # noqa: BLE001 - protocol boundary
+            self.writer.emit(
+                "tool_diff_resolved",
+                path=proposal.path,
+                applied=False,
+                message=f"{type(exc).__name__}: {exc}",
+            )
+            return
+        self._pending_tool_diff = None
+        self.writer.emit(
+            "tool_diff_resolved",
+            path=result.path,
+            applied=result.applied,
+            message="diff applied" if result.applied else "diff discarded",
         )
 
     def _start_assistant_task(self, stage: str, target: Any) -> None:

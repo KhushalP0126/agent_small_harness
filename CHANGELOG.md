@@ -24,6 +24,8 @@ Initial tagged release of the generalized code-generation and repair harness.
 - A bounded Qwen/DeepSeek repository tool loop with typed search, bounded file
   reads, review-only search/replace diffs, isolated script execution, shared
   path-escape protection, and stale-diff checks at explicit approval time.
+- Rust TUI integration for repository tool tasks, streamed tool-call status,
+  assistant results, and a blocking `y`/`n` diff approval modal.
 - Structured contract planning, sequential small-worker execution, repair and
   architect escalation, checkpoint artifacts, and validation evidence.
 

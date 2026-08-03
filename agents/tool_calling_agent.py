@@ -6,7 +6,7 @@ import json
 import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 from harness_kernel.tool_handlers import (
     ApplySearchReplaceRequest,
@@ -18,6 +18,7 @@ from harness_kernel.tool_registry import ToolRegistry
 
 
 GenerateText = Callable[[str], str]
+ToolResultCallback = Callable[["ToolCallRecord", Any | None], None]
 TOOL_NAMES = (
     "search_directory",
     "read_file",
@@ -51,10 +52,12 @@ class ToolCallingAgent:
         registry: ToolRegistry,
         *,
         max_turns: int = 8,
+        on_tool_result: ToolResultCallback | None = None,
     ) -> None:
         self.generate_text = generate_text
         self.registry = registry
         self.max_turns = max(1, min(int(max_turns), 20))
+        self.on_tool_result = on_tool_result
 
     def run(self, task: str) -> ToolCallingRun:
         transcript: list[dict] = []
@@ -70,6 +73,7 @@ class ToolCallingAgent:
 
             tool = str(action.get("tool") or "")
             arguments = action.get("arguments")
+            raw_value = None
             if tool not in TOOL_NAMES or not isinstance(arguments, dict):
                 result_payload = {
                     "ok": False,
@@ -89,8 +93,11 @@ class ToolCallingAgent:
                 else:
                     dispatched = self.registry.dispatch(tool, request)
                     result_payload = _result_payload(dispatched)
+                    raw_value = dispatched.value if dispatched.ok else None
             record = ToolCallRecord(turn, tool, arguments if isinstance(arguments, dict) else {}, result_payload)
             calls.append(record)
+            if self.on_tool_result is not None:
+                self.on_tool_result(record, raw_value)
             transcript.append(
                 {
                     "assistant": action,

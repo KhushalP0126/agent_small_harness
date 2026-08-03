@@ -132,6 +132,38 @@ class ToolCallingAgentTests(unittest.TestCase):
         self.assertEqual(run.calls[0].result["error_kind"], "invalid_arguments")
         self.assertIn("invalid_arguments", prompts[-1])
 
+    def test_result_callback_receives_raw_diff_without_replaying_it_to_model(self) -> None:
+        responses = iter(
+            [
+                json.dumps(
+                    {
+                        "action": "tool",
+                        "tool": "apply_search_replace",
+                        "arguments": {
+                            "root": ".",
+                            "path": "main.py",
+                            "search": "return 1",
+                            "replace": "return 2",
+                        },
+                    }
+                ),
+                json.dumps({"action": "final", "answer": "review it"}),
+            ]
+        )
+        callbacks = []
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "main.py").write_text("def main():\n    return 1\n", encoding="utf-8")
+            ToolCallingAgent(
+                lambda _prompt: next(responses),
+                build_default_tool_registry(repository_root=root),
+                on_tool_result=lambda record, raw: callbacks.append((record, raw)),
+            ).run("prepare a change")
+
+        self.assertEqual(callbacks[0][0].tool, "apply_search_replace")
+        self.assertEqual(callbacks[0][1].path, "main.py")
+        self.assertIn("return 2", callbacks[0][1].proposed_content)
+
 
 if __name__ == "__main__":
     unittest.main()

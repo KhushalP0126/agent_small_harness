@@ -43,6 +43,7 @@ enum AppMode {
     Questionnaire,
     DraftingSpec,
     SpecReview { spec_text: String },
+    ToolDiffReview { path: String, diff: String },
     Executing,
 }
 
@@ -53,6 +54,7 @@ impl AppMode {
             Self::Questionnaire => "questionnaire",
             Self::DraftingSpec => "drafting spec",
             Self::SpecReview { .. } => "spec review",
+            Self::ToolDiffReview { .. } => "tool diff review",
             Self::Executing => "executing",
         }
     }
@@ -80,6 +82,7 @@ struct AppState {
     history_detail: Option<String>,
     prompt: String,
     prompt_active: bool,
+    tool_prompt_active: bool,
     assistant_busy: bool,
     numbered_options_available: bool,
     clarification_questions: Vec<ClarificationQuestion>,
@@ -97,6 +100,7 @@ struct AppState {
     validated_source_visible: bool,
     code_scroll_y: usize,
     code_scroll_x: usize,
+    tool_diff_scroll: usize,
 }
 
 impl Default for AppState {
@@ -104,7 +108,7 @@ impl Default for AppState {
         Self {
             mode: AppMode::Chat,
             logs: vec![
-                "c/p: chat  s: draft spec  m: repository map  d: history  v: validated code  q: quit"
+                "c/p: chat  a: repository tools  s: draft spec  m: repository map  d: history  v: validated code  q: quit"
                     .into(),
             ],
             log_scroll: 0,
@@ -125,6 +129,7 @@ impl Default for AppState {
             history_detail: None,
             prompt: String::new(),
             prompt_active: false,
+            tool_prompt_active: false,
             assistant_busy: false,
             numbered_options_available: false,
             clarification_questions: Vec::new(),
@@ -142,6 +147,7 @@ impl Default for AppState {
             validated_source_visible: false,
             code_scroll_y: 0,
             code_scroll_x: 0,
+            tool_diff_scroll: 0,
         }
     }
 }
@@ -347,6 +353,50 @@ impl AppState {
                 self.logs
                     .push("validated source ready · press v to view it again".into());
             }
+            HarnessEvent::ToolCall {
+                turn,
+                tool,
+                ok,
+                summary,
+            } => self.logs.push(format!(
+                "[tool {turn}] {tool}: {}{}",
+                if ok { "completed" } else { "failed" },
+                if summary.is_empty() {
+                    String::new()
+                } else {
+                    format!(" · {summary}")
+                }
+            )),
+            HarnessEvent::ToolAnswer {
+                answer,
+                exhausted,
+                call_count,
+            } => self.logs.push(format!(
+                "[assistant] repository task {} after {call_count} tool call(s): {answer}",
+                if exhausted { "stopped at its limit" } else { "finished" }
+            )),
+            HarnessEvent::ToolDiff {
+                path,
+                diff,
+                replacements,
+            } => {
+                self.logs.push(format!(
+                    "tool proposed {replacements} replacement(s) in {path}; review with y/n"
+                ));
+                self.tool_diff_scroll = 0;
+                self.mode = AppMode::ToolDiffReview { path, diff };
+            }
+            HarnessEvent::ToolDiffResolved {
+                path,
+                applied,
+                message,
+            } => {
+                self.logs.push(format!(
+                    "tool diff {path}: {} · {message}",
+                    if applied { "applied" } else { "not applied" }
+                ));
+                self.mode = AppMode::Chat;
+            }
             HarnessEvent::ProtocolError { line, error } => {
                 self.logs
                     .push(format!("[protocol warning] {error}: {line}"));
@@ -379,7 +429,9 @@ impl AppState {
             && !self.validated_source_visible
             && !matches!(
                 self.mode,
-                AppMode::Questionnaire | AppMode::SpecReview { .. }
+                AppMode::Questionnaire
+                    | AppMode::SpecReview { .. }
+                    | AppMode::ToolDiffReview { .. }
             )
     }
 
@@ -635,6 +687,7 @@ async fn run_loop(
                         match key.code {
                             KeyCode::Esc => {
                                 state.prompt_active = false;
+                                state.tool_prompt_active = false;
                                 state.questionnaire_other_active = false;
                                 state.prompt.clear();
                             }
@@ -659,8 +712,21 @@ async fn run_loop(
                             }
                             KeyCode::Enter if !state.prompt.trim().is_empty() && !state.assistant_busy => {
                                 let text = std::mem::take(&mut state.prompt);
-                                send_command(child_stdin, &HarnessCommand::Chat { text }).await?;
+                                if state.tool_prompt_active {
+                                    send_command(
+                                        child_stdin,
+                                        &HarnessCommand::ToolTask {
+                                            text,
+                                            provider: "qwen".into(),
+                                        },
+                                    )
+                                    .await?;
+                                    state.logs.push("repository tool task started…".into());
+                                } else {
+                                    send_command(child_stdin, &HarnessCommand::Chat { text }).await?;
+                                }
                                 state.prompt_active = false;
+                                state.tool_prompt_active = false;
                             }
                             KeyCode::Char(digit @ '1'..='5')
                                 if state.prompt.is_empty()
@@ -749,6 +815,41 @@ async fn run_loop(
                                 .logs
                                 .push("approved spec sent to the execution pipeline".into());
                         }
+                        KeyCode::Char('y')
+                            if matches!(state.mode, AppMode::ToolDiffReview { .. }) =>
+                        {
+                            send_command(
+                                child_stdin,
+                                &HarnessCommand::ApplyToolDiff { approved: true },
+                            )
+                            .await?;
+                            state.logs.push("approved tool diff; verifying and applying…".into());
+                        }
+                        KeyCode::Char('n') | KeyCode::Esc
+                            if matches!(state.mode, AppMode::ToolDiffReview { .. }) =>
+                        {
+                            send_command(
+                                child_stdin,
+                                &HarnessCommand::ApplyToolDiff { approved: false },
+                            )
+                            .await?;
+                        }
+                        KeyCode::Up if matches!(state.mode, AppMode::ToolDiffReview { .. }) => {
+                            state.tool_diff_scroll = state.tool_diff_scroll.saturating_sub(1);
+                        }
+                        KeyCode::Down if matches!(state.mode, AppMode::ToolDiffReview { .. }) => {
+                            state.tool_diff_scroll = state.tool_diff_scroll.saturating_add(1);
+                        }
+                        KeyCode::PageUp
+                            if matches!(state.mode, AppMode::ToolDiffReview { .. }) =>
+                        {
+                            state.tool_diff_scroll = state.tool_diff_scroll.saturating_sub(20);
+                        }
+                        KeyCode::PageDown
+                            if matches!(state.mode, AppMode::ToolDiffReview { .. }) =>
+                        {
+                            state.tool_diff_scroll = state.tool_diff_scroll.saturating_add(20);
+                        }
                         KeyCode::Char('n') | KeyCode::Esc
                             if matches!(state.mode, AppMode::SpecReview { .. }) =>
                         {
@@ -794,6 +895,14 @@ async fn run_loop(
                             if state.mode == AppMode::Chat && !state.assistant_busy =>
                         {
                             state.prompt_active = true;
+                            state.tool_prompt_active = false;
+                        }
+                        KeyCode::Char('a')
+                            if state.mode == AppMode::Chat && !state.assistant_busy =>
+                        {
+                            state.prompt.clear();
+                            state.prompt_active = true;
+                            state.tool_prompt_active = true;
                         }
                         KeyCode::Char(digit @ '1'..='5')
                             if state.select_numbered_option(digit) => {}
@@ -1021,6 +1130,8 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState, mermaid: &mut MermaidView)
     );
     let prompt_title = if state.questionnaire_other_active {
         " Other answer · type a custom response · Enter confirm · Esc options "
+    } else if state.tool_prompt_active {
+        "Repository tools · describe inspection/change · Enter run · Esc cancel"
     } else if state.prompt_active {
         "Chat · Enter sends message only · Esc cancels input"
     } else if state.assistant_busy {
@@ -1031,8 +1142,10 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState, mermaid: &mut MermaidView)
         "Spec · drafting from conversation"
     } else if matches!(state.mode, AppMode::SpecReview { .. }) {
         "Spec review · y execute · n revise"
+    } else if matches!(state.mode, AppMode::ToolDiffReview { .. }) {
+        "Tool diff review · y apply · n discard"
     } else {
-        "Chat · c/p type · s draft spec · /remember <preference>"
+        "Chat · c/p type · a repository tools · s draft spec · /remember <preference>"
     };
     let prompt_text = if state.prompt.is_empty() && !state.prompt_active {
         "Chat refines the idea without changing files. Execution requires a generated spec and explicit y approval."
@@ -1080,6 +1193,10 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState, mermaid: &mut MermaidView)
 
     if let AppMode::SpecReview { spec_text } = &state.mode {
         draw_spec_review(frame, spec_text);
+    }
+
+    if matches!(state.mode, AppMode::ToolDiffReview { .. }) {
+        draw_tool_diff_review(frame, state);
     }
 
     if state.mode == AppMode::Questionnaire {
@@ -1359,6 +1476,55 @@ fn draw_spec_review(frame: &mut ratatui::Frame, spec_text: &str) {
     frame.render_widget(Paragraph::new(spec_text).wrap(Wrap { trim: false }), inner);
 }
 
+fn draw_tool_diff_review(frame: &mut ratatui::Frame, state: &AppState) {
+    let AppMode::ToolDiffReview { path, diff } = &state.mode else {
+        return;
+    };
+    let area = centered_rect(92, 90, frame.area());
+    frame.render_widget(Clear, area);
+    frame.render_widget(
+        pane_block(
+            format!(" Tool diff · {path} · y apply · n/Esc discard · Up/Down/PgUp/PgDn "),
+            true,
+        ),
+        area,
+    );
+    let inner = Rect {
+        x: area.x + 1,
+        y: area.y + 1,
+        width: area.width.saturating_sub(2),
+        height: area.height.saturating_sub(2),
+    };
+    let lines: Vec<Line> = diff
+        .lines()
+        .map(|line| {
+            let color = if line.starts_with("+++") || line.starts_with("---") {
+                Color::Cyan
+            } else if line.starts_with('+') {
+                Color::Green
+            } else if line.starts_with('-') {
+                Color::Red
+            } else if line.starts_with("@@") {
+                Color::Yellow
+            } else {
+                Color::White
+            };
+            Line::styled(line.to_owned(), Style::default().fg(color))
+        })
+        .collect();
+    let max_scroll = lines.len().saturating_sub(usize::from(inner.height));
+    let scroll = state
+        .tool_diff_scroll
+        .min(max_scroll)
+        .min(u16::MAX as usize) as u16;
+    frame.render_widget(
+        Paragraph::new(Text::from(lines))
+            .scroll((scroll, 0))
+            .wrap(Wrap { trim: false }),
+        inner,
+    );
+}
+
 fn draw_repo_browser(frame: &mut ratatui::Frame, state: &AppState) {
     let area = centered_rect(86, 86, frame.area());
     frame.render_widget(Clear, area);
@@ -1491,6 +1657,31 @@ mod tests {
         );
         assert_eq!(state.validated_language, "python");
         assert!(state.logs.last().unwrap().contains("press v"));
+    }
+
+    #[test]
+    fn tool_diff_opens_review_and_resolution_returns_to_chat() {
+        let mut state = AppState::default();
+        state.apply(HarnessEvent::ToolDiff {
+            path: "src/main.rs".into(),
+            diff: "--- a/src/main.rs\n+++ b/src/main.rs\n".into(),
+            replacements: 1,
+        });
+        assert_eq!(
+            state.mode,
+            AppMode::ToolDiffReview {
+                path: "src/main.rs".into(),
+                diff: "--- a/src/main.rs\n+++ b/src/main.rs\n".into(),
+            }
+        );
+        assert!(!state.main_output_active());
+
+        state.apply(HarnessEvent::ToolDiffResolved {
+            path: "src/main.rs".into(),
+            applied: false,
+            message: "diff discarded".into(),
+        });
+        assert_eq!(state.mode, AppMode::Chat);
     }
 
     #[test]

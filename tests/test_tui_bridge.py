@@ -71,6 +71,73 @@ class TuiBridgeTests(unittest.TestCase):
         self.assertEqual(self.events()[0]["type"], "log")
         self.assertEqual(self.events()[0]["level"], "error")
 
+    def test_tool_task_streams_calls_and_answer(self) -> None:
+        responses = iter(
+            [
+                json.dumps(
+                    {
+                        "action": "tool",
+                        "tool": "search_directory",
+                        "arguments": {"root": ".", "pattern": "*.py"},
+                    }
+                ),
+                json.dumps({"action": "final", "answer": "inspection complete"}),
+            ]
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "main.py").write_text("print('ok')\n", encoding="utf-8")
+            bridge = Bridge(
+                EventWriter(self.output),
+                tool_generate_text=lambda _prompt: next(responses),
+                tool_repository_root=root,
+            )
+            bridge.handle({"cmd": "tool_task", "text": "inspect", "provider": "qwen"})
+            answer = self.wait_for_event("tool_answer")
+
+        events = self.events()
+        call = next(event for event in events if event["type"] == "tool_call")
+        self.assertEqual(call["tool"], "search_directory")
+        self.assertTrue(call["ok"])
+        self.assertEqual(answer["answer"], "inspection complete")
+
+    def test_tool_diff_requires_explicit_approval(self) -> None:
+        responses = iter(
+            [
+                json.dumps(
+                    {
+                        "action": "tool",
+                        "tool": "apply_search_replace",
+                        "arguments": {
+                            "root": ".",
+                            "path": "main.py",
+                            "search": "return 1",
+                            "replace": "return 2",
+                        },
+                    }
+                ),
+                json.dumps({"action": "final", "answer": "diff ready"}),
+            ]
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            path = root / "main.py"
+            path.write_text("def main():\n    return 1\n", encoding="utf-8")
+            bridge = Bridge(
+                EventWriter(self.output),
+                tool_generate_text=lambda _prompt: next(responses),
+                tool_repository_root=root,
+            )
+            bridge.handle({"cmd": "tool_task", "text": "change return", "provider": "qwen"})
+            diff = self.wait_for_event("tool_diff")
+            self.assertEqual(path.read_text(encoding="utf-8"), "def main():\n    return 1\n")
+            bridge.handle({"cmd": "apply_tool_diff", "approved": True})
+            resolved = self.wait_for_event("tool_diff_resolved")
+            self.assertEqual(path.read_text(encoding="utf-8"), "def main():\n    return 2\n")
+
+        self.assertEqual(diff["path"], "main.py")
+        self.assertTrue(resolved["applied"])
+
     def test_profile_samples_emits_typed_result(self) -> None:
         self.bridge.handle(
             {
