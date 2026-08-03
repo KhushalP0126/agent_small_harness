@@ -117,13 +117,13 @@ def _tool_prompt(task: str, transcript: list[dict], turn: int, max_turns: int) -
             "REPOSITORY TOOL-CALLING MODE",
             "Inspect and reason about the repository using only the declared tools.",
             "No tool writes repository files. apply_search_replace returns an unapplied diff for human review.",
-            "execute_script runs Python in a disposable sanitized working directory, not in the repository.",
+            "execute_script runs generated source in a disposable Docker sandbox with no network by default; language defaults to Python and may be python, c, cpp, rust, or javascript.",
             "Return exactly one JSON object and no markdown.",
             "To call a tool:",
             '{"action":"tool","tool":"search_directory","arguments":{"root":".","pattern":"*.py","max_results":50}}',
             '{"action":"tool","tool":"read_file","arguments":{"root":".","path":"src/main.py","max_bytes":64000}}',
             '{"action":"tool","tool":"apply_search_replace","arguments":{"root":".","path":"src/main.py","search":"old","replace":"new"}}',
-            '{"action":"tool","tool":"execute_script","arguments":{"root":".","source":"print(1)","timeout_seconds":10}}',
+            '{"action":"tool","tool":"execute_script","arguments":{"root":".","language":"python","source":"print(1)","timeout_seconds":10}}',
             "When finished:",
             '{"action":"final","answer":"concise evidence-based answer"}',
             f"Turn: {turn}/{max_turns}",
@@ -174,6 +174,7 @@ def _request_from_arguments(tool: str, arguments: dict):
         root=root,
         source=str(arguments.get("source") or ""),
         timeout_seconds=float(arguments.get("timeout_seconds") or 10.0),
+        language=str(arguments.get("language") or "python"),
     )
 
 

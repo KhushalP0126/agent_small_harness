@@ -30,6 +30,8 @@ Initial tagged release of the generalized code-generation and repair harness.
   JavaScript adapters, and an explicit trusted-local fallback.
 - A 20-task paired coding-agent benchmark for measuring outcomes, tool calls,
   retries, duration, and local-agent versus baseline token consumption.
+- `execute_script` now uses the hardened Docker sandbox by default; local mode
+  requires an explicit caller selection.
 - Structured contract planning, sequential small-worker execution, repair and
   architect escalation, checkpoint artifacts, and validation evidence.
 

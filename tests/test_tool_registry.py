@@ -2,6 +2,7 @@ import unittest
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from agents.engine_registry import EngineRegistry
 from agents.generation_controller import GenerationController
@@ -26,6 +27,7 @@ from harness_kernel.tool_handlers import (
     apply_reviewed_search_replace,
     build_default_tool_registry,
 )
+from harness_kernel.container_sandbox import SandboxResult
 from harness_kernel.tool_registry import ToolError, ToolHandler, ToolRegistry
 from validation.behavior import BehaviorCase, FunctionBehaviorSpec
 
@@ -41,6 +43,23 @@ class EchoResponse:
 
 
 class ToolRegistryTests(unittest.TestCase):
+    def test_execute_script_defaults_to_container_sandbox(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            registry = build_default_tool_registry(repository_root=Path(tmpdir))
+            with patch(
+                "harness_kernel.tool_handlers.run_source_isolated",
+                return_value=SandboxResult("python", "container", 0, "ok\n", "", False),
+            ) as run_source:
+                result = registry.dispatch(
+                    "execute_script",
+                    ExecuteScriptRequest(root=Path("."), source="print('ok')"),
+                )
+
+        self.assertTrue(result.ok)
+        run_source.assert_called_once()
+        self.assertEqual(run_source.call_args.kwargs["mode"], "container")
+        self.assertEqual(run_source.call_args.kwargs["runtime"], "docker")
+
     def test_dispatch_success(self) -> None:
         registry = ToolRegistry()
         registry.register(
@@ -179,7 +198,11 @@ class ToolRegistryTests(unittest.TestCase):
             )
             execution = registry.dispatch(
                 "execute_script",
-                ExecuteScriptRequest(root=Path("."), source="print('sandboxed')"),
+                ExecuteScriptRequest(
+                    root=Path("."),
+                    source="print('sandboxed')",
+                    sandbox_mode="local",
+                ),
             )
 
             self.assertEqual(search.value, SearchDirectoryResponse(["src/example.py"], False))

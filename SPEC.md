@@ -180,16 +180,17 @@ TUI. Each reports results as a new JSON-lines event type so either TUI
 
 ### 3.0 Local Generated-Code Boundary
 
-- Generated Python never receives the parent shell environment or repository
-  `.env`; the child receives a small allowlist plus explicit smoke-test flags.
+- Generated source executed through the repository tool boundary runs in the
+  Docker sandbox by default: it receives no parent shell environment or
+  repository `.env`, has no network, and sees only a read-only repository
+  mount plus a disposable writable scratch area.
 - Behavior cases, structured-contract examples, and assembled-program smoke
   tests use disposable working directories rather than the repository root.
 - The local runner uses Python isolated mode, bounded stdout/stderr capture,
   wall-clock and process-group termination, and POSIX CPU/file/core/address-space
   limits when supported.
-- This is defense in depth for trusted local generation, not a hardened boundary:
-  a container or OS sandbox is still required to deny absolute host filesystem
-  and network access for adversarial code.
+- The explicit local mode remains defense in depth for trusted development only;
+  it is never selected implicitly when Docker is unavailable.
 
 ### 3.0.1 Repository Tool Boundary
 

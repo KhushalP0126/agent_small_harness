@@ -294,9 +294,11 @@ The typed registry also exposes four repository-scoped model tools:
   writes it; `applied` remains false until a separate human approval path is
   invoked. The approval helper verifies the file hash again before writing, so
   an approved but stale diff is rejected.
-- `execute_script` runs bounded Python in the disposable local runner. It uses
-  an import allowlist and rejects direct file, dynamic-code, and input calls
-  before execution.
+- `execute_script` runs generated source in a disposable Docker sandbox by
+  default: the repository is mounted read-only, networking is disabled, API
+  keys are not inherited, and CPU/memory/process/output/time limits are
+  bounded. Local execution is available only when an explicit caller selects
+  `sandbox_mode="local"` for development or tests.
 
 All filesystem requests pass through one resolved-root guard that rejects
 absolute, traversal, and symlink escapes. A bounded model→tool→result loop lets
@@ -306,6 +308,9 @@ model direct filesystem mutation.
 ```bash
 make tool-agent TASK="inspect the structured-spec integration failure"
 make tool-agent TASK="prepare a diff for README.md" TOOL_AGENT=deepseek
+
+# Direct hardened execution smoke test
+make sandbox-run SOURCE=/tmp/candidate.py LANGUAGE=python
 ```
 
 The returned JSON contains the final answer and every typed call/result. Diffs

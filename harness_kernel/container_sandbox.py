@@ -58,7 +58,7 @@ def container_command(
         "--tmpfs",
         "/tmp:rw,noexec,nosuid,size=64m",
         "--mount",
-        f"type=bind,src={scratch_dir.resolve()},dst=/workspace,rw",
+        f"type=bind,src={scratch_dir.resolve()},dst=/workspace",
         "--workdir",
         "/workspace",
         adapter.container_image,

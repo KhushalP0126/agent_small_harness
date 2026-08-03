@@ -20,7 +20,8 @@ from backends.ollama_client import (
 )
 from engines.base import EngineFinding
 from engines.lint_engine import LintEngine
-from harness_kernel.local_sandbox import MAX_CAPTURE_BYTES, run_python_locally_isolated
+from harness_kernel.container_sandbox import run_source_isolated
+from harness_kernel.local_sandbox import MAX_CAPTURE_BYTES
 from harness_kernel.tool_paths import repository_relative, resolve_within_root
 from harness_kernel.tool_registry import ToolError, ToolHandler, ToolRegistry
 from validation.behavior import (
@@ -140,6 +141,9 @@ class ExecuteScriptRequest:
     root: Path
     source: str
     timeout_seconds: float = 10.0
+    language: str = "python"
+    sandbox_mode: str = "container"
+    runtime: str = "docker"
 
 
 @dataclass(frozen=True)
@@ -453,9 +457,16 @@ def _make_execute_script_handler(
             raise ToolError("Script source cannot be empty", kind="invalid_source")
         if len(request.source.encode("utf-8")) > 128 * 1024:
             raise ToolError("Script source exceeds 128 KiB", kind="source_too_large")
-        _validate_tool_script(request.source)
+        if request.language.casefold() in {"python", "python3", "py"}:
+            _validate_tool_script(request.source)
         timeout = max(0.1, min(float(request.timeout_seconds), 30.0))
-        result = run_python_locally_isolated(request.source, timeout_seconds=timeout)
+        result = run_source_isolated(
+            request.source,
+            request.language,
+            timeout_seconds=timeout,
+            mode=request.sandbox_mode,
+            runtime=request.runtime,
+        )
         return ExecuteScriptResponse(
             returncode=result.returncode,
             stdout=result.stdout,
@@ -468,7 +479,7 @@ def _make_execute_script_handler(
         request_type=ExecuteScriptRequest,
         response_type=ExecuteScriptResponse,
         invoke=invoke,
-        description="Execute Python in the disposable, sanitized, resource-bounded local runner.",
+        description="Execute generated source in a disposable Docker sandbox with no network by default.",
     )
 
 
