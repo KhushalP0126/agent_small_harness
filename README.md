@@ -354,10 +354,37 @@ make agent-benchmark \
   BASELINE_CMD="./scripts/baseline_runner" \
   SHIELDED_CMD="./scripts/shielded_runner" \
   BENCHMARK_OUTPUT=artifacts/agent-benchmark.json
+
+# DeepSeek-backed runner used for the measured comparison below
+make agent-benchmark \
+  BASELINE_CMD="python3 scripts/run_deepseek_benchmark_agent.py --mode baseline" \
+  SHIELDED_CMD="python3 scripts/run_deepseek_benchmark_agent.py --mode shielded" \
+  BENCHMARK_OUTPUT=artifacts/agent-benchmark-deepseek.json
 ```
 
 This provides evidence for cloud-token reduction without claiming that extra
 local inference reduces total tokens across every model.
+
+#### First real DeepSeek run (2026-08-03)
+
+The included 20-task corpus was executed with `deepseek-v4-pro` using a direct
+baseline runner and the typed local-agent/shielded runner. The report is saved
+locally at `artifacts/agent-benchmark-deepseek.json` (the generated artifact is
+ignored; the runner and this summary are versioned).
+
+| Measure | Direct baseline | Shielded tool loop |
+| --- | ---: | ---: |
+| Successful tasks | 20/20 | 11/20 |
+| Model tokens | 6,823 | 642,918 |
+| Tool calls | 0 | 99 |
+| Wall-clock time | 88.9s | 369.1s |
+
+This is a diagnostic result, not a success claim: the shielded loop currently
+re-sends its growing tool transcript on every turn, and six of its failures
+hit the eight-turn limit. It consumed about 94.2x as many tokens as the
+baseline and took about 4.2x as long. The next optimization is transcript
+compaction plus task-specific turn budgets; the benchmark should be rerun
+after that change before claiming token reduction or robustness.
 
 ### What Each Engine Traverses
 

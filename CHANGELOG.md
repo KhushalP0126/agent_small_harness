@@ -32,6 +32,9 @@ Initial tagged release of the generalized code-generation and repair harness.
   retries, duration, and local-agent versus baseline token consumption.
 - `execute_script` now uses the hardened Docker sandbox by default; local mode
   requires an explicit caller selection.
+- Added the DeepSeek benchmark runner and recorded the first real 20-task
+  result: 20/20 direct successes versus 11/20 shielded successes, with the
+  current transcript-heavy loop using 642,918 versus 6,823 model tokens.
 - Structured contract planning, sequential small-worker execution, repair and
   architect escalation, checkpoint artifacts, and validation evidence.
 
