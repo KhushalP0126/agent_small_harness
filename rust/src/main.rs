@@ -28,7 +28,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
-    widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap},
+    widgets::{Block, Borders, Clear, List, ListItem, Padding, Paragraph, Wrap},
     Terminal,
 };
 use tokio::{
@@ -1051,20 +1051,30 @@ async fn send_command(stdin: &mut ChildStdin, command: &HarnessCommand) -> Resul
 }
 
 fn draw(frame: &mut ratatui::Frame, state: &AppState, mermaid: &mut MermaidView) {
+    frame.render_widget(
+        Block::default().style(Style::default().bg(theme_background())),
+        frame.area(),
+    );
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(1),
+            Constraint::Length(2),
             Constraint::Min(0),
-            Constraint::Length(7),
+            Constraint::Length(8),
         ])
         .split(frame.area());
-    let top =
-        Layout::horizontal([Constraint::Percentage(75), Constraint::Percentage(25)]).split(rows[1]);
+    let top = Layout::horizontal([
+        Constraint::Percentage(74),
+        Constraint::Length(1),
+        Constraint::Min(0),
+    ])
+    .split(rows[1]);
     let bottom = Layout::horizontal([
-        Constraint::Percentage(20),
-        Constraint::Percentage(55),
-        Constraint::Percentage(25),
+        Constraint::Percentage(22),
+        Constraint::Length(1),
+        Constraint::Percentage(53),
+        Constraint::Length(1),
+        Constraint::Min(0),
     ])
     .split(rows[2]);
 
@@ -1089,10 +1099,11 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState, mermaid: &mut MermaidView)
     };
     frame.render_widget(
         Paragraph::new(Text::from(log_lines))
+            .style(Style::default().fg(theme_foreground()))
             .scroll((log_offset, 0))
             .block(pane_block(
                 format!(
-                    " main output · {} · {}% · {scroll_status} · Up/Down/PgUp/PgDn · End follow ",
+                    " MAIN OUTPUT  ·  {}  ·  {}%  ·  {scroll_status}  ·  Up/Down/PgUp/PgDn  ·  End follow ",
                     state.engine, state.pct
                 ),
                 main_active,
@@ -1100,15 +1111,16 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState, mermaid: &mut MermaidView)
         top[0],
     );
     let repo_title = format!(
-        "repo map · {} · m focus · r variables · t files{}",
+        " REPO MAP  ·  {}  ·  [m] focus  ·  [r] vars  ·  [t] files{}",
         state.repo_mode,
         if state.repo_focused { " · ACTIVE" } else { "" }
     );
     frame.render_widget(
         Paragraph::new(state.selected_repo_detail())
+            .style(Style::default().fg(theme_foreground()))
             .wrap(Wrap { trim: false })
             .block(pane_block(repo_title, state.repo_focused)),
-        top[1],
+        top[2],
     );
 
     let context = format!(
@@ -1125,7 +1137,9 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState, mermaid: &mut MermaidView)
         state.context_content
     );
     frame.render_widget(
-        Paragraph::new(context).block(pane_block(" context ", false)),
+        Paragraph::new(context)
+            .style(Style::default().fg(theme_foreground()))
+            .block(pane_block_accent(" CONTEXT ", false, theme_context())),
         bottom[0],
     );
     let prompt_title = if state.questionnaire_other_active {
@@ -1153,17 +1167,20 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState, mermaid: &mut MermaidView)
         state.prompt.as_str()
     };
     frame.render_widget(
-        Paragraph::new(prompt_text).block(pane_block(prompt_title, state.prompt_active)),
-        bottom[1],
+        Paragraph::new(prompt_text)
+            .style(Style::default().fg(theme_foreground()))
+            .block(pane_block(prompt_title, state.prompt_active)),
+        bottom[2],
     );
     frame.render_widget(
         Paragraph::new(format!(
             "Local memory\n{}\n{} preference(s)\n\nUse /remember <preference> in chat.",
             state.memory_path, state.preference_count
         ))
+        .style(Style::default().fg(theme_foreground()))
         .wrap(Wrap { trim: true })
-        .block(pane_block(" settings ", false)),
-        bottom[2],
+        .block(pane_block_accent(" SETTINGS ", false, theme_settings())),
+        bottom[4],
     );
 
     if mermaid.is_visible() {
@@ -1353,19 +1370,50 @@ fn activity_status_line(state: &AppState) -> Paragraph<'static> {
             Style::default().fg(if busy { Color::LightCyan } else { Color::Gray }),
         ),
     ]))
+    .style(Style::default().bg(theme_background()).fg(theme_muted()))
+}
+
+fn theme_background() -> Color {
+    Color::Rgb(9, 13, 20)
+}
+
+fn theme_panel() -> Color {
+    Color::Rgb(15, 23, 34)
+}
+
+fn theme_foreground() -> Color {
+    Color::Rgb(226, 232, 240)
+}
+
+fn theme_muted() -> Color {
+    Color::Rgb(148, 163, 184)
+}
+
+fn theme_context() -> Color {
+    Color::Rgb(96, 165, 250)
+}
+
+fn theme_settings() -> Color {
+    Color::Rgb(192, 132, 252)
 }
 
 fn pane_block<'a>(title: impl Into<Line<'a>>, active: bool) -> Block<'a> {
-    let color = if active { Color::Cyan } else { Color::DarkGray };
+    pane_block_accent(title, active, Color::Rgb(71, 85, 105))
+}
+
+fn pane_block_accent<'a>(title: impl Into<Line<'a>>, active: bool, accent: Color) -> Block<'a> {
+    let color = if active {
+        Color::Rgb(45, 212, 191)
+    } else {
+        accent
+    };
     Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(color))
+        .style(Style::default().bg(theme_panel()))
+        .padding(Padding::horizontal(1))
         .title(title)
-        .title_style(Style::default().fg(color).add_modifier(if active {
-            Modifier::BOLD
-        } else {
-            Modifier::empty()
-        }))
+        .title_style(Style::default().fg(color).add_modifier(Modifier::BOLD))
 }
 
 fn styled_log_lines(line: &str) -> Vec<Line<'static>> {
