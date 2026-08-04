@@ -97,7 +97,7 @@ help:
 	@printf "  make test-formal-experiment          Run optional CrossHair semantic-validation smoke experiment\n"
 	@printf "  make day1                            Run benchmark and tests\n"
 	@printf "\nCommon variables:\n"
-	@printf "  MODEL=qwen2.5-coder:3b               Local Ollama worker model; default is $(MODEL)\n"
+	@printf "  MODEL=qwen2.5-coder:1.5b               Local Ollama worker model; default is $(MODEL)\n"
 	@printf "  MAX_RETRIES=3                        Small-worker retry budget for ladder targets; default is $(MAX_RETRIES)\n"
 	@printf "  ARCHITECT_AFTER=1                    Escalate to architect after this many failed repairs; default is $(ARCHITECT_AFTER)\n"
 	@printf "  ARCHITECT_MAX_RETRIES=2              Total repair budget for architect targets; default is $(ARCHITECT_MAX_RETRIES)\n"

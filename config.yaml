@@ -34,13 +34,13 @@ execution:
     architect_model: deepseek-v4-pro
     profiles:
       tiny: qwen2.5-coder:1.5b
-      small: qwen2.5-coder:3b
-      daily_driver: qwen2.5-coder:7b
+      small: qwen2.5-coder:1.5b
+      daily_driver: qwen2.5-coder:1.5b
       architect: deepseek-v4-pro
     difficulty_models:
       1-2: qwen2.5-coder:1.5b
-      3-5: qwen2.5-coder:3b
-      6+: qwen2.5-coder:3b
+      3-5: qwen2.5-coder:1.5b
+      6+: qwen2.5-coder:1.5b
   architect:
     contract:
       model: deepseek-v4-pro

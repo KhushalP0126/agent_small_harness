@@ -81,7 +81,7 @@ def _run(task: dict, mode: str, model: str, base_url: str, max_turns: int) -> di
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", choices=("baseline", "shielded"), required=True)
-    parser.add_argument("--model", default="qwen2.5-coder:3b")
+    parser.add_argument("--model", default="qwen2.5-coder:1.5b")
     parser.add_argument("--ollama-url", default="http://127.0.0.1:11434")
     parser.add_argument("--max-turns", type=int, default=8)
     args = parser.parse_args()
