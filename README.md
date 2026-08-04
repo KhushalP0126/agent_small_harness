@@ -410,6 +410,14 @@ larger model or a claim of robustness. During this run `ollama ps` showed no
 active model, so Metal/GPU layer engagement could not be measured; this
 benchmark used the configured DeepSeek API rather than Ollama.
 
+The follow-up loop hardening now includes repeated-call detection, explicit
+final-turn guidance, compact replay of large file/diff/output values, and
+deterministic container-backed checks for the objective safety tasks. The
+benchmark baseline also receives the same bounded repository file index before
+answering, so its comparison is less asymmetric than the original one-shot
+prompt. A new benchmark run is required before claiming these changes improve
+the 11/20 shielded success rate.
+
 ### What Each Engine Traverses
 
 Every Python engine exposes `scan(source)` and returns `EngineFinding` records.

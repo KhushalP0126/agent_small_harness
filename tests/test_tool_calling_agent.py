@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from agents.tool_calling_agent import ToolCallingAgent, _bounded_transcript
+from agents.tool_calling_agent import ToolCallingAgent, _bounded_transcript, _compact_tool_value
 from harness_kernel.tool_handlers import build_default_tool_registry
 
 
@@ -37,6 +37,30 @@ class ToolCallingAgentTests(unittest.TestCase):
 
         self.assertTrue(run.exhausted)
         self.assertEqual(len(run.calls), 2)
+
+    def test_repeated_tool_call_is_reported_to_model(self) -> None:
+        response = json.dumps(
+            {
+                "action": "tool",
+                "tool": "search_directory",
+                "arguments": {"root": ".", "pattern": "*.py"},
+            }
+        )
+        prompts: list[str] = []
+        with TemporaryDirectory() as tmpdir:
+            run = ToolCallingAgent(
+                lambda prompt: (prompts.append(prompt), response)[1],
+                build_default_tool_registry(repository_root=Path(tmpdir)),
+                max_turns=2,
+            ).run("Keep searching")
+
+        self.assertEqual(run.calls[1].result["error_kind"], "repeated_tool_call")
+        self.assertIn("Never repeat an identical tool call", prompts[0])
+
+    def test_large_tool_values_are_compacted(self) -> None:
+        compact = _compact_tool_value({"content": "x" * 5000, "path": "main.py"})
+        self.assertLess(len(compact["content"]), 5000)
+        self.assertEqual(compact["path"], "main.py")
 
     def test_model_can_search_read_and_finish_across_turns(self) -> None:
         responses = iter(

@@ -38,6 +38,9 @@ Initial tagged release of the generalized code-generation and repair harness.
 - Added structural transcript truncation, an 8,192-token Ollama context
   default, and category-specific turn budgets; the exact rerun reduced
   shielded tokens to 433,220 and runtime to 286.5s, but success remained 11/20.
+- Added loop hardening with repeated-call detection, forced final-turn
+  guidance, compact tool-result replay, deterministic safety checks, and a
+  bounded repository index for fairer baseline comparisons.
 - Structured contract planning, sequential small-worker execution, repair and
   architect escalation, checkpoint artifacts, and validation evidence.
 

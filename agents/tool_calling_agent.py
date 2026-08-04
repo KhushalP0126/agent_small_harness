@@ -66,6 +66,7 @@ class ToolCallingAgent:
     def run(self, task: str, *, max_turns_override: int | None = None) -> ToolCallingRun:
         transcript: list[dict] = []
         calls: list[ToolCallRecord] = []
+        seen_calls: set[str] = set()
         turn_limit = self.max_turns if max_turns_override is None else max(1, min(int(max_turns_override), 20))
         for turn in range(1, turn_limit + 1):
             response = self.generate_text(
@@ -81,13 +82,25 @@ class ToolCallingAgent:
             tool = str(action.get("tool") or "")
             arguments = action.get("arguments")
             raw_value = None
-            if tool not in TOOL_NAMES or not isinstance(arguments, dict):
+            signature = json.dumps(
+                {"tool": tool, "arguments": arguments},
+                sort_keys=True,
+                default=str,
+            )
+            if signature in seen_calls:
+                result_payload = {
+                    "ok": False,
+                    "error_kind": "repeated_tool_call",
+                    "error": "This exact tool call was already made. Return a final answer or choose a different tool.",
+                }
+            elif tool not in TOOL_NAMES or not isinstance(arguments, dict):
                 result_payload = {
                     "ok": False,
                     "error_kind": "invalid_tool_call",
                     "error": "Use one declared tool with an object-valued arguments field.",
                 }
             else:
+                seen_calls.add(signature)
                 try:
                     request = _request_from_arguments(tool, arguments)
                 except (TypeError, ValueError) as exc:
@@ -151,6 +164,8 @@ def _tool_prompt(
             "Inspect and reason about the repository using only the declared tools.",
             "No tool writes repository files. apply_search_replace returns an unapplied diff for human review.",
             "execute_script runs generated source in a disposable Docker sandbox with no network by default; language defaults to Python and may be python, c, cpp, rust, or javascript.",
+            "If the latest tool result answers the task, return action=final immediately. Never repeat an identical tool call.",
+            "On the final allowed turn, return action=final now; do not call another tool.",
             "Return exactly one JSON object and no markdown.",
             "To call a tool:",
             '{"action":"tool","tool":"search_directory","arguments":{"root":".","pattern":"*.py","max_results":50}}',
@@ -160,6 +175,7 @@ def _tool_prompt(
             "When finished:",
             '{"action":"final","answer":"concise evidence-based answer"}',
             f"Turn: {turn}/{max_turns}",
+            "FINAL TURN: return action=final now." if turn == max_turns else "",
             f"TASK:\n{task.strip()}",
             "PRIOR TOOL TRANSCRIPT:",
             _bounded_transcript(transcript, transcript_max_chars),
@@ -222,4 +238,18 @@ def _result_payload(result) -> dict:
     value = asdict(result.value) if hasattr(result.value, "__dataclass_fields__") else result.value
     if isinstance(value, dict) and "proposed_content" in value:
         value = {**value, "proposed_content": "[held for approval; use the diff for review]"}
+    value = _compact_tool_value(value)
     return {"ok": True, "tool": result.tool, "value": value}
+
+
+def _compact_tool_value(value: Any) -> Any:
+    """Keep replayable evidence small without discarding status or identity."""
+
+    if not isinstance(value, dict):
+        return value
+    compact = dict(value)
+    for key, limit in (("content", 4000), ("diff", 4000), ("stdout", 2000), ("stderr", 2000)):
+        payload = compact.get(key)
+        if isinstance(payload, str) and len(payload) > limit:
+            compact[key] = payload[:limit] + f"\n[tool result compacted after {limit} characters]"
+    return compact
