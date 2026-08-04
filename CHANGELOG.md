@@ -35,6 +35,9 @@ Initial tagged release of the generalized code-generation and repair harness.
 - Added the DeepSeek benchmark runner and recorded the first real 20-task
   result: 20/20 direct successes versus 11/20 shielded successes, with the
   current transcript-heavy loop using 642,918 versus 6,823 model tokens.
+- Added structural transcript truncation, an 8,192-token Ollama context
+  default, and category-specific turn budgets; the exact rerun reduced
+  shielded tokens to 433,220 and runtime to 286.5s, but success remained 11/20.
 - Structured contract planning, sequential small-worker execution, repair and
   architect escalation, checkpoint artifacts, and validation evidence.
 

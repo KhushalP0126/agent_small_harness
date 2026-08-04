@@ -86,7 +86,7 @@ def run_shielded(task: dict, client: ArchitectApiClient, profile: ArchitectProfi
             build_default_tool_registry(repository_root=ROOT),
             max_turns=8,
             on_tool_result=observe,
-        ).run(task["prompt"])
+        ).run(task["prompt"], max_turns_override=task.get("suggested_max_turns"))
         return {
             "success": bool(run.final_answer.strip()) and not run.exhausted,
             "prompt_tokens": usage_totals[0],

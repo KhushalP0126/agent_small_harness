@@ -23,7 +23,7 @@ LANGUAGE_TAG_LINE_RE = re.compile(r"^[ \t]*(?:python|py|cpp|c\+\+|cxx|cc|c)[ \t]
 class OllamaGenerationConfig:
     temperature: float = 0.1
     num_predict: int = 512
-    num_ctx: int = 4096
+    num_ctx: int = 8192
 
 
 class OllamaClient:

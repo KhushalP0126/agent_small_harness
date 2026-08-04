@@ -3,11 +3,41 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from agents.tool_calling_agent import ToolCallingAgent
+from agents.tool_calling_agent import ToolCallingAgent, _bounded_transcript
 from harness_kernel.tool_handlers import build_default_tool_registry
 
 
 class ToolCallingAgentTests(unittest.TestCase):
+    def test_bounded_transcript_keeps_valid_json_and_marks_omitted_turns(self) -> None:
+        transcript = [
+            {"assistant": {"action": "tool", "turn": index}, "tool_result": {"value": "x" * 80}}
+            for index in range(5)
+        ]
+
+        rendered = _bounded_transcript(transcript, max_chars=180)
+        parsed = json.loads(rendered)
+
+        self.assertEqual(parsed[0]["note"], "4 earlier turn(s) omitted for space")
+        self.assertEqual(parsed[-1]["assistant"]["turn"], 4)
+
+    def test_turn_budget_override_is_used_for_one_run(self) -> None:
+        response = json.dumps(
+            {
+                "action": "tool",
+                "tool": "search_directory",
+                "arguments": {"root": ".", "pattern": "*.py"},
+            }
+        )
+        with TemporaryDirectory() as tmpdir:
+            run = ToolCallingAgent(
+                lambda _prompt: response,
+                build_default_tool_registry(repository_root=Path(tmpdir)),
+                max_turns=8,
+            ).run("Keep searching", max_turns_override=2)
+
+        self.assertTrue(run.exhausted)
+        self.assertEqual(len(run.calls), 2)
+
     def test_model_can_search_read_and_finish_across_turns(self) -> None:
         responses = iter(
             [

@@ -386,6 +386,30 @@ baseline and took about 4.2x as long. The next optimization is transcript
 compaction plus task-specific turn budgets; the benchmark should be rerun
 after that change before claiming token reduction or robustness.
 
+#### Transcript/budget rerun (2026-08-03)
+
+The same 20 tasks were rerun after raising the Ollama default context to 8,192
+tokens, replacing character slicing with whole-entry transcript truncation, and
+adding category-specific turn budgets. The original run remains above for a
+direct comparison:
+
+| Measure | Original | After transcript/budget fix | Change |
+| --- | ---: | ---: | ---: |
+| Successful tasks (baseline / shielded) | 20 / 11 | 20 / 11 | unchanged |
+| Baseline model tokens | 6,823 | 6,815 | -0.1% |
+| Shielded model tokens | 642,918 | 433,220 | -32.6% |
+| Shielded tool calls | 109 | 97 | -12 |
+| Baseline wall-clock | 88.9s | 94.9s | +6.0s |
+| Shielded wall-clock | 369.1s | 286.5s | -22.4% |
+| Shielded turn-limit failures | 9 | 9 | unchanged |
+
+The fix materially reduced transcript waste and runtime, but the shielded loop
+still uses about 63.6x the baseline tokens and does not yet improve task
+success. The next engineering target is the tool-loop decision behavior, not a
+larger model or a claim of robustness. During this run `ollama ps` showed no
+active model, so Metal/GPU layer engagement could not be measured; this
+benchmark used the configured DeepSeek API rather than Ollama.
+
 ### What Each Engine Traverses
 
 Every Python engine exposes `scan(source)` and returns `EngineFinding` records.

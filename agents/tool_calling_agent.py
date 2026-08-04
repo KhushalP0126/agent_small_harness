@@ -26,6 +26,8 @@ TOOL_NAMES = (
     "execute_script",
 )
 JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)```", re.IGNORECASE | re.DOTALL)
+DEFAULT_TOOL_NUM_CTX = 8192
+DEFAULT_TRANSCRIPT_MAX_CHARS = DEFAULT_TOOL_NUM_CTX * 3
 
 
 @dataclass(frozen=True)
@@ -52,18 +54,23 @@ class ToolCallingAgent:
         registry: ToolRegistry,
         *,
         max_turns: int = 8,
+        transcript_max_chars: int = DEFAULT_TRANSCRIPT_MAX_CHARS,
         on_tool_result: ToolResultCallback | None = None,
     ) -> None:
         self.generate_text = generate_text
         self.registry = registry
         self.max_turns = max(1, min(int(max_turns), 20))
+        self.transcript_max_chars = max(256, int(transcript_max_chars))
         self.on_tool_result = on_tool_result
 
-    def run(self, task: str) -> ToolCallingRun:
+    def run(self, task: str, *, max_turns_override: int | None = None) -> ToolCallingRun:
         transcript: list[dict] = []
         calls: list[ToolCallRecord] = []
-        for turn in range(1, self.max_turns + 1):
-            response = self.generate_text(_tool_prompt(task, transcript, turn, self.max_turns))
+        turn_limit = self.max_turns if max_turns_override is None else max(1, min(int(max_turns_override), 20))
+        for turn in range(1, turn_limit + 1):
+            response = self.generate_text(
+                _tool_prompt(task, transcript, turn, turn_limit, self.transcript_max_chars)
+            )
             action = _parse_action(response)
             if action["action"] == "final":
                 return ToolCallingRun(
@@ -111,7 +118,33 @@ class ToolCallingAgent:
         )
 
 
-def _tool_prompt(task: str, transcript: list[dict], turn: int, max_turns: int) -> str:
+def _bounded_transcript(transcript: list[dict], max_chars: int) -> str:
+    """Keep whole transcript entries so the model always receives valid JSON."""
+
+    kept: list[dict] = []
+    total = 2
+    for entry in reversed(transcript):
+        entry_text = json.dumps(entry, default=str, separators=(",", ":"))
+        if total + len(entry_text) + 1 > max_chars and kept:
+            break
+        kept.append(entry)
+        total += len(entry_text) + 1
+    kept.reverse()
+    if len(kept) < len(transcript):
+        kept.insert(
+            0,
+            {"note": f"{len(transcript) - len(kept)} earlier turn(s) omitted for space"},
+        )
+    return json.dumps(kept, default=str, separators=(",", ":"))
+
+
+def _tool_prompt(
+    task: str,
+    transcript: list[dict],
+    turn: int,
+    max_turns: int,
+    transcript_max_chars: int = DEFAULT_TRANSCRIPT_MAX_CHARS,
+) -> str:
     return "\n".join(
         [
             "REPOSITORY TOOL-CALLING MODE",
@@ -129,7 +162,7 @@ def _tool_prompt(task: str, transcript: list[dict], turn: int, max_turns: int) -
             f"Turn: {turn}/{max_turns}",
             f"TASK:\n{task.strip()}",
             "PRIOR TOOL TRANSCRIPT:",
-            json.dumps(transcript, default=str, separators=(",", ":"))[-48_000:] or "[]",
+            _bounded_transcript(transcript, transcript_max_chars),
         ]
     )
 

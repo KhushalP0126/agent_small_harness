@@ -16,6 +16,7 @@ class BenchmarkTask:
     task_id: str
     category: str
     prompt: str
+    suggested_max_turns: int | None = None
 
 
 @dataclass(frozen=True)
@@ -58,6 +59,11 @@ def load_tasks(path: Path) -> list[BenchmarkTask]:
                 task_id=str(row["task_id"]),
                 category=str(row["category"]),
                 prompt=str(row["prompt"]),
+                suggested_max_turns=(
+                    int(row["suggested_max_turns"])
+                    if row.get("suggested_max_turns") is not None
+                    else None
+                ),
             )
         )
     return tasks
