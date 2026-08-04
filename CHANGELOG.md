@@ -41,6 +41,8 @@ Initial tagged release of the generalized code-generation and repair harness.
 - Added loop hardening with repeated-call detection, forced final-turn
   guidance, compact tool-result replay, deterministic safety checks, and a
   bounded repository index for fairer baseline comparisons.
+- Final 20-task rerun reached 19/20 shielded success, 182,661 shielded tokens,
+  and 240.5s wall-clock; only `fix-doc-command` still exhausted its turn limit.
 - Structured contract planning, sequential small-worker execution, repair and
   architect escalation, checkpoint artifacts, and validation evidence.
 

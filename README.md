@@ -418,6 +418,26 @@ answering, so its comparison is less asymmetric than the original one-shot
 prompt. A new benchmark run is required before claiming these changes improve
 the 11/20 shielded success rate.
 
+#### Final loop-hardening benchmark (2026-08-03)
+
+The exact 20-task corpus was rerun after all five loop fixes. This run uses the
+fairer baseline with the same bounded repository index, so its token count is
+higher than the original one-shot baseline:
+
+| Measure | Comparable baseline | Hardened shielded loop |
+| --- | ---: | ---: |
+| Successful tasks | 20/20 | 19/20 |
+| Model tokens | 53,467 | 182,661 |
+| Tool calls | 0 | 76 |
+| Wall-clock time | 197.7s | 240.5s |
+| Turn-limit failures | 0 | 1 (`fix-doc-command`) |
+
+Compared with the original shielded result, the hardened loop reduced shielded
+tokens by 71.6%, improved success from 11/20 to 19/20, and reduced runtime from
+369.1s to 240.5s. The remaining failure is isolated to the documentation-edit
+task and should be addressed with a targeted edit/finalization policy rather
+than broadening the model or turn budget globally.
+
 ### What Each Engine Traverses
 
 Every Python engine exposes `scan(source)` and returns `EngineFinding` records.
