@@ -341,6 +341,11 @@ sanitized subprocess boundary. A missing container runtime never silently
 falls back locally; the CLI requires the separate `--allow-local-fallback`
 flag when that behavior is deliberately requested.
 
+The registered repository tools are stricter: their default registry rejects
+`sandbox_mode=local` even if a caller supplies it. Local execution is available
+only to explicitly trusted in-process callers that construct a registry with
+`allow_local_sandbox=True`.
+
 ### Paired coding-agent benchmark
 
 `data/agent_benchmark_tasks.json` contains 20 fixed inspection, edit, repair,
@@ -367,9 +372,9 @@ local inference reduces total tokens across every model.
 
 `scripts/run_ollama_benchmark_agent.py` is available for an explicitly
 authorized local-model comparison and records Ollama's prompt/evaluation token
-counts. No second-model result is published here: the 3B run was intentionally
-stopped before completion, so the frozen Compute Shield and cross-model rows
-remain unclaimed until an authorized run supplies paired artifacts.
+counts. The 3B comparison was intentionally stopped before completion; no 3B
+result is used. The authorized 1.5B frozen Compute Shield result is published in
+`docs/compute-shield-10-2026-08-04.md`.
 
 #### First real DeepSeek run (2026-08-03)
 
@@ -829,8 +834,11 @@ make approve-library LIB=clang.cindex
   preserve file ownership, and generated Python projects have a disposable
   multi-file smoke runner with cross-file import validation.
 - [x] Behavior traces now retain bounded before/after state snapshots and
-  debugger hints include state deltas; dependency-aware failure localization is
-  available through the debugger helper.
+  per-step local snapshots; debugger hints include state deltas, dependency-aware
+  failure localization, and bounded minimal reproducers.
+- [x] Multi-file contract plans preserve file ownership, validate sibling-module
+  exports and owned function signatures, and run a whole generated project in a
+  disposable smoke sandbox.
 - [x] Public API requests expose `repo_root`, execution-trace retention, and
   debugger type-contract controls. Version `2` is written to session,
   validation, repository-map, and execution-trace artifacts while preserving
@@ -841,23 +849,21 @@ make approve-library LIB=clang.cindex
 - [ ] Complete manual terminal compatibility passes for the directly emitted
   Kitty and iTerm2 protocol paths before making the Rust TUI the default. The
   quadrant-block fallback has been smoke-tested in Apple Terminal.
-- [ ] Run and publish a frozen 10-task Compute Shield experiment; the exact
-  task-level accounting exists, but no model-dependent result is claimed.
-- [ ] Extend the new debugger state deltas/localization with true per-step
-  tracing and reproducible minimal failing-case extraction.
-- [ ] Complete multi-file generation beyond the current ownership packets,
-  import-graph checks, and whole-project smoke runner: generated contracts
-  still need full cross-file type/export validation and robust per-file
-  integration assembly.
-- [ ] Add a mandatory container/OS policy with network denial and filesystem
-  allowlisting beyond the current sanitized, resource-limited local subprocess
-  before accepting adversarial code in a shared or hosted deployment.
+- [x] Run and publish the frozen 10-task Compute Shield experiment. The honest
+  2026-08-04 1.5B result is documented in
+  `docs/compute-shield-10-2026-08-04.md`; it used more shielded tokens and had
+  one shielded failure, so no token-saving claim is made.
+- [ ] Extend the mandatory container-only registered-tool policy with a
+  host-enforced OS/filesystem allowlist before accepting adversarial code in a
+  shared or hosted deployment. Registered tools now reject local execution by
+  default and containers already deny network access.
 - [ ] Extend the repeated paired benchmark beyond Qwen 1.5B and publish
   confidence intervals across models and larger task sets.
 - [ ] Add authentication, authorization, rate limits, and production-grade job
   storage before exposing the API outside a trusted local environment.
-- [ ] Version the debugger and repository-map artifact/report schemas and add
-  backward-compatibility tests for external consumers.
+- [x] Version the debugger and repository-map artifact/report schemas. Version
+  `2` is emitted while legacy timeline/graph field shapes remain readable; the
+  execution-trace deserializer ignores the version marker for compatibility.
 
 The public direction remains generalized code creation and repair. App-like
 specs are stress fixtures, and discovered library documentation remains proposal

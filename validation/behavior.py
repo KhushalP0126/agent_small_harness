@@ -6,6 +6,7 @@ import io
 import multiprocessing as mp
 import os
 import queue
+import sys
 import tempfile
 import time
 import traceback
@@ -101,6 +102,8 @@ class CaseTrace:
     state_before: str = ""
     state_after: str = ""
     state_delta: str = ""
+    steps: list[dict[str, Any]] = field(default_factory=list)
+    step_deltas: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -352,11 +355,30 @@ def _run_case(namespace: dict[str, Any], function_name: str, case: BehaviorCase)
     call_kwargs = deepcopy(case.kwargs)
     state_before = _snapshot_runtime_state(call_args, call_kwargs)
     record.state_before = state_before
+    step_records: list[dict[str, Any]] = []
+
+    def trace_step(frame, event, _arg):
+        if (
+            event == "line"
+            and frame.f_code.co_filename == "<behavior-check>"
+            and len(step_records) < 64
+        ):
+            step_records.append(
+                {
+                    "line": frame.f_lineno,
+                    "state": _snapshot_locals(frame.f_locals),
+                }
+            )
+        return trace_step
+
+    previous_trace = sys.gettrace()
+    sys.settrace(trace_step)
     try:
         with contextlib.redirect_stdout(stdout_buffer), contextlib.redirect_stderr(stderr_buffer):
             candidate = _resolve_case_callable(namespace, function_name, case)
             actual = candidate(*call_args, **call_kwargs)
     except Exception as exc:  # noqa: BLE001 - reported as trace evidence
+        sys.settrace(previous_trace)
         record.elapsed_seconds = time.perf_counter() - start
         record.exception_type = exc.__class__.__name__
         record.exception_message = str(exc)
@@ -365,7 +387,11 @@ def _run_case(namespace: dict[str, Any], function_name: str, case: BehaviorCase)
         record.stderr = _clip(stderr_buffer.getvalue())
         record.state_after = _snapshot_runtime_state(call_args, call_kwargs)
         record.state_delta = _state_delta(record.state_before, record.state_after)
+        record.steps = step_records
+        record.step_deltas = _step_deltas(step_records)
         return record
+    finally:
+        sys.settrace(previous_trace)
     record.elapsed_seconds = time.perf_counter() - start
     record.returned = repr(actual)
     record.matched = actual == case.expected
@@ -373,6 +399,8 @@ def _run_case(namespace: dict[str, Any], function_name: str, case: BehaviorCase)
     record.stderr = _clip(stderr_buffer.getvalue())
     record.state_after = _snapshot_runtime_state(call_args, call_kwargs, actual)
     record.state_delta = _state_delta(record.state_before, record.state_after)
+    record.steps = step_records
+    record.step_deltas = _step_deltas(step_records)
     return record
 
 
@@ -392,6 +420,25 @@ def _state_delta(before: str, after: str) -> str:
     if not before or not after or before == after:
         return ""
     return f"before={before}\nafter={after}"
+
+
+def _snapshot_locals(values: dict[str, Any]) -> str:
+    try:
+        return _clip(repr(values))
+    except Exception:  # pragma: no cover - defensive for hostile repr methods
+        return "<unrepresentable locals>"
+
+
+def _step_deltas(steps: list[dict[str, Any]]) -> list[str]:
+    deltas: list[str] = []
+    for previous, current in zip(steps, steps[1:]):
+        if previous.get("state") == current.get("state"):
+            continue
+        deltas.append(
+            f"line {previous.get('line')} -> {current.get('line')}: "
+            f"{previous.get('state')} -> {current.get('state')}"
+        )
+    return deltas[:64]
 
 
 def _candidate_lookup_issue(namespace: dict[str, Any], target_name: str) -> BehaviorIssue | None:

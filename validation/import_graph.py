@@ -5,6 +5,7 @@ import importlib
 import sys
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
+from typing import Any, Iterable
 
 
 @dataclass(frozen=True)
@@ -34,7 +35,10 @@ def analyze_import_graph(files: dict[str, str], external_roots: set[str] | None 
         missing = sorted(module for module in imports if module not in module_to_file)
         if missing:
             missing_imports[path] = missing
-        unresolved = validate_imported_symbols(source, external_roots=external_roots)
+        unresolved = [
+            *validate_local_imported_symbols(source, module_to_file, files),
+            *validate_imported_symbols(source, external_roots=external_roots),
+        ]
         if unresolved:
             missing_symbols[path] = unresolved
     return FileImportGraph(
@@ -43,6 +47,116 @@ def analyze_import_graph(files: dict[str, str], external_roots: set[str] | None 
         missing_imports=missing_imports,
         missing_symbols=missing_symbols,
     )
+
+
+def validate_local_imported_symbols(
+    source: str,
+    module_to_file: dict[str, str],
+    files: dict[str, str],
+) -> list[str]:
+    """Validate names imported from generated sibling modules."""
+
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return []
+    exports_by_module = {
+        module: _defined_symbols(files[path])
+        for module, path in module_to_file.items()
+    }
+    missing: list[str] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ImportFrom) or node.level:
+            continue
+        module = node.module or ""
+        if module not in module_to_file:
+            continue
+        exports = exports_by_module[module]
+        for alias in node.names:
+            if alias.name != "*" and alias.name not in exports:
+                missing.append(f"{module}.{alias.name}")
+    return sorted(set(missing))
+
+
+def _defined_symbols(source: str) -> set[str]:
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return set()
+    symbols: set[str] = set()
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            symbols.add(node.name)
+        elif isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            symbols.update(target.id for target in targets if isinstance(target, ast.Name))
+    return symbols
+
+
+def validate_cross_file_contracts(
+    files: dict[str, str],
+    contracts: Iterable[Any],
+) -> list[dict[str, str]]:
+    """Check that owned contract exports exist with compatible call shapes."""
+
+    parsed: dict[str, ast.Module] = {}
+    for path, source in files.items():
+        try:
+            parsed[path] = ast.parse(source)
+        except SyntaxError:
+            continue
+    issues: list[dict[str, str]] = []
+    for contract in contracts:
+        target_file = str(getattr(contract, "target_file", ""))
+        name = str(getattr(contract, "name", ""))
+        if not target_file or not name or target_file not in parsed:
+            continue
+        nodes = {
+            node.name: node
+            for node in parsed[target_file].body
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
+        }
+        node = nodes.get(name)
+        if node is None:
+            issues.append({"kind": "missing_contract_export", "file": target_file, "symbol": name})
+            continue
+        if getattr(contract, "kind", "function") == "class" and not isinstance(node, ast.ClassDef):
+            issues.append({"kind": "contract_kind_mismatch", "file": target_file, "symbol": name})
+            continue
+        if getattr(contract, "kind", "function") != "class" and isinstance(node, ast.ClassDef):
+            issues.append({"kind": "contract_kind_mismatch", "file": target_file, "symbol": name})
+            continue
+        expected = _signature_shape(str(getattr(contract, "signature", "")))
+        actual = _node_signature_shape(node)
+        if expected and actual and expected != actual:
+            issues.append(
+                {
+                    "kind": "contract_signature_mismatch",
+                    "file": target_file,
+                    "symbol": name,
+                    "expected": repr(expected),
+                    "actual": repr(actual),
+                }
+            )
+    return issues
+
+
+def _signature_shape(signature: str) -> tuple[str, ...]:
+    text = signature.strip()
+    if not text.startswith("def "):
+        return ()
+    try:
+        node = ast.parse(text + ":\n    pass\n").body[0]
+    except SyntaxError:
+        return ()
+    return _node_signature_shape(node)
+
+
+def _node_signature_shape(node: ast.AST) -> tuple[str, ...]:
+    if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+        return ()
+    args = [*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs]
+    return tuple(arg.arg for arg in args) + (("*" if node.args.vararg else ""), ("**" if node.args.kwarg else ""))
 
 
 def validate_imported_symbols(source: str, external_roots: set[str] | None = None) -> list[str]:

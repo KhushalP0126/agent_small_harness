@@ -27,9 +27,32 @@ from scripts.run_structured_spec import (
     _validated_source_event,
 )
 from harness_kernel.function_contracts import ContractQueue, ContractQueuePlan, DealExample, FunctionContract
+from validation.import_graph import analyze_import_graph, validate_cross_file_contracts
 
 
 class StructuredSpecRunnerTests(unittest.TestCase):
+    def test_import_graph_rejects_missing_symbol_from_generated_sibling(self) -> None:
+        graph = analyze_import_graph(
+            {
+                "helpers.py": "def present():\n    return 1\n",
+                "main.py": "from helpers import missing\n\ndef main():\n    return missing()\n",
+            }
+        )
+        self.assertFalse(graph.is_compliant)
+        self.assertEqual(graph.missing_symbols["main.py"], ["helpers.missing"])
+
+    def test_cross_file_contract_validation_checks_owned_signature(self) -> None:
+        contract = FunctionContract(
+            name="build",
+            signature="def build(value: int) -> str",
+            target_file="helpers.py",
+        )
+        issues = validate_cross_file_contracts(
+            {"helpers.py": "def build(other: int) -> str:\n    return str(other)\n"},
+            [contract],
+        )
+        self.assertEqual(issues[0]["kind"], "contract_signature_mismatch")
+
     def test_validated_source_event_requires_completed_final_status(self) -> None:
         source = "def main():\n    return 0\n"
         self.assertEqual(

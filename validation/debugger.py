@@ -46,6 +46,8 @@ def build_debugger_hints(
             )
         if case.state_delta and len(hints) < max_hints:
             hints.append(f"Case '{case.name}' state delta:\n{case.state_delta}")
+        if case.step_deltas and len(hints) < max_hints:
+            hints.append(f"Case '{case.name}' first step delta: {case.step_deltas[0]}")
         elif not case.matched:
             hints.append(
                 f"Case '{case.name}': input {case.args} produced {case.returned}, but the spec "
@@ -73,3 +75,28 @@ def localize_contract_failure(
         if not validation_results.get(dependency, False):
             suspects.append(dependency)
     return suspects
+
+
+def minimal_failing_reproducer(trace: ExecutionTrace, max_cases: int = 3) -> dict:
+    """Return a bounded replay payload for the first failing behavior cases."""
+
+    cases = [
+        {
+            "name": case.name,
+            "args": case.args,
+            "kwargs": case.kwargs,
+            "expected": case.expected,
+            "returned": case.returned,
+            "exception_type": case.exception_type,
+            "exception_message": case.exception_message,
+            "step_deltas": case.step_deltas[:8],
+        }
+        for case in trace.cases
+        if case.exception_type or not case.matched
+    ][: max(1, max_cases)]
+    return {
+        "schema_version": 1,
+        "function_name": trace.function_name,
+        "fatal_case": trace.fatal_case,
+        "cases": cases,
+    }

@@ -450,9 +450,16 @@ def apply_reviewed_search_replace(
 
 def _make_execute_script_handler(
     repository_root: Path,
+    *,
+    allow_local_sandbox: bool = False,
 ) -> ToolHandler[ExecuteScriptRequest, ExecuteScriptResponse]:
     def invoke(request: ExecuteScriptRequest) -> ExecuteScriptResponse:
         resolve_within_root(repository_root, request.root)
+        if request.sandbox_mode == "local" and not allow_local_sandbox:
+            raise ToolError(
+                "Local script execution is disabled for registered tools; use the container policy",
+                kind="local_sandbox_disabled",
+            )
         if not request.source.strip():
             raise ToolError("Script source cannot be empty", kind="invalid_source")
         if len(request.source.encode("utf-8")) > 128 * 1024:
@@ -518,6 +525,7 @@ def build_default_tool_registry(
     ollama_client: OllamaClient | None = None,
     architect_client: ArchitectApiClient | None = None,
     repository_root: Path | str | None = None,
+    allow_local_sandbox: bool = False,
 ) -> ToolRegistry:
     trusted_root = Path(repository_root or Path.cwd()).resolve()
     registry = ToolRegistry()
@@ -529,5 +537,10 @@ def build_default_tool_registry(
     registry.register(_make_search_directory_handler(trusted_root))
     registry.register(_make_read_file_handler(trusted_root))
     registry.register(_make_apply_search_replace_handler(trusted_root))
-    registry.register(_make_execute_script_handler(trusted_root))
+    registry.register(
+        _make_execute_script_handler(
+            trusted_root,
+            allow_local_sandbox=allow_local_sandbox,
+        )
+    )
     return registry

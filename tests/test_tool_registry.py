@@ -60,6 +60,20 @@ class ToolRegistryTests(unittest.TestCase):
         self.assertEqual(run_source.call_args.kwargs["mode"], "container")
         self.assertEqual(run_source.call_args.kwargs["runtime"], "docker")
 
+    def test_registered_tools_reject_local_sandbox_by_default(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            registry = build_default_tool_registry(repository_root=Path(tmpdir))
+            result = registry.dispatch(
+                "execute_script",
+                ExecuteScriptRequest(
+                    root=Path("."),
+                    source="print('blocked')",
+                    sandbox_mode="local",
+                ),
+            )
+        self.assertFalse(result.ok)
+        self.assertEqual(result.error_kind, "local_sandbox_disabled")
+
     def test_dispatch_success(self) -> None:
         registry = ToolRegistry()
         registry.register(
@@ -177,7 +191,10 @@ class ToolRegistryTests(unittest.TestCase):
             source_path = root / "src" / "example.py"
             source_path.parent.mkdir()
             source_path.write_text("value = 1\n", encoding="utf-8")
-            registry = build_default_tool_registry(repository_root=root)
+            registry = build_default_tool_registry(
+                repository_root=root,
+                allow_local_sandbox=True,
+            )
 
             search = registry.dispatch(
                 "search_directory",

@@ -1,0 +1,12 @@
+[
+  {"task_id": "locate-routing", "category": "inspect", "prompt": "Find the repository's routing entrypoint and report its path and purpose.", "suggested_max_turns": 4},
+  {"task_id": "locate-sandbox", "category": "inspect", "prompt": "Find the execution sandbox boundary and summarize its network and environment policy.", "suggested_max_turns": 4},
+  {"task_id": "fix-doc-command", "category": "single_file", "prompt": "Correct one outdated command in repository documentation and provide a diff.", "suggested_max_turns": 8},
+  {"task_id": "add-validation", "category": "single_file", "prompt": "Find the validation entrypoint and propose a focused check for malformed input.", "suggested_max_turns": 6},
+  {"task_id": "repair-unit-test", "category": "repair", "prompt": "Locate the unit-test fixture for a failing helper and describe the smallest repair.", "suggested_max_turns": 6},
+  {"task_id": "repair-parser", "category": "repair", "prompt": "Inspect the parser implementation and identify how it handles an empty record.", "suggested_max_turns": 6},
+  {"task_id": "add-event", "category": "multi_file", "prompt": "Trace the event type and its handler, then propose where a new event belongs.", "suggested_max_turns": 8},
+  {"task_id": "add-command", "category": "multi_file", "prompt": "Trace a command from protocol definition to handler and summarize the files involved.", "suggested_max_turns": 8},
+  {"task_id": "refactor-duplicate", "category": "refactor", "prompt": "Find a duplicated helper pattern and report the safest shared extraction point.", "suggested_max_turns": 6},
+  {"task_id": "refactor-state", "category": "refactor", "prompt": "Inspect state mutation flow and report one function that could be made more explicit.", "suggested_max_turns": 6}
+]

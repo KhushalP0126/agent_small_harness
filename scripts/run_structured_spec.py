@@ -34,7 +34,11 @@ from harness_kernel.local_sandbox import (
 )
 from prompt.budget import budget_prompt
 from prompt.summarizer import DefaultPromptSummarizer
-from validation.import_graph import analyze_import_graph, validate_imported_symbols
+from validation.import_graph import (
+    analyze_import_graph,
+    validate_cross_file_contracts,
+    validate_imported_symbols,
+)
 
 
 DEFAULT_ARTIFACT_ROOT = Path("artifacts/runs")
@@ -1151,7 +1155,7 @@ def _normalize_symbol(text: str) -> str:
     return value.strip()
 
 
-def _validate_structured_spec_output(source: str, plan) -> list[dict]:
+def _validate_structured_spec_output(source: str, plan, contracts=None) -> list[dict]:
     issues: list[dict] = []
     try:
         tree = ast.parse(source)
@@ -1210,6 +1214,17 @@ def _validate_structured_spec_output(source: str, plan) -> list[dict]:
                 "kind": "missing_import_symbol",
                 "summary": f"Generated file `{path}` imports symbols that do not exist",
                 "details": ", ".join(missing),
+            }
+        )
+    for issue in validate_cross_file_contracts(file_map, contracts or []):
+        issues.append(
+            {
+                "kind": issue["kind"],
+                "summary": f"Contract export `{issue['symbol']}` is incompatible in `{issue['file']}`",
+                "details": ", ".join(
+                    f"{key}={value}" for key, value in issue.items() if key not in {"kind", "symbol", "file"}
+                )
+                or issue["kind"],
             }
         )
     return issues
@@ -1598,7 +1613,7 @@ def run_spec(
         session = result.payload
     final_attempt = _best_attempt(session.get("attempts", []))
     final_source = final_attempt.get("draft", "")
-    spec_issues = _validate_structured_spec_output(final_source, plan)
+    spec_issues = _validate_structured_spec_output(final_source, plan, queue.contracts)
     generated_files = _structured_spec_file_map(final_source, plan, contract_execution_results)
     import_graph = analyze_import_graph(
         generated_files,

@@ -8,6 +8,7 @@ from validation.behavior import (
     execute_behavior_trace,
     serialize_execution_trace,
 )
+from validation.debugger import minimal_failing_reproducer
 
 
 class ExecutionAgent(BaseAgent):
@@ -54,5 +55,6 @@ class ExecutionAgent(BaseAgent):
                     for case in trace.cases
                     if case.exception_type or not case.matched
                 ],
+                "minimal_reproducer": minimal_failing_reproducer(trace),
             },
         )

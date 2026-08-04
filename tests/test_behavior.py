@@ -13,7 +13,11 @@ from validation.behavior import (
     mixed_hard_case_spec,
     validate_function_behavior,
 )
-from validation.debugger import build_debugger_hints, localize_contract_failure
+from validation.debugger import (
+    build_debugger_hints,
+    localize_contract_failure,
+    minimal_failing_reproducer,
+)
 from validation.policy import validate_findings
 
 
@@ -185,6 +189,8 @@ def append_item(values):
         trace = execute_behavior_trace(source, spec)
         self.assertIn("before=", trace.cases[0].state_delta)
         self.assertIn("after=", trace.cases[0].state_delta)
+        self.assertTrue(trace.cases[0].steps)
+        self.assertTrue(trace.cases[0].step_deltas)
 
     def test_result_derived_from_trace_matches_validator(self) -> None:
         source = "def add(a, b):\n    return a - b\n"
@@ -215,6 +221,9 @@ def append_item(values):
             ),
             ["a"],
         )
+        reproducer = minimal_failing_reproducer(trace)
+        self.assertEqual(reproducer["schema_version"], 1)
+        self.assertEqual(reproducer["cases"][0]["name"], "delta")
 
 
 if __name__ == "__main__":
