@@ -107,6 +107,11 @@ make rust-tui REPO_ROOT=.
 make test-rust
 ```
 
+The Rust crate lives under `rust/`; its `mermaid_view` module contains the
+in-process SVG-to-PNG pipeline and Kitty/iTerm2/quadrant-block terminal
+renderers. Run Cargo directly with `cargo --manifest-path rust/Cargo.toml`
+when you need a Rust-specific command.
+
 The primary view keeps main output and repository context above persistent
 context, chat, and settings panels. Press `c` or `p` to chat with the architect
 without executing anything. New project ideas automatically open a typed 2–4
@@ -565,32 +570,44 @@ Those outcomes are recorded in artifact metadata and the contract queue results.
 | `pyproject.toml` | Python package metadata and runtime dependencies |
 | `Dockerfile` | Container entrypoint for the synchronous API service |
 | `.github/workflows/ci.yml` | Push/PR workflow for tests and Docker image build |
-| `design.md` | Architectural constraints and safety principles |
-| `structure.md` | File-by-file repository map |
+| `docs/reference/design.md` | Architectural constraints and safety principles |
+| `docs/reference/structure.md` | File-by-file repository map |
+| `docs/reference/conventions.md` | Stable model-facing coding and harness rules |
+| `docs/reference/SPEC.md` | Rust TUI and engine-expansion specification |
+| `rust/` | Rust TUI crate and in-process Mermaid/image rendering |
 
 ## Setup
 
 Install the base runtime and optional formal-verification dependencies:
 
 ```bash
-make install
+make setup
 make install-formal
 ```
 
+`make setup` installs the base Python dependencies and creates `.env` from
+`.env.example` when it is missing. Use `make install` alone when you do not
+want to create an environment file yet.
+
 The Rust preview additionally requires a Rust toolchain with `cargo`. It is not
-required for the Python harness or Textual TUI:
+required for the Python harness or Textual TUI. The crate is isolated under
+`rust/`, so the repository root remains Python-first:
 
 ```bash
 rustup toolchain install stable
 make test-rust
+make rust-tui REPO_ROOT=.
 ```
 
 Pull local Ollama models as needed:
 
 ```bash
 ollama pull qwen2.5-coder:1.5b
-ollama pull qwen2.5-coder:3b
 ```
+
+The checked-in defaults route every local worker profile and difficulty tier to
+Qwen 1.5B so the project remains usable on constrained laptops. Larger models
+are not required for the supported workflow.
 
 For architect escalation, create a local `.env` file:
 
@@ -720,10 +737,10 @@ make test-engine-edge-cases
 Run model capability experiments:
 
 ```bash
-make test-worker-limit MODEL=qwen2.5-coder:3b SAVE_ARTIFACTS=1
+make test-worker-limit MODEL=qwen2.5-coder:1.5b SAVE_ARTIFACTS=1
 make test-worker-limit-auto SAVE_ARTIFACTS=1
-make test-raw-vs-harness MODEL=qwen2.5-coder:3b
-make test-raw-vs-harness-architect MODEL=qwen2.5-coder:3b
+make test-raw-vs-harness MODEL=qwen2.5-coder:1.5b
+make test-raw-vs-harness-architect MODEL=qwen2.5-coder:1.5b
 make test-raw-vs-harness-repeated MODEL=qwen2.5-coder:1.5b RAW_VS_HARNESS_SAMPLES=5
 make test-raw-vs-harness-ablation MODEL=qwen2.5-coder:1.5b RAW_VS_HARNESS_SAMPLES=5
 ```
@@ -731,17 +748,17 @@ make test-raw-vs-harness-ablation MODEL=qwen2.5-coder:1.5b RAW_VS_HARNESS_SAMPLE
 Run focused Python ladders:
 
 ```bash
-make test-python-ladder-parsing MODEL=qwen2.5-coder:3b
-make test-python-ladder-data MODEL=qwen2.5-coder:3b
-make test-python-ladder-algorithmic MODEL=qwen2.5-coder:3b
-make test-python-ladder-stateful MODEL=qwen2.5-coder:3b
+make test-python-ladder-parsing MODEL=qwen2.5-coder:1.5b
+make test-python-ladder-data MODEL=qwen2.5-coder:1.5b
+make test-python-ladder-algorithmic MODEL=qwen2.5-coder:1.5b
+make test-python-ladder-stateful MODEL=qwen2.5-coder:1.5b
 ```
 
 Run architect escalation:
 
 ```bash
-make test-worker-limit-architect MODEL=qwen2.5-coder:3b SAVE_ARTIFACTS=1
-make test-python-ladder-stateful-architect MODEL=qwen2.5-coder:3b SAVE_ARTIFACTS=1
+make test-worker-limit-architect MODEL=qwen2.5-coder:1.5b SAVE_ARTIFACTS=1
+make test-python-ladder-stateful-architect MODEL=qwen2.5-coder:1.5b SAVE_ARTIFACTS=1
 ```
 
 Review saved artifacts:

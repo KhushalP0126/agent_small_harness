@@ -153,7 +153,7 @@ class BenchmarkerTests(unittest.TestCase):
 
     def test_preprocessor_preserves_raw_goal_and_uses_normalized_goal(self) -> None:
         goal = "I want you to actually create a helper with no globals."
-        result = PreprocessorAgent(ROOT / "conventions.md").run("gen-test", goal).payload
+        result = PreprocessorAgent(ROOT / "docs" / "reference" / "conventions.md").run("gen-test", goal).payload
         self.assertEqual(result["raw_goal"], goal)
         self.assertIn("Create a helper", result["goal"])
         self.assertNotIn("actually", result["goal"].lower())

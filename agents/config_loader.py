@@ -93,15 +93,15 @@ class ModelsConfig:
     profiles: dict[str, str] = field(
         default_factory=lambda: {
             "tiny": "qwen2.5-coder:1.5b",
-            "daily_driver": "qwen2.5-coder:7b",
+            "daily_driver": "qwen2.5-coder:1.5b",
             "architect": "deepseek-v4-pro",
         }
     )
     difficulty_models: dict[str, str] = field(
         default_factory=lambda: {
             "1-2": "qwen2.5-coder:1.5b",
-            "3-5": "qwen2.5-coder:3b",
-            "6+": "qwen2.5-coder:7b",
+            "3-5": "qwen2.5-coder:1.5b",
+            "6+": "qwen2.5-coder:1.5b",
         }
     )
 
@@ -286,7 +286,7 @@ class HarnessConfig:
                         "profiles",
                         {
                             "tiny": "qwen2.5-coder:1.5b",
-                            "daily_driver": "qwen2.5-coder:7b",
+                            "daily_driver": "qwen2.5-coder:1.5b",
                             "architect": "deepseek-v4-pro",
                         },
                     ),
@@ -295,8 +295,8 @@ class HarnessConfig:
                         "difficulty_models",
                         {
                             "1-2": "qwen2.5-coder:1.5b",
-                            "3-5": "qwen2.5-coder:3b",
-                            "6+": "qwen2.5-coder:7b",
+                            "3-5": "qwen2.5-coder:1.5b",
+                            "6+": "qwen2.5-coder:1.5b",
                         },
                     ),
                 ),

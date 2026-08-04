@@ -1663,21 +1663,21 @@ mod tests {
     fn tool_diff_opens_review_and_resolution_returns_to_chat() {
         let mut state = AppState::default();
         state.apply(HarnessEvent::ToolDiff {
-            path: "src/main.rs".into(),
-            diff: "--- a/src/main.rs\n+++ b/src/main.rs\n".into(),
+            path: "rust/src/main.rs".into(),
+            diff: "--- a/rust/src/main.rs\n+++ b/rust/src/main.rs\n".into(),
             replacements: 1,
         });
         assert_eq!(
             state.mode,
             AppMode::ToolDiffReview {
-                path: "src/main.rs".into(),
-                diff: "--- a/src/main.rs\n+++ b/src/main.rs\n".into(),
+                path: "rust/src/main.rs".into(),
+                diff: "--- a/rust/src/main.rs\n+++ b/rust/src/main.rs\n".into(),
             }
         );
         assert!(!state.main_output_active());
 
         state.apply(HarnessEvent::ToolDiffResolved {
-            path: "src/main.rs".into(),
+            path: "rust/src/main.rs".into(),
             applied: false,
             message: "diff discarded".into(),
         });

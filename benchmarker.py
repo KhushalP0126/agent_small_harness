@@ -25,7 +25,7 @@ from validation.policy import serialize_validation_result, validate_findings
 
 ROOT = Path(__file__).resolve().parent
 HISTORY_PATH = ROOT / "history.json"
-CONVENTIONS_PATH = ROOT / "conventions.md"
+CONVENTIONS_PATH = ROOT / "docs" / "reference" / "conventions.md"
 
 
 @dataclass

@@ -1,7 +1,7 @@
 # TUI Code Spec — `agent_small_harness`
 
 > Audited 2026-07-30. This file specifies the Python Textual client. The
-> Rust/Ratatui client is documented separately in `SPEC.md`.
+> Rust/Ratatui client is documented separately in `docs/reference/SPEC.md`.
 
 Implemented Phase 1 + Phase 2 from the grounded specification. Phase 3 (extra
 model providers, master-key mode, commercial tiering) is intentionally excluded

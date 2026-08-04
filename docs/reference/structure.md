@@ -34,8 +34,8 @@ described where relevant but are intentionally not tracked.
 ## Root Files
 
 - `README.md` - Professional project overview, architecture, setup, and command surface.
-- `SPEC.md` - Rust TUI and engine-expansion specification plus current implementation status and rollout constraints.
-- `Cargo.toml` - Pinned Rust TUI dependencies.
+- `docs/reference/SPEC.md` - Rust TUI and engine-expansion specification plus current implementation status and rollout constraints.
+- `rust/Cargo.toml` - Pinned Rust TUI dependencies.
 - `Makefile` - Common setup, Rust/Textual TUI, test, ladder, model, history, review, Compute Shield, and smoke commands.
 - `config.yaml` - Declarative policy, retry, model, behavior, and routing settings.
 - `pyproject.toml` - Python package metadata and runtime dependencies.
@@ -49,9 +49,16 @@ described where relevant but are intentionally not tracked.
 - `requirements-kernel.txt` - Optional Kernel browser documentation dependency manifest.
 - `requirements-formal.txt` - Optional Deal and CrossHair formal-validation dependency manifest.
 - `history.json` - Historian persistence file for run summaries and successful repair lessons.
-- `conventions.md` - Stable model-facing coding and harness rules.
-- `design.md` - Architecture, safety, escalation, and validation design constraints.
-- `structure.md` - This file.
+- `docs/reference/conventions.md` - Stable model-facing coding and harness rules.
+- `docs/reference/design.md` - Architecture, safety, escalation, and validation design constraints.
+- `docs/reference/structure.md` - This file.
+
+## `docs/`
+
+- `docs/reference/README.md` - Index for the maintained project reference documents.
+- `docs/reference/SPEC.md` - Implemented Rust TUI and engine-expansion specification.
+- `docs/*-2026-*.md` - Dated benchmark and experiment reports retained as historical evidence.
+- `docs/open_source_readiness_audit.pdf` - Historical readiness audit.
 
 ## `agents/`
 
@@ -123,12 +130,12 @@ instead of replacing it.
 - `harness_kernel/compute_shield.py` - Exact per-task and aggregate baseline-versus-shielded token accounting; evaluation evidence rather than a validation gate.
 - `harness_kernel/__init__.py` - Public harness-kernel exports; the name avoids collision with the Kernel browser SDK.
 
-## Rust TUI
+## `rust/`
 
-- `Cargo.toml` - Pinned Rust application dependencies for Ratatui, Tokio, terminal image protocols, Mermaid SVG rendering, and rasterization.
-- `src/main.rs` - Async terminal application, Python bridge lifecycle, pure application-state reducer, input/event/redraw selection loop, and review dashboard.
-- `src/protocol.rs` - Serde command/event contract and resilient JSON-lines reader.
-- `src/mermaid_view.rs` - In-process Mermaid SVG rendering, PNG rasterization, terminal protocol selection, and modal widget.
+- `rust/Cargo.toml` - Pinned Rust application dependencies for Ratatui, Tokio, terminal image protocols, Mermaid SVG rendering, and rasterization.
+- `rust/src/main.rs` - Async terminal application, Python bridge lifecycle, pure application-state reducer, input/event/redraw selection loop, and review dashboard.
+- `rust/src/protocol.rs` - Serde command/event contract and resilient JSON-lines reader.
+- `rust/src/mermaid_view.rs` - In-process Mermaid SVG rendering, PNG rasterization, terminal protocol selection, and modal widget.
 
 The Rust client is additive during rollout. Python remains the source of truth
 for engine logic and artifacts, and the Textual TUI remains available until

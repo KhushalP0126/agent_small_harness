@@ -24,11 +24,12 @@ IMAGE ?= agent-small-harness:local
 ARTIFACT_ARGS = $(if $(filter 1 true yes,$(SAVE_ARTIFACTS)),--save-artifacts --artifact-root "$(ARTIFACT_ROOT)",)
 DOC_ARGS = --doc-agent "$(DOC_AGENT)" $(if $(DOC_MODEL),--doc-model "$(DOC_MODEL)",) $(if $(DOC_OUTPUT),--doc-output "$(DOC_OUTPUT)",)
 
-.PHONY: help install install-formal install-kernel env-path init-env api-dev tui rust-tui tui_rust test-rust docker-build sandbox-run agent-benchmark test test-engine-expansion compute-shield test-claude-fixes test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-fixture resume-coding-capability test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-worker-limit-architect resume-worker-limit test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-python-ladder-stateful test-python-ladder-stateful-architect test-plan-mode-ladder test-raw-vs-harness test-raw-vs-harness-architect test-raw-vs-harness-repeated test-raw-vs-harness-ablation test-formal-experiment structured-spec structured-spec-plan resume-structured-spec repo-map review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library tool-agent ollama-smoke inference-smoke live-repair day1 clean-history
+.PHONY: help setup install install-formal install-kernel env-path init-env api-dev tui rust-tui tui_rust test-rust docker-build sandbox-run agent-benchmark test test-engine-expansion compute-shield test-claude-fixes test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-fixture resume-coding-capability test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-worker-limit-architect resume-worker-limit test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-python-ladder-stateful test-python-ladder-stateful-architect test-plan-mode-ladder test-raw-vs-harness test-raw-vs-harness-architect test-raw-vs-harness-repeated test-raw-vs-harness-ablation test-formal-experiment structured-spec structured-spec-plan resume-structured-spec repo-map review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library tool-agent ollama-smoke inference-smoke live-repair day1 clean-history
 
 help:
 	@printf "Agent Small Harness commands\n"
 	@printf "\nSetup:\n"
+	@printf "  make setup                           Install Python dependencies and create .env from .env.example\n"
 	@printf "  make install                         Install optional tree-sitter deps for C/C++ support\n"
 	@printf "  make install-formal                  Install optional Deal/CrossHair formal-verification deps\n"
 	@printf "  make install-kernel                  Install optional Kernel browser documentation deps\n"
@@ -115,10 +116,12 @@ help:
 	@printf "  CONTAINER_RUNTIME=docker|podman      Hardened runtime; default is $(CONTAINER_RUNTIME)\n"
 	@printf "  IMAGE=agent-small-harness:local      Docker image tag for docker-build\n"
 	@printf "\nExamples:\n"
-	@printf "  make test-worker-limit MODEL=qwen2.5-coder:3b SAVE_ARTIFACTS=1\n"
+	@printf "  make test-worker-limit MODEL=qwen2.5-coder:1.5b SAVE_ARTIFACTS=1\n"
 	@printf "  make test-worker-limit-auto SAVE_ARTIFACTS=1\n"
-	@printf "  make test-worker-limit-architect MODEL=qwen2.5-coder:3b SAVE_ARTIFACTS=1\n"
+	@printf "  make test-worker-limit-architect MODEL=qwen2.5-coder:1.5b SAVE_ARTIFACTS=1\n"
 	@printf "  make review-run RUN=worker_limit_6\n"
+
+setup: install init-env
 
 install:
 	$(PYTHON) -m pip install -r requirements.txt
@@ -147,12 +150,12 @@ tui:
 	$(PYTHON) -m TUI --artifact-root "$(ARTIFACT_ROOT)" --repo-root "$(REPO_ROOT)"
 
 rust-tui:
-	PYTHON="$(PYTHON)" cargo run -- "$(REPO_ROOT)"
+	PYTHON="$(PYTHON)" cargo run --manifest-path rust/Cargo.toml -- "$(REPO_ROOT)"
 
 tui_rust: rust-tui
 
 test-rust:
-	cargo test
+	cargo test --manifest-path rust/Cargo.toml
 
 docker-build:
 	docker build -t "$(IMAGE)" .
@@ -284,7 +287,7 @@ approve-library:
 	$(PYTHON) scripts/approve_library.py "$(LIB)"
 
 tool-agent:
-	@test -n "$(TASK)" || (echo "Set TASK, e.g. make tool-agent TASK='inspect src/main.rs'" && exit 1)
+	@test -n "$(TASK)" || (echo "Set TASK, e.g. make tool-agent TASK='inspect rust/src/main.rs'" && exit 1)
 	$(PYTHON) scripts/run_tool_agent.py "$(TASK)" --provider "$(TOOL_AGENT)" --repo-root "$(REPO_ROOT)"
 
 sandbox-run:

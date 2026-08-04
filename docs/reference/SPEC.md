@@ -160,10 +160,10 @@ validated sheet-derived queue and reports a warning instead of failing the run.
 
 ### 2.6 Deliverables from this repo turn
 
-- `Cargo.toml` — dependency manifest
-- `src/main.rs` — event loop, subprocess spawn, harness event enum, base UI
-- `src/mermaid_view.rs` — Mermaid modal widget
-- `src/protocol.rs` — typed command/event schema and resilient line reader
+- `rust/Cargo.toml` — dependency manifest
+- `rust/src/main.rs` — event loop, subprocess spawn, harness event enum, base UI
+- `rust/src/mermaid_view.rs` — Mermaid modal widget and image-processing pipeline
+- `rust/src/protocol.rs` — typed command/event schema and resilient line reader
 - `harness_kernel/tui_bridge.py` — CLI launcher and protocol bridge
 - `harness_kernel/event_stream.py` — inherited controller-event sink
 
