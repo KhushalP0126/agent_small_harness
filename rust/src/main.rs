@@ -107,10 +107,7 @@ impl Default for AppState {
     fn default() -> Self {
         Self {
             mode: AppMode::Chat,
-            logs: vec![
-                "c/p: chat  a: repository tools  s: draft spec  m: repository map  d: history  v: validated code  q: quit"
-                    .into(),
-            ],
+            logs: Vec::new(),
             log_scroll: 0,
             engine: "idle".into(),
             pct: 0,
@@ -157,8 +154,7 @@ impl AppState {
         let previous_log_count = self.logs.len();
         match event {
             HarnessEvent::Ready { protocol_version } => {
-                self.logs
-                    .push(format!("bridge ready (protocol {protocol_version})"));
+                let _ = protocol_version;
             }
             HarnessEvent::EngineProgress { engine, pct } => {
                 self.engine = engine;
@@ -177,16 +173,6 @@ impl AppState {
                 self.deepseek_source = source;
                 self.memory_path = memory_path;
                 self.preference_count = preference_count;
-                self.logs.push(format!(
-                    "DeepSeek: {} · source={} · {} saved preference(s)",
-                    if deepseek_configured {
-                        "configured"
-                    } else {
-                        "not configured"
-                    },
-                    self.deepseek_source,
-                    self.preference_count
-                ));
             }
             HarnessEvent::AssistantStatus { stage, busy } => {
                 self.assistant_busy = busy;
@@ -1058,9 +1044,9 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState, mermaid: &mut MermaidView)
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(2),
+            Constraint::Length(1),
             Constraint::Min(0),
-            Constraint::Length(8),
+            Constraint::Length(6),
         ])
         .split(frame.area());
     let top = Layout::horizontal([
@@ -1102,16 +1088,13 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState, mermaid: &mut MermaidView)
             .style(Style::default().fg(theme_foreground()))
             .scroll((log_offset, 0))
             .block(pane_block(
-                format!(
-                    " MAIN OUTPUT  ·  {}  ·  {}%  ·  {scroll_status}  ·  Up/Down/PgUp/PgDn  ·  End follow ",
-                    state.engine, state.pct
-                ),
+                format!(" OUTPUT · {} · {scroll_status} ", state.engine),
                 main_active,
             )),
         top[0],
     );
     let repo_title = format!(
-        " REPO MAP  ·  {}  ·  [m] focus  ·  [r] vars  ·  [t] files{}",
+        " REPO · {}{} ",
         state.repo_mode,
         if state.repo_focused { " · ACTIVE" } else { "" }
     );
@@ -1124,17 +1107,14 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState, mermaid: &mut MermaidView)
     );
 
     let context = format!(
-        "mode: {} · status: {}\nDeepSeek: {} ({})\nmemory: {} preference(s)\n{}",
+        "{} · {}\n{} prefs",
         state.mode.label(),
-        if state.running { "running" } else { "idle" },
         if state.deepseek_configured {
-            "configured"
+            "DeepSeek"
         } else {
-            "missing"
+            "no key"
         },
-        state.deepseek_source,
         state.preference_count,
-        state.context_content
     );
     frame.render_widget(
         Paragraph::new(context)
@@ -1143,26 +1123,26 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState, mermaid: &mut MermaidView)
         bottom[0],
     );
     let prompt_title = if state.questionnaire_other_active {
-        " Other answer · type a custom response · Enter confirm · Esc options "
+        " ANSWER · Enter "
     } else if state.tool_prompt_active {
-        "Repository tools · describe inspection/change · Enter run · Esc cancel"
+        " TOOLS · Enter "
     } else if state.prompt_active {
-        "Chat · Enter sends message only · Esc cancels input"
+        " CHAT · Enter "
     } else if state.assistant_busy {
-        "Chat · DeepSeek is responding"
+        " CHAT · thinking "
     } else if state.mode == AppMode::Executing {
-        "Execution · approved spec is running"
+        " RUNNING "
     } else if state.mode == AppMode::DraftingSpec {
-        "Spec · drafting from conversation"
+        " DRAFTING "
     } else if matches!(state.mode, AppMode::SpecReview { .. }) {
-        "Spec review · y execute · n revise"
+        " REVIEW · y/n "
     } else if matches!(state.mode, AppMode::ToolDiffReview { .. }) {
-        "Tool diff review · y apply · n discard"
+        " DIFF · y/n "
     } else {
-        "Chat · c/p type · a repository tools · s draft spec · /remember <preference>"
+        " CHAT "
     };
     let prompt_text = if state.prompt.is_empty() && !state.prompt_active {
-        "Chat refines the idea without changing files. Execution requires a generated spec and explicit y approval."
+        "c chat · s spec · a tools · m map · d history"
     } else {
         state.prompt.as_str()
     };
@@ -1173,13 +1153,10 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState, mermaid: &mut MermaidView)
         bottom[2],
     );
     frame.render_widget(
-        Paragraph::new(format!(
-            "Local memory\n{}\n{} preference(s)\n\nUse /remember <preference> in chat.",
-            state.memory_path, state.preference_count
-        ))
-        .style(Style::default().fg(theme_foreground()))
-        .wrap(Wrap { trim: true })
-        .block(pane_block_accent(" SETTINGS ", false, theme_settings())),
+        Paragraph::new(format!("memory · {} saved", state.preference_count))
+            .style(Style::default().fg(theme_foreground()))
+            .wrap(Wrap { trim: true })
+            .block(pane_block_accent(" SETTINGS ", false, theme_settings())),
         bottom[4],
     );
 
@@ -1344,18 +1321,11 @@ fn activity_status_line(state: &AppState) -> Paragraph<'static> {
         "●"
     };
     let status = if state.assistant_busy {
-        format!("{} in progress", state.engine)
+        state.engine.clone()
     } else if state.running {
         format!("{} · {}%", state.engine, state.pct)
     } else {
-        format!("{} · ready", state.mode.label())
-    };
-    let shortcut = if state.mode == AppMode::Questionnaire {
-        " · press 1-5 to choose · Esc cancel"
-    } else if state.numbered_options_available {
-        " · 1-5 quick-select available"
-    } else {
-        ""
+        "ready".into()
     };
     Paragraph::new(Line::from(vec![
         Span::styled(
@@ -1366,7 +1336,7 @@ fn activity_status_line(state: &AppState) -> Paragraph<'static> {
                 .add_modifier(Modifier::BOLD),
         ),
         Span::styled(
-            format!(" {status}{shortcut} "),
+            format!(" {status} "),
             Style::default().fg(if busy { Color::LightCyan } else { Color::Gray }),
         ),
     ]))
@@ -1756,7 +1726,6 @@ mod tests {
         });
         assert!(state.deepseek_configured);
         assert_eq!(state.preference_count, 3);
-        assert!(state.logs.last().unwrap().contains("configured"));
         state.apply(HarnessEvent::MemoryUpdated {
             preference: "keep responses concise".into(),
             added: true,
