@@ -376,7 +376,7 @@ ignored; the runner and this summary are versioned).
 | --- | ---: | ---: |
 | Successful tasks | 20/20 | 11/20 |
 | Model tokens | 6,823 | 642,918 |
-| Tool calls | 0 | 99 |
+| Tool calls | 0 | 109 |
 | Wall-clock time | 88.9s | 369.1s |
 
 This is a diagnostic result, not a success claim: the shielded loop currently
