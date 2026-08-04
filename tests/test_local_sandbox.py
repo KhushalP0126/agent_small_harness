@@ -4,7 +4,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from harness_kernel.local_sandbox import MAX_CAPTURE_BYTES, run_python_locally_isolated
+from harness_kernel.local_sandbox import (
+    MAX_CAPTURE_BYTES,
+    run_python_locally_isolated,
+    run_python_project_locally_isolated,
+)
 
 
 class LocalSandboxTests(unittest.TestCase):
@@ -46,6 +50,18 @@ print(json.dumps({
 
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertLessEqual(len(result.stdout.encode("utf-8")), MAX_CAPTURE_BYTES)
+
+    def test_project_execution_resolves_cross_file_imports(self) -> None:
+        result = run_python_project_locally_isolated(
+            {
+                "helpers.py": "def value():\n    return 7\n",
+                "main.py": "from helpers import value\nprint(value())\n",
+            },
+            entrypoint="main.py",
+            timeout_seconds=2,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "7")
 
 
 if __name__ == "__main__":

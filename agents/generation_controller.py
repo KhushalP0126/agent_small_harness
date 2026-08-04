@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import asdict, dataclass, field
 from difflib import unified_diff
+from pathlib import Path
 from typing import Callable
 
 from agents.base import AgentResult, BaseAgent
@@ -158,6 +159,7 @@ class GenerationController(BaseAgent):
         enable_history_context: bool = True,
         profiling_runner: ProfilingRunner | None = None,
         event_sink: EventSink | None = None,
+        repository_root: Path | str | None = None,
     ) -> None:
         self.max_retries = max_retries
         self.draft_supplier = draft_supplier or (lambda prompt: prompt)
@@ -183,11 +185,13 @@ class GenerationController(BaseAgent):
         self.enable_history_context = enable_history_context
         self.profiling_runner = profiling_runner
         self.event_sink = event_sink or event_sink_from_env()
+        self.repository_root = Path(repository_root or Path.cwd()).resolve()
         self.execution_agent = execution_agent or (
             ExecutionAgent() if (enable_execution_trace or enable_debugger_hints) else None
         )
         self.tool_registry = tool_registry or build_default_tool_registry(
-            execution_agent=self.execution_agent
+            execution_agent=self.execution_agent,
+            repository_root=self.repository_root,
         )
         self.engine_registry = engine_registry or EngineRegistry.default(
             tool_registry=self.tool_registry

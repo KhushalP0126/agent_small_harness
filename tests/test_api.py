@@ -94,6 +94,26 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(architect_config.base_url, "https://architect.example/v1/chat/completions")
         self.assertIsNotNone(controller.architect_supplier)
 
+    def test_build_controller_wires_repository_and_debugger_controls(self) -> None:
+        request = SyncRunRequest(
+            target="configured-function",
+            spec="write code",
+            repo_root=".",
+            execution_trace=False,
+            debugger_hints=False,
+            debugger_type_contracts=["value: int"],
+        )
+        with patch("api.app.OllamaModelSupplier"):
+            controller = build_controller(request)
+        self.assertEqual(controller.repository_root, Path.cwd().resolve())
+        self.assertFalse(controller.enable_execution_trace)
+        self.assertFalse(controller.enable_debugger_hints)
+        self.assertEqual(controller.debugger_type_contracts, ["value: int"])
+
+    def test_build_controller_rejects_repository_escape(self) -> None:
+        with self.assertRaises(ValueError):
+            build_controller(SyncRunRequest(target="x", spec="y", repo_root="/tmp"))
+
     def test_sync_run_returns_structured_backend_error(self) -> None:
         def controller_factory(_request):
             raise RuntimeError("Ollama is not reachable")

@@ -13,6 +13,7 @@ from validation.behavior import (
     mixed_hard_case_spec,
     validate_function_behavior,
 )
+from validation.debugger import build_debugger_hints, localize_contract_failure
 from validation.policy import validate_findings
 
 
@@ -171,6 +172,20 @@ class ExecutionTraceTests(unittest.TestCase):
         self.assertFalse(result.is_compliant)
         self.assertIn("stdout: observed 2 3", result.issues[0].details)
 
+    def test_trace_captures_state_delta_for_mutated_arguments(self) -> None:
+        source = """
+def append_item(values):
+    values.append(3)
+    return values
+"""
+        spec = FunctionBehaviorSpec(
+            function_name="append_item",
+            cases=[BehaviorCase(name="append", args=([1, 2],), expected=[1, 2, 3])],
+        )
+        trace = execute_behavior_trace(source, spec)
+        self.assertIn("before=", trace.cases[0].state_delta)
+        self.assertIn("after=", trace.cases[0].state_delta)
+
     def test_result_derived_from_trace_matches_validator(self) -> None:
         source = "def add(a, b):\n    return a - b\n"
         spec = self._spec()
@@ -180,6 +195,25 @@ class ExecutionTraceTests(unittest.TestCase):
         self.assertEqual(
             [asdict(issue) for issue in derived.issues],
             [asdict(issue) for issue in direct.issues],
+        )
+
+    def test_debugger_hints_include_state_delta_and_localize_dependencies(self) -> None:
+        trace = execute_behavior_trace(
+            "def add(values):\n    values.append(4)\n    return values\n",
+            FunctionBehaviorSpec(
+                function_name="add",
+                cases=[BehaviorCase(name="delta", args=([1],), expected=[1])],
+            ),
+        )
+        hints = build_debugger_hints(trace)
+        self.assertTrue(any("state delta" in hint for hint in hints))
+        self.assertEqual(
+            localize_contract_failure(
+                "b",
+                {"b": ["a"]},
+                {"a": False, "b": False},
+            ),
+            ["a"],
         )
 
 

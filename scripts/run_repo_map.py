@@ -10,7 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from agents.artifact_manager import ArtifactManager
+from agents.artifact_manager import ARTIFACT_SCHEMA_VERSION, ArtifactManager
 from agents.repo_map_agent import RepoMapAgent
 
 
@@ -37,7 +37,8 @@ def run_repo_map(
     if save_artifacts:
         manager = ArtifactManager(artifact_root)
         paths = manager.create_run(prefix=f"repo_map_{Path(repo_root).name or 'root'}")
-        (paths.run_dir / "repo_map.json").write_text(json.dumps(asdict(graph), indent=2), encoding="utf-8")
+        payload = {"schema_version": ARTIFACT_SCHEMA_VERSION, **asdict(graph)}
+        (paths.run_dir / "repo_map.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
         (paths.run_dir / "repo_map.mmd").write_text(agent.to_mermaid(graph), encoding="utf-8")
         print(f"\n[repo-map] artifacts written to {paths.run_dir}", file=sys.stderr)
     return 0

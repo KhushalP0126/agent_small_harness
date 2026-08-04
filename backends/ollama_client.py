@@ -30,6 +30,7 @@ class OllamaClient:
     def __init__(self, base_url: str = DEFAULT_OLLAMA_URL, timeout_seconds: int = 120) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout_seconds = timeout_seconds
+        self.last_usage: dict[str, int] = {}
 
     def generate(
         self,
@@ -68,6 +69,13 @@ class OllamaClient:
         result = body.get("response", "")
         if not isinstance(result, str) or not result.strip():
             raise RuntimeError("Ollama returned an empty response.")
+        prompt_tokens = int(body.get("prompt_eval_count") or 0)
+        completion_tokens = int(body.get("eval_count") or 0)
+        self.last_usage = {
+            "prompt_tokens": prompt_tokens,
+            "completion_tokens": completion_tokens,
+            "total_tokens": prompt_tokens + completion_tokens,
+        }
         return result
 
 

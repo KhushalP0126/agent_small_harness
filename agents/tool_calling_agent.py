@@ -81,6 +81,14 @@ class ToolCallingAgent:
 
             tool = str(action.get("tool") or "")
             arguments = action.get("arguments")
+            if _doc_edit_is_complete(calls, tool, arguments):
+                return ToolCallingRun(
+                    final_answer=(
+                        "The requested documentation diff is prepared for review; "
+                        "no additional edit was needed."
+                    ),
+                    calls=calls,
+                )
             raw_value = None
             signature = json.dumps(
                 {"tool": tool, "arguments": arguments},
@@ -149,6 +157,32 @@ def _bounded_transcript(transcript: list[dict], max_chars: int) -> str:
             {"note": f"{len(transcript) - len(kept)} earlier turn(s) omitted for space"},
         )
     return json.dumps(kept, default=str, separators=(",", ":"))
+
+
+def _doc_edit_is_complete(
+    calls: list[ToolCallRecord],
+    tool: str,
+    arguments: Any,
+) -> bool:
+    """Finish a one-file doc edit after redundant same-file verification."""
+
+    if tool not in {"read_file", "search_directory"} or not isinstance(arguments, dict):
+        return False
+    proposals = [
+        call
+        for call in calls
+        if call.tool == "apply_search_replace"
+        and call.result.get("ok")
+        and isinstance(call.result.get("value"), dict)
+        and int(call.result["value"].get("replacements", 0)) > 0
+    ]
+    if not proposals:
+        return False
+    proposed_path = str(proposals[-1].arguments.get("path") or "")
+    requested_path = str(arguments.get("path") or arguments.get("pattern") or "")
+    if tool == "search_directory":
+        requested_path = str(arguments.get("pattern") or "")
+    return bool(proposed_path and requested_path and proposed_path in requested_path)
 
 
 def _tool_prompt(

@@ -100,6 +100,61 @@ def run_python_locally_isolated(
             )
 
 
+def run_python_project_locally_isolated(
+    files: dict[str, str],
+    *,
+    entrypoint: str,
+    timeout_seconds: float,
+    extra_environment: dict[str, str] | None = None,
+) -> LocalSandboxResult:
+    """Run a generated multi-file Python project in one disposable directory."""
+
+    normalized_entrypoint = Path(entrypoint)
+    if normalized_entrypoint.is_absolute() or ".." in normalized_entrypoint.parts:
+        raise ValueError("entrypoint must stay within the generated project")
+    if not files:
+        raise ValueError("generated project must contain at least one file")
+    with tempfile.TemporaryDirectory(prefix="agent-harness-project-") as temp_dir:
+        scratch_dir = Path(temp_dir)
+        for relative_path, source in files.items():
+            path = Path(relative_path)
+            if path.is_absolute() or ".." in path.parts:
+                raise ValueError(f"generated path escapes project: {relative_path}")
+            destination = scratch_dir / path
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_text(source, encoding="utf-8")
+        runner_path = scratch_dir / "__harness_runner__.py"
+        runner_path.write_text(
+            _project_runner_source(scratch_dir / normalized_entrypoint, timeout_seconds),
+            encoding="utf-8",
+        )
+        with tempfile.TemporaryFile() as stdout_file, tempfile.TemporaryFile() as stderr_file:
+            process = subprocess.Popen(
+                [sys.executable, "-I", str(runner_path)],
+                cwd=scratch_dir,
+                env=sanitized_environment(scratch_dir, extra_environment),
+                stdin=subprocess.DEVNULL,
+                stdout=stdout_file,
+                stderr=stderr_file,
+                start_new_session=os.name == "posix",
+            )
+            timed_out = False
+            try:
+                process.wait(timeout=timeout_seconds)
+            except subprocess.TimeoutExpired:
+                timed_out = True
+                _terminate_process_tree(process)
+            else:
+                _terminate_remaining_process_group(process.pid)
+            return LocalSandboxResult(
+                returncode=process.returncode,
+                stdout=_read_tail(stdout_file),
+                stderr=_read_tail(stderr_file),
+                timed_out=timed_out,
+                working_directory=str(scratch_dir),
+            )
+
+
 def _runner_source(candidate_path: Path, timeout_seconds: float) -> str:
     cpu_seconds = max(1, math.ceil(timeout_seconds) + 1)
     return f"""
@@ -126,6 +181,11 @@ if resource is not None:
 
 runpy.run_path({str(candidate_path)!r}, run_name="__main__")
 """.lstrip()
+
+
+def _project_runner_source(entrypoint: Path, timeout_seconds: float) -> str:
+    source = _runner_source(entrypoint, timeout_seconds)
+    return "import sys\nsys.path.insert(0, " + repr(str(entrypoint.parent)) + ")\n\n" + source
 
 
 def _terminate_process_tree(process: subprocess.Popen[bytes]) -> None:

@@ -581,7 +581,12 @@ class ContractPlannerSupplier:
             raise ContractArchitectError(code, str(exc)) from exc
         except ValueError as exc:
             raise ContractArchitectError("architect_contract_plan_invalid_json", str(exc)) from exc
-        if not plan.contract_order and not plan.dependencies and not plan.contract_notes:
+        if (
+            not plan.contract_order
+            and not plan.dependencies
+            and not plan.contract_notes
+            and not plan.file_ownership
+        ):
             raise ContractArchitectError("architect_contract_plan_zero_contracts", "Architect returned an empty contract plan.")
         return plan
 

@@ -25,6 +25,10 @@ class SyncRunRequest(BaseModel):
     use_architect: bool = False
     architect_model: str | None = Field(default=None, min_length=1)
     architect_url: str | None = Field(default=None, min_length=1)
+    repo_root: str | None = Field(default=None, min_length=1)
+    execution_trace: bool = True
+    debugger_hints: bool = True
+    debugger_type_contracts: list[str] = Field(default_factory=list, max_length=32)
 
 
 class SyncRunResponse(BaseModel):
@@ -52,6 +56,7 @@ def build_controller(request: SyncRunRequest) -> GenerationController:
         if request.use_architect
         else None
     )
+    repository_root = _validated_repo_root(request.repo_root)
     return GenerationController(
         max_retries=request.max_retries,
         draft_supplier=worker.generate_draft,
@@ -60,7 +65,23 @@ def build_controller(request: SyncRunRequest) -> GenerationController:
         architect_after_repair_attempts=1 if architect_supplier is not None else None,
         repair_strategy=RepairStrategyAgent(),
         language=request.language,
+        repository_root=repository_root,
+        enable_execution_trace=request.execution_trace,
+        enable_debugger_hints=request.debugger_hints,
+        debugger_type_contracts=request.debugger_type_contracts,
     )
+
+
+def _validated_repo_root(raw: str | None) -> Path | None:
+    """Keep public API repository access inside the launched workspace."""
+
+    if not raw:
+        return None
+    workspace = Path.cwd().resolve()
+    candidate = Path(raw).expanduser().resolve()
+    if candidate != workspace and workspace not in candidate.parents:
+        raise ValueError("repo_root must be the API workspace or one of its descendants")
+    return candidate
 
 
 def _run_background_job(

@@ -33,6 +33,7 @@ class FunctionContract:
     invariants: list[str] = field(default_factory=list)
     examples: list[DealExample] = field(default_factory=list)
     dependencies: list[str] = field(default_factory=list)
+    target_file: str = ""
 
     def normalized_signature(self) -> str:
         signature = self.signature.strip()
@@ -88,6 +89,8 @@ class FunctionContract:
         if self.dependencies:
             lines.append("DEPENDENCIES:")
             lines.extend(f"- {item}" for item in self.dependencies)
+        if self.target_file:
+            lines.append(f"TARGET FILE: {self.target_file}")
         lines.extend(
             [
                 "FINAL RULES:",
@@ -126,6 +129,7 @@ class ContractQueuePlan:
     contract_order: list[str] = field(default_factory=list)
     dependencies: dict[str, list[str]] = field(default_factory=dict)
     contract_notes: dict[str, str] = field(default_factory=dict)
+    file_ownership: dict[str, str] = field(default_factory=dict)
 
 
 def parse_contract_queue_json(text: str) -> ContractQueue:
@@ -160,12 +164,17 @@ def parse_contract_queue_plan_json(text: str) -> ContractQueuePlan:
     order = _string_list(data.get("contract_order", data.get("order", [])), "contract_order")
     dependencies = _string_list_mapping(data.get("dependencies", {}), "dependencies")
     notes = _string_mapping(data.get("contract_notes", data.get("notes", {})), "contract_notes")
-    if not order and not dependencies and not notes:
+    ownership = _string_mapping(
+        data.get("file_ownership", data.get("target_files", {})),
+        "file_ownership",
+    )
+    if not order and not dependencies and not notes and not ownership:
         raise ValueError("contract queue plan must contain an order, dependencies, or notes")
     return ContractQueuePlan(
         contract_order=order,
         dependencies=dependencies,
         contract_notes=notes,
+        file_ownership=ownership,
     )
 
 
@@ -191,6 +200,9 @@ def _contract_from_mapping(item: Any) -> FunctionContract:
         invariants=[str(value).strip() for value in _list(item.get("invariants", [])) if str(value).strip()],
         examples=examples,
         dependencies=[str(value).strip() for value in _list(item.get("dependencies", [])) if str(value).strip()],
+        target_file=str(
+            item.get("target_file", item.get("file_path", item.get("file", "")))
+        ).strip(),
     )
 
 

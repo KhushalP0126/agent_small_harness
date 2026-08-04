@@ -365,6 +365,12 @@ make agent-benchmark \
 This provides evidence for cloud-token reduction without claiming that extra
 local inference reduces total tokens across every model.
 
+`scripts/run_ollama_benchmark_agent.py` is available for an explicitly
+authorized local-model comparison and records Ollama's prompt/evaluation token
+counts. No second-model result is published here: the 3B run was intentionally
+stopped before completion, so the frozen Compute Shield and cross-model rows
+remain unclaimed until an authorized run supplies paired artifacts.
+
 #### First real DeepSeek run (2026-08-03)
 
 The included 20-task corpus was executed with `deepseek-v4-pro` using a direct
@@ -816,6 +822,19 @@ make approve-library LIB=clang.cindex
   SVG-to-terminal-image modal.
 - [x] Strict C/C++ compilation gate plus opt-in algorithmic profiling and
   task-level Compute Shield token accounting.
+- [x] Tool-loop finalization for documentation-only edits: after a proposed
+  diff, redundant same-file verification is treated as completion instead of
+  spending the remaining tool turns.
+- [x] Contract packets can carry an explicit target file, architect plans can
+  preserve file ownership, and generated Python projects have a disposable
+  multi-file smoke runner with cross-file import validation.
+- [x] Behavior traces now retain bounded before/after state snapshots and
+  debugger hints include state deltas; dependency-aware failure localization is
+  available through the debugger helper.
+- [x] Public API requests expose `repo_root`, execution-trace retention, and
+  debugger type-contract controls. Version `2` is written to session,
+  validation, repository-map, and execution-trace artifacts while preserving
+  legacy timeline/graph field shapes.
 
 ### Remaining Work
 
@@ -824,14 +843,12 @@ make approve-library LIB=clang.cindex
   quadrant-block fallback has been smoke-tested in Apple Terminal.
 - [ ] Run and publish a frozen 10-task Compute Shield experiment; the exact
   task-level accounting exists, but no model-dependent result is claimed.
-- [ ] Expose `repo_root`, execution-trace retention, and debugger controls
-  through the public API and remaining standalone run commands; the capability,
-  worker-limit/Python-ladder, and raw-versus-harness drivers already honor the
-  strict config toggles.
-- [ ] Expand debugger mode from bounded case-level hints to step/state deltas,
-  cross-contract failure localization, and reproducible minimal failing cases.
-- [ ] Add multi-file generation with explicit file ownership, cross-file symbol
-  and type contracts, dependency ordering, and whole-project integration tests.
+- [ ] Extend the new debugger state deltas/localization with true per-step
+  tracing and reproducible minimal failing-case extraction.
+- [ ] Complete multi-file generation beyond the current ownership packets,
+  import-graph checks, and whole-project smoke runner: generated contracts
+  still need full cross-file type/export validation and robust per-file
+  integration assembly.
 - [ ] Add a mandatory container/OS policy with network denial and filesystem
   allowlisting beyond the current sanitized, resource-limited local subprocess
   before accepting adversarial code in a shared or hosted deployment.

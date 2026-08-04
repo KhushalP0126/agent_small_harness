@@ -98,6 +98,9 @@ class CaseTrace:
     exception_message: str = ""
     traceback: str = ""
     elapsed_seconds: float = 0.0
+    state_before: str = ""
+    state_after: str = ""
+    state_delta: str = ""
 
 
 @dataclass
@@ -150,7 +153,7 @@ def serialize_behavior_result(result: BehaviorResult) -> dict[str, Any]:
 
 
 def serialize_execution_trace(trace: ExecutionTrace) -> dict[str, Any]:
-    return asdict(trace)
+    return {"schema_version": 2, **asdict(trace)}
 
 
 def mixed_hard_case_spec() -> FunctionBehaviorSpec:
@@ -291,7 +294,11 @@ def _trace_worker(source: str, spec: FunctionBehaviorSpec, result_queue: Any) ->
 
 def _deserialize_execution_trace(payload: dict[str, Any]) -> ExecutionTrace:
     cases = [CaseTrace(**case) for case in payload.get("cases", [])]
-    data = {key: value for key, value in payload.items() if key != "cases"}
+    data = {
+        key: value
+        for key, value in payload.items()
+        if key not in {"cases", "schema_version"}
+    }
     return ExecutionTrace(cases=cases, **data)
 
 
@@ -341,10 +348,14 @@ def _run_case(namespace: dict[str, Any], function_name: str, case: BehaviorCase)
         expected=repr(case.expected),
     )
     start = time.perf_counter()
+    call_args = deepcopy(case.args)
+    call_kwargs = deepcopy(case.kwargs)
+    state_before = _snapshot_runtime_state(call_args, call_kwargs)
+    record.state_before = state_before
     try:
         with contextlib.redirect_stdout(stdout_buffer), contextlib.redirect_stderr(stderr_buffer):
             candidate = _resolve_case_callable(namespace, function_name, case)
-            actual = candidate(*deepcopy(case.args), **deepcopy(case.kwargs))
+            actual = candidate(*call_args, **call_kwargs)
     except Exception as exc:  # noqa: BLE001 - reported as trace evidence
         record.elapsed_seconds = time.perf_counter() - start
         record.exception_type = exc.__class__.__name__
@@ -352,13 +363,35 @@ def _run_case(namespace: dict[str, Any], function_name: str, case: BehaviorCase)
         record.traceback = _clip(traceback.format_exc())
         record.stdout = _clip(stdout_buffer.getvalue())
         record.stderr = _clip(stderr_buffer.getvalue())
+        record.state_after = _snapshot_runtime_state(call_args, call_kwargs)
+        record.state_delta = _state_delta(record.state_before, record.state_after)
         return record
     record.elapsed_seconds = time.perf_counter() - start
     record.returned = repr(actual)
     record.matched = actual == case.expected
     record.stdout = _clip(stdout_buffer.getvalue())
     record.stderr = _clip(stderr_buffer.getvalue())
+    record.state_after = _snapshot_runtime_state(call_args, call_kwargs, actual)
+    record.state_delta = _state_delta(record.state_before, record.state_after)
     return record
+
+
+def _snapshot_runtime_state(args: tuple[Any, ...], kwargs: dict[str, Any], returned: Any = None) -> str:
+    """Capture bounded, serializable state useful for debugger diffs."""
+
+    payload: dict[str, Any] = {"args": args, "kwargs": kwargs}
+    if returned is not None and hasattr(returned, "__dict__"):
+        payload["returned_state"] = getattr(returned, "__dict__", {})
+    try:
+        return _clip(repr(payload))
+    except Exception:  # pragma: no cover - defensive for hostile repr methods
+        return "<unrepresentable runtime state>"
+
+
+def _state_delta(before: str, after: str) -> str:
+    if not before or not after or before == after:
+        return ""
+    return f"before={before}\nafter={after}"
 
 
 def _candidate_lookup_issue(namespace: dict[str, Any], target_name: str) -> BehaviorIssue | None:

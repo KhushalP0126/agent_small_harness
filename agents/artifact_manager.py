@@ -10,6 +10,9 @@ from uuid import uuid4
 from prompt.budget import estimate_tokens
 
 
+ARTIFACT_SCHEMA_VERSION = 2
+
+
 @dataclass(frozen=True)
 class ArtifactPaths:
     run_id: str
@@ -42,9 +45,11 @@ class ArtifactManager:
         metadata = metadata or {}
         self._write_json(
             paths.run_dir / "metadata.json",
-            {"run_id": paths.run_id, **metadata, "telemetry": self._telemetry(session, metadata)},
+            {"schema_version": ARTIFACT_SCHEMA_VERSION, "run_id": paths.run_id, **metadata, "telemetry": self._telemetry(session, metadata)},
         )
-        self._write_json(paths.run_dir / "session_summary.json", self._session_summary(session))
+        self._write_json(paths.run_dir / "session_summary.json", {"schema_version": ARTIFACT_SCHEMA_VERSION, **self._session_summary(session)})
+        # Keep the historical timeline array shape for existing readers; the
+        # versioned metadata/session/validation artifacts carry the schema.
         self._write_json(paths.run_dir / "attempt_timeline.json", self._attempt_timeline(session))
         for attempt in session.get("attempts", []):
             attempt_index = int(attempt.get("attempt", 0))
@@ -57,6 +62,7 @@ class ArtifactManager:
             self._write_json(
                 paths.run_dir / f"attempt_{attempt_index}_validation.json",
                 {
+                    "schema_version": ARTIFACT_SCHEMA_VERSION,
                     "validation": attempt.get("validation", {}),
                     "behavior_validation": attempt.get("behavior_validation", {}),
                     "execution_trace": attempt.get("execution_trace", {}),

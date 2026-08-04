@@ -28,7 +28,10 @@ from backends.architect_client import (
 from backends.ollama_client import DEFAULT_OLLAMA_MODEL, OllamaModelSupplier
 from harness_kernel.function_contracts import ContractQueue, ContractQueuePlan, DealExample, FunctionContract
 from harness_kernel.event_stream import event_sink_from_env
-from harness_kernel.local_sandbox import run_python_locally_isolated
+from harness_kernel.local_sandbox import (
+    run_python_locally_isolated,
+    run_python_project_locally_isolated,
+)
 from prompt.budget import budget_prompt
 from prompt.summarizer import DefaultPromptSummarizer
 from validation.import_graph import analyze_import_graph, validate_imported_symbols
@@ -47,6 +50,7 @@ class ContractExecutionResult:
     name: str
     status: str
     source: str = ""
+    file_path: str = ""
     issues: list[dict] = field(default_factory=list)
     prompt_size: int = 0
     dependencies: list[str] = field(default_factory=list)
@@ -143,6 +147,9 @@ def _apply_contract_plan(base_queue: ContractQueue, contract_plan: ContractQueue
         contract = contracts_by_name[name]
         if note not in contract.purpose:
             contract.purpose = f"{contract.purpose}\nArchitect note: {note}".strip()
+    for name, file_path in contract_plan.file_ownership.items():
+        if name in contracts_by_name and file_path:
+            contracts_by_name[name].target_file = file_path
 
     requested_names = [name for name in contract_plan.contract_order if name in contracts_by_name]
     remaining_names = [contract.name for contract in base_queue.contracts if contract.name not in requested_names]
@@ -156,12 +163,25 @@ def _contract_queue_payload(queue: ContractQueue) -> list[dict]:
             "name": contract.name,
             "kind": contract.kind,
             "signature": contract.normalized_signature(),
+            "target_file": contract.target_file,
             "dependencies": contract.dependencies,
             "purpose": contract.purpose,
             "example_count": len(contract.examples),
         }
         for contract in queue.contracts
     ]
+
+
+def _assign_contract_files(queue: ContractQueue, plan) -> None:
+    """Assign explicit plan files to contracts without changing queue order."""
+
+    files = [str(path).strip() for path in getattr(plan, "files", []) if str(path).strip()]
+    if not files:
+        return
+    for index, contract in enumerate(queue.contracts):
+        if contract.target_file:
+            continue
+        contract.target_file = files[index % len(files)]
 
 
 def _fallback_contract_queue(plan) -> tuple[ContractQueue, bool]:
@@ -885,6 +905,7 @@ def _run_contract_queue_sequentially(
                 ContractExecutionResult(
                     name=contract.name,
                     status="backend_failed",
+                    file_path=contract.target_file,
                     issues=[
                         {
                             "kind": "contract_backend_failure",
@@ -1015,6 +1036,7 @@ def _run_contract_queue_sequentially(
                     name=contract.name,
                     status="validation_failed",
                     source=source,
+                    file_path=contract.target_file,
                     issues=issues,
                     prompt_size=len(prompt),
                     dependencies=dependencies,
@@ -1032,6 +1054,7 @@ def _run_contract_queue_sequentially(
                 name=contract.name,
                 status="accepted",
                 source=source,
+                file_path=contract.target_file,
                 prompt_size=len(prompt),
                 dependencies=dependencies,
                 repair_attempts=repair_attempts,
@@ -1192,14 +1215,33 @@ def _validate_structured_spec_output(source: str, plan) -> list[dict]:
     return issues
 
 
-def _structured_spec_file_map(source: str, plan) -> dict[str, str]:
+def _structured_spec_file_map(
+    source: str,
+    plan,
+    contract_results: list[ContractExecutionResult] | None = None,
+) -> dict[str, str]:
+    if contract_results:
+        owned: dict[str, str] = {}
+        for result in contract_results:
+            if result.status != "accepted" or not result.file_path or not result.source:
+                continue
+            owned[result.file_path] = "\n\n".join(
+                item for item in [owned.get(result.file_path, ""), result.source] if item
+            )
+        if owned:
+            return owned
     files = [path for path in getattr(plan, "files", []) if str(path).endswith(".py")]
     if not files:
         return {"generated_source.py": source}
     return {files[0]: source, **{path: "" for path in files[1:]}}
 
 
-def _run_integration_smoke_test(source: str, plan, timeout_seconds: float = 5.0) -> dict:
+def _run_integration_smoke_test(
+    source: str,
+    plan,
+    timeout_seconds: float = 5.0,
+    generated_files: dict[str, str] | None = None,
+) -> dict:
     """Start the assembled Python entrypoint and reject immediate runtime crashes.
 
     Interactive applications are expected to keep running. Surviving the bounded
@@ -1212,15 +1254,28 @@ def _run_integration_smoke_test(source: str, plan, timeout_seconds: float = 5.0)
     if not getattr(plan, "entrypoints", []):
         return {"is_compliant": True, "status": "skipped_no_entrypoint", "issues": []}
 
-    completed = run_python_locally_isolated(
-        source,
-        timeout_seconds=timeout_seconds,
-        extra_environment={
-            "SDL_VIDEODRIVER": "dummy",
-            "SDL_AUDIODRIVER": "dummy",
-            "HARNESS_SMOKE_TEST": "1",
-        },
+    smoke_env = {
+        "SDL_VIDEODRIVER": "dummy",
+        "SDL_AUDIODRIVER": "dummy",
+        "HARNESS_SMOKE_TEST": "1",
+    }
+    entrypoint = next(
+        (path for path in getattr(plan, "entrypoints", []) if str(path).endswith(".py")),
+        next(iter(generated_files), "generated_source.py") if generated_files else "candidate.py",
     )
+    if generated_files and len(generated_files) > 1 and all(generated_files.values()):
+        completed = run_python_project_locally_isolated(
+            generated_files,
+            entrypoint=entrypoint,
+            timeout_seconds=timeout_seconds,
+            extra_environment=smoke_env,
+        )
+    else:
+        completed = run_python_locally_isolated(
+            source,
+            timeout_seconds=timeout_seconds,
+            extra_environment=smoke_env,
+        )
     if completed.timed_out:
         return {
             "is_compliant": True,
@@ -1339,6 +1394,7 @@ def run_spec(
                 }
                 print(json.dumps(payload, indent=2))
                 return 1
+        _assign_contract_files(queue, plan)
         print(
             "[contract-plan] "
             + json.dumps(
@@ -1543,11 +1599,12 @@ def run_spec(
     final_attempt = _best_attempt(session.get("attempts", []))
     final_source = final_attempt.get("draft", "")
     spec_issues = _validate_structured_spec_output(final_source, plan)
+    generated_files = _structured_spec_file_map(final_source, plan, contract_execution_results)
     import_graph = analyze_import_graph(
-        _structured_spec_file_map(final_source, plan),
+        generated_files,
         external_roots=set(getattr(plan, "allowed_libraries", [])),
     )
-    smoke_result = _run_integration_smoke_test(final_source, plan)
+    smoke_result = _run_integration_smoke_test(final_source, plan, generated_files=generated_files)
     final_gate_issues = [*spec_issues, *smoke_result["issues"]]
     if session.get("final_status") == "completed" and final_gate_issues:
         session["final_status"] = "manual_review_required"

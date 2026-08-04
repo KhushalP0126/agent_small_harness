@@ -62,6 +62,41 @@ class ToolCallingAgentTests(unittest.TestCase):
         self.assertLess(len(compact["content"]), 5000)
         self.assertEqual(compact["path"], "main.py")
 
+    def test_doc_edit_finalizes_after_redundant_same_file_verification(self) -> None:
+        responses = iter(
+            [
+                json.dumps(
+                    {
+                        "action": "tool",
+                        "tool": "apply_search_replace",
+                        "arguments": {
+                            "root": ".",
+                            "path": "README.md",
+                            "search": "old command",
+                            "replace": "new command",
+                        },
+                    }
+                ),
+                json.dumps(
+                    {
+                        "action": "tool",
+                        "tool": "read_file",
+                        "arguments": {"root": ".", "path": "README.md"},
+                    }
+                ),
+            ]
+        )
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "README.md").write_text("old command\n", encoding="utf-8")
+            run = ToolCallingAgent(
+                lambda _prompt: next(responses),
+                build_default_tool_registry(repository_root=root),
+            ).run("Correct one outdated command")
+
+        self.assertFalse(run.exhausted)
+        self.assertIn("diff is prepared", run.final_answer)
+
     def test_model_can_search_read_and_finish_across_turns(self) -> None:
         responses = iter(
             [
