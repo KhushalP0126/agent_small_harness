@@ -40,6 +40,7 @@ described where relevant but are intentionally not tracked.
 - `config.yaml` - Declarative policy, retry, model, behavior, and routing settings.
 - `pyproject.toml` - Python package metadata and runtime dependencies.
 - `Dockerfile` - Container entrypoint for the synchronous API service.
+- `install.sh` - Local clone/update, virtualenv setup, optional key setup, and Rust TUI build.
 - `.dockerignore` - Excludes local secrets, caches, artifacts, and build output from image context.
 - `.gitignore` - Keeps local environments, secrets, caches, run artifacts, and generated state out of commits.
 - `.github/workflows/ci.yml` - GitHub Actions workflow for package install, tests, and Docker image build.

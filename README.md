@@ -569,6 +569,7 @@ Those outcomes are recorded in artifact metadata and the contract queue results.
 | `tests/` | Unit, integration, edge-case, ladder, and pipeline tests |
 | `pyproject.toml` | Python package metadata and runtime dependencies |
 | `Dockerfile` | Container entrypoint for the synchronous API service |
+| `install.sh` | Local clone/update, virtualenv setup, optional key setup, and Rust TUI build |
 | `.github/workflows/ci.yml` | Push/PR workflow for tests and Docker image build |
 | `docs/reference/design.md` | Architectural constraints and safety principles |
 | `docs/reference/structure.md` | File-by-file repository map |
@@ -577,6 +578,18 @@ Those outcomes are recorded in artifact metadata and the contract queue results.
 | `rust/` | Rust TUI crate and in-process Mermaid/image rendering |
 
 ## Setup
+
+For a fresh local checkout, run the installer from a shell with Git, Python
+3.11+, and Cargo available:
+
+```bash
+./install.sh "$HOME/agent_small_harness"
+```
+
+It creates the virtual environment, runs `make setup`, optionally records a
+DeepSeek key in `.env`, and builds the Rust TUI. Existing checkouts are updated
+with `git pull --ff-only`. The installer is intended for local development;
+review it before using it in an automated environment.
 
 Install the base runtime and optional formal-verification dependencies:
 

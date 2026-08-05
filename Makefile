@@ -30,6 +30,7 @@ help:
 	@printf "Agent Small Harness commands\n"
 	@printf "\nSetup:\n"
 	@printf "  make setup                           Install Python dependencies and create .env from .env.example\n"
+	@printf "  ./install.sh [dir]                  Clone/update, install, and build the Rust TUI\n"
 	@printf "  make install                         Install optional tree-sitter deps for C/C++ support\n"
 	@printf "  make install-formal                  Install optional Deal/CrossHair formal-verification deps\n"
 	@printf "  make install-kernel                  Install optional Kernel browser documentation deps\n"
