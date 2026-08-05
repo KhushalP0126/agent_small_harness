@@ -1,6 +1,8 @@
+#[allow(dead_code)]
 mod mermaid_view;
 mod protocol;
 
+use std::fs;
 use std::io;
 use std::panic;
 use std::path::PathBuf;
@@ -18,7 +20,6 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use futures::{FutureExt, StreamExt};
-use mermaid_view::MermaidView;
 use protocol::{
     read_harness_events, ClarificationQuestion, FileEntry, HarnessCommand, HarnessEvent,
     QuestionnaireAnswer, RunSummary, VariableEntry,
@@ -68,7 +69,9 @@ struct AppState {
     engine: String,
     pct: u16,
     running: bool,
+    working_directory: String,
     repo_map_source: Option<String>,
+    repo_map_url: Option<String>,
     repo_content: String,
     repo_mode: String,
     repo_focused: bool,
@@ -112,7 +115,9 @@ impl Default for AppState {
             engine: "idle".into(),
             pct: 0,
             running: false,
+            working_directory: String::new(),
             repo_map_source: None,
+            repo_map_url: None,
             repo_content: "m map · r vars · t files".into(),
             repo_mode: "diagram".into(),
             repo_focused: false,
@@ -150,6 +155,50 @@ impl Default for AppState {
 }
 
 impl AppState {
+    fn context_remaining(&self) -> usize {
+        const CONTEXT_BUDGET: usize = 8_192;
+        let used = self
+            .logs
+            .iter()
+            .map(|line| line.len())
+            .sum::<usize>()
+            .div_ceil(4);
+        CONTEXT_BUDGET.saturating_sub(used)
+    }
+
+    fn persist_context(&self, repo_root: &std::path::Path) {
+        let mut lines = vec![
+            "# TUI Session Context".to_string(),
+            "".to_string(),
+            format!("Mode: {}", self.mode.label()),
+            format!("Engine: {} · {}%", self.engine, self.pct),
+            format!(
+                "DeepSeek: {}",
+                if self.deepseek_configured {
+                    "configured"
+                } else {
+                    "not configured"
+                }
+            ),
+            format!("Saved preferences: {}", self.preference_count),
+            "".to_string(),
+            "## Recent activity".to_string(),
+        ];
+        for entry in self.logs.iter().rev().take(24).rev() {
+            lines.push(format!("- {}", redact_context(entry)));
+        }
+        lines.extend([
+            "".to_string(),
+            "This file is a local, ignored journal and is not sent to the model automatically."
+                .to_string(),
+        ]);
+        let path = repo_root.join("context.md");
+        let temporary = repo_root.join(".context.md.tmp");
+        if fs::write(&temporary, format!("{}\n", lines.join("\n"))).is_ok() {
+            let _ = fs::rename(temporary, path);
+        }
+    }
+
     fn apply(&mut self, event: HarnessEvent) {
         let previous_log_count = self.logs.len();
         match event {
@@ -295,6 +344,11 @@ impl AppState {
                 self.repo_content = summary;
                 self.repo_mode = "diagram".into();
                 self.logs.push("repository map received".into());
+            }
+            HarnessEvent::RepoMapUrl { url } => {
+                self.repo_map_url = Some(url.clone());
+                self.repo_focused = true;
+                self.logs.push(format!("repository map ready · press o to open {url}"));
             }
             HarnessEvent::RepoMapView { mode, content } => {
                 self.repo_mode = mode;
@@ -529,6 +583,27 @@ impl AppState {
     }
 }
 
+fn redact_context(value: &str) -> String {
+    let mut text = value.replace('\n', " ");
+    for marker in ["DEEPSEEK_API_KEY", "ARCHITECT_API_KEY"] {
+        if let Some(index) = text.find(marker) {
+            if let Some(equal) = text[index..].find('=') {
+                let start = index + equal + 1;
+                let end = text[start..]
+                    .find(char::is_whitespace)
+                    .map(|offset| start + offset)
+                    .unwrap_or(text.len());
+                text.replace_range(start..end, "[redacted]");
+            }
+        }
+    }
+    if text.len() > 500 {
+        text.truncate(500);
+        text.push('…');
+    }
+    text
+}
+
 #[derive(Debug, Clone, PartialEq)]
 enum QuestionnaireAction {
     Ignored,
@@ -630,8 +705,7 @@ async fn run_terminal(
     let mut terminal = Terminal::new(backend)?;
     // Terminal graphics probing must happen after entering the alternate screen
     // and before the crossterm event reader starts consuming terminal replies.
-    let mut mermaid = MermaidView::new();
-    run_loop(&mut terminal, child_stdin, rx, repo_root, &mut mermaid).await
+    run_loop(&mut terminal, child_stdin, rx, repo_root).await
 }
 
 async fn run_loop(
@@ -639,9 +713,10 @@ async fn run_loop(
     child_stdin: &mut ChildStdin,
     rx: &mut mpsc::UnboundedReceiver<HarnessEvent>,
     repo_root: &std::path::Path,
-    mermaid: &mut MermaidView,
 ) -> Result<()> {
     let mut state = AppState::default();
+    state.working_directory = repo_root.display().to_string();
+    state.persist_context(repo_root);
     let mut term_events = EventStream::new();
     let mut tick = tokio::time::interval(Duration::from_millis(33));
     loop {
@@ -850,23 +925,6 @@ async fn run_loop(
                             send_command(child_stdin, &HarnessCommand::DraftSpec).await?;
                             state.mode = AppMode::DraftingSpec;
                         }
-                        KeyCode::Char('r') if state.repo_focused => {
-                            state.repo_mode = "variables".into();
-                            mermaid.hide();
-                        }
-                        KeyCode::Char('t') if state.repo_focused => {
-                            state.repo_mode = "files".into();
-                            mermaid.hide();
-                        }
-                        KeyCode::Up if state.repo_focused => {
-                            state.repo_selected = state.repo_selected.saturating_sub(1);
-                        }
-                        KeyCode::Down if state.repo_focused => {
-                            let len = state.repo_files.len().max(state.repo_variables.len());
-                            if state.repo_selected + 1 < len {
-                                state.repo_selected += 1;
-                            }
-                        }
                         KeyCode::Char('r') if !state.running => {
                             send_command(
                                 child_stdin,
@@ -903,23 +961,14 @@ async fn run_loop(
                                     mode: "diagram".into(),
                                 },
                             ).await?;
-                            send_command(
-                                child_stdin,
-                                &HarnessCommand::RepoMap {
-                                    root: repo_root.display().to_string(),
-                                    focus: String::new(),
-                                    mode: "files".into(),
-                                },
-                            ).await?;
-                            send_command(
-                                child_stdin,
-                                &HarnessCommand::RepoMap {
-                                    root: repo_root.display().to_string(),
-                                    focus: String::new(),
-                                    mode: "variables".into(),
-                                },
-                            ).await?;
-                            state.logs.push("building repository map…".into());
+                            state.logs.push("building browser map…".into());
+                        }
+                        KeyCode::Char('o') if state.repo_focused => {
+                            if let Some(url) = state.repo_map_url.as_deref() {
+                                open_localhost(url);
+                            } else {
+                                state.logs.push("map is not ready yet; press m first".into());
+                            }
                         }
                         KeyCode::Char('d') => {
                             if state.history_visible {
@@ -990,7 +1039,6 @@ async fn run_loop(
                         }
                         KeyCode::Esc if state.repo_focused => {
                             state.repo_focused = false;
-                            mermaid.hide();
                         }
                         _ => {}
                     }
@@ -998,30 +1046,13 @@ async fn run_loop(
             }
             maybe_harness = rx.recv() => {
                 if let Some(event) = maybe_harness {
-                    let repo_map = match &event {
-                        HarnessEvent::RepoMap { mermaid, .. } => Some(mermaid.clone()),
-                        _ => None,
-                    };
                     state.apply(event);
-                    if let Some(source) = repo_map {
-                        match mermaid.set_diagram(&source) {
-                            Ok(()) => {
-                                mermaid.show();
-                                if mermaid.uses_text_fallback() {
-                                    state.logs.push(
-                                        "using the built-in quadrant-block renderer (2x2 pixels per terminal cell); iTerm2, WezTerm, Kitty, and Ghostty use native graphics".into()
-                                    );
-                                }
-                            }
-                            Err(error) => state.logs.push(format!("[diagram error] {error}")),
-                        }
-                    }
+                    state.persist_context(repo_root);
                 }
             }
             _ = tick.tick() => {
                 state.activity_tick = state.activity_tick.wrapping_add(1);
-                terminal.draw(|frame| draw(frame, &state, mermaid))?;
-                mermaid.write_protocol(terminal.backend_mut())?;
+            terminal.draw(|frame| draw(frame, &state))?;
             }
         }
     }
@@ -1036,7 +1067,18 @@ async fn send_command(stdin: &mut ChildStdin, command: &HarnessCommand) -> Resul
     Ok(())
 }
 
-fn draw(frame: &mut ratatui::Frame, state: &AppState, mermaid: &mut MermaidView) {
+fn open_localhost(url: &str) {
+    let (program, args): (&str, [&str; 1]) = if cfg!(target_os = "macos") {
+        ("open", [url])
+    } else if cfg!(target_os = "windows") {
+        ("cmd", [url])
+    } else {
+        ("xdg-open", [url])
+    };
+    let _ = std::process::Command::new(program).args(args).spawn();
+}
+
+fn draw(frame: &mut ratatui::Frame, state: &AppState) {
     frame.render_widget(
         Block::default().style(Style::default().bg(theme_background())),
         frame.area(),
@@ -1093,21 +1135,17 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState, mermaid: &mut MermaidView)
             )),
         top[0],
     );
-    let repo_title = format!(
-        " REPO · {}{} ",
-        state.repo_mode,
-        if state.repo_focused { " · ACTIVE" } else { "" }
-    );
+    let workspace = format!("{}\n\n[m] map · [o] browser", state.working_directory);
     frame.render_widget(
-        Paragraph::new(state.selected_repo_detail())
+        Paragraph::new(workspace)
             .style(Style::default().fg(theme_foreground()))
             .wrap(Wrap { trim: false })
-            .block(pane_block(repo_title, state.repo_focused)),
+            .block(pane_block(" WORKSPACE ", false)),
         top[2],
     );
 
     let context = format!(
-        "{} · {}\n{} prefs",
+        "{} · {}\n{} prefs\n~{} ctx left",
         state.mode.label(),
         if state.deepseek_configured {
             "DeepSeek"
@@ -1115,6 +1153,7 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState, mermaid: &mut MermaidView)
             "no key"
         },
         state.preference_count,
+        state.context_remaining(),
     );
     frame.render_widget(
         Paragraph::new(context)
@@ -1142,9 +1181,12 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState, mermaid: &mut MermaidView)
         " CHAT "
     };
     let prompt_text = if state.prompt.is_empty() && !state.prompt_active {
-        "c chat · s spec · a tools · m map · d history"
+        Text::from(Line::from(vec![
+            Span::styled("  ", Style::default().bg(Color::LightCyan)),
+            Span::raw("  c chat · s spec · a tools · d history"),
+        ]))
     } else {
-        state.prompt.as_str()
+        Text::from(state.prompt.as_str())
     };
     frame.render_widget(
         Paragraph::new(prompt_text)
@@ -1159,31 +1201,6 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState, mermaid: &mut MermaidView)
             .block(pane_block_accent(" SETTINGS ", false, theme_settings())),
         bottom[4],
     );
-
-    if mermaid.is_visible() {
-        let area = mermaid.stabilize_viewport(centered_rect(86, 86, frame.area()), frame.area());
-        frame.render_widget(Clear, area);
-        let title = format!(
-            "Repository diagram · {} · Esc/m to close",
-            mermaid.status_label()
-        );
-        frame.render_widget(pane_block(title, true), area);
-        let inner = Rect {
-            x: area.x + 1,
-            y: area.y + 1,
-            width: area.width.saturating_sub(2),
-            height: area.height.saturating_sub(2),
-        };
-        if let Some(error) = mermaid.error() {
-            frame.render_widget(Paragraph::new(error).wrap(Wrap { trim: true }), inner);
-        } else {
-            mermaid.render(frame, inner);
-        }
-    }
-
-    if state.repo_focused && state.repo_mode != "diagram" {
-        draw_repo_browser(frame, state);
-    }
 
     if let AppMode::SpecReview { spec_text } = &state.mode {
         draw_spec_review(frame, spec_text);
@@ -1540,57 +1557,6 @@ fn draw_tool_diff_review(frame: &mut ratatui::Frame, state: &AppState) {
             .scroll((scroll, 0))
             .wrap(Wrap { trim: false }),
         inner,
-    );
-}
-
-fn draw_repo_browser(frame: &mut ratatui::Frame, state: &AppState) {
-    let area = centered_rect(86, 86, frame.area());
-    frame.render_widget(Clear, area);
-    frame.render_widget(
-        pane_block(
-            " Repository files · Up/Down select · t summary · r variables · Esc close ",
-            true,
-        ),
-        area,
-    );
-    let inner = Rect {
-        x: area.x + 1,
-        y: area.y + 1,
-        width: area.width.saturating_sub(2),
-        height: area.height.saturating_sub(2),
-    };
-    let columns =
-        Layout::horizontal([Constraint::Percentage(36), Constraint::Percentage(64)]).split(inner);
-    let paths: Vec<ListItem> = state
-        .repo_files
-        .iter()
-        .enumerate()
-        .map(|(index, entry)| {
-            let marker = if index == state.repo_selected {
-                "> "
-            } else {
-                "  "
-            };
-            let style = if index == state.repo_selected {
-                Style::default()
-                    .fg(Color::Black)
-                    .bg(Color::LightCyan)
-                    .add_modifier(Modifier::BOLD)
-            } else {
-                Style::default()
-            };
-            ListItem::new(format!("{marker}{}", entry.path)).style(style)
-        })
-        .collect();
-    frame.render_widget(
-        List::new(paths).block(Block::default().borders(Borders::RIGHT).title("files")),
-        columns[0],
-    );
-    frame.render_widget(
-        Paragraph::new(state.selected_repo_detail())
-            .wrap(Wrap { trim: false })
-            .block(Block::default().title(state.repo_mode.as_str())),
-        columns[1],
     );
 }
 

@@ -145,9 +145,17 @@ The context panel reports whether DeepSeek was configured from the environment
 or repository `.env`; it never displays the key. Explicit phrases such as
 `/remember keep responses concise`, `remember that ...`, or `I prefer ...`
 store a bounded preference in ignored `.tui_memory.json`. Those preferences are
-injected into later chat and spec-drafting prompts. Session conversation stays
-in memory and is not written to disk; messages containing credential-like
-preferences are refused by the memory extractor.
+injected into later chat and spec-drafting prompts. The Rust TUI also refreshes
+an ignored `context.md` journal after bridge events. It keeps the current mode,
+engine status, and a bounded recent-activity list for the next local session;
+API-key-looking values are redacted and the journal is never sent to the model
+automatically. Messages containing credential-like preferences are refused by
+the memory extractor.
+
+The workspace panel shows the active directory and map controls; it no longer
+renders the diagram or file browser. The context panel includes an approximate
+remaining-token count for the current visible transcript. Press `m` to build a
+map on loopback, then `o` to open its temporary browser page.
 
 Chat roles are visually distinct: user labels are green, assistant labels and
 responses are cyan, saved-memory notices are magenta, and warnings/errors keep
@@ -673,13 +681,11 @@ make tui
 
 The TUI is deliberately outside the control loop. It launches the existing CLI
 scripts as subprocesses and reads their JSON checkpoints. `Q` quits, `R`
-resumes the selected run, `M` opens the repository-map modal, `D` shows
+resumes the selected run, `M` prepares the repository map, and `O` opens its
+loopback browser page. `D` shows
 successive-attempt diffs, and `H` searches similar past attempts. The
-architecture modal defaults to human-scale package layers with dependency
-summaries and module filtering. A raw node tree, LLM Plan context, and full
-Mermaid source remain available as diagnostic views. **Open Diagram** renders
-the small layer graph with local `mmdc` when installed, or opens a generated
-browser page using Mermaid JS as a fallback.
+terminal stays focused on status and review; the map itself is rendered in the
+browser using Mermaid JS.
 
 The first service boundary is intentionally small:
 

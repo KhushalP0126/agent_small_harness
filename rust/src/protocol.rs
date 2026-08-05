@@ -204,6 +204,9 @@ pub enum HarnessEvent {
         #[serde(default)]
         summary: String,
     },
+    RepoMapUrl {
+        url: String,
+    },
     RepoMapView {
         mode: String,
         content: String,
