@@ -164,16 +164,16 @@ context and settings panes use subdued borders. A one-line status strip animates
 while DeepSeek or an approved harness run is active without blocking keyboard
 input. Typed questionnaire events use immediate `1`–`5` selection without an
 IPC request per answer. Plain assistant messages that contain at least two
+repository-inspection cues are routed through a bounded, read-only local tool
+loop (search/read only); edits and script execution still require the explicit
+tools mode and review gate. Plain assistant messages that contain at least two
 numbered choices retain the lighter quick-reference behavior. Ordinary numbers
 retain their normal typing behavior everywhere else.
 
-`m` focuses/refreshes the repository panel and eagerly loads its
-typed file, summary, symbol, import, and variable records. `Up`/`Down` then
-navigate that cached list without an IPC call. While focused, `r` shows the
-selected file's variables/imports and `t` shows its summary and symbols in a
-split list/detail modal. Outside repository focus, `r` retains the
-coding-capability shortcut. `d` opens run history, `Esc` leaves the current
-focus/overlay, and `q` cancels before exiting.
+`m` prepares the repository map on loopback; `o` opens it in the browser.
+Outside repository focus, `r` retains the coding-capability shortcut. `d` opens
+run history, `Esc` leaves the current focus/overlay, and `q` cancels before
+exiting.
 
 Kitty and Ghostty use the directly emitted Kitty graphics protocol; iTerm2 and
 WezTerm use directly emitted iTerm2 inline images. Other terminals, including

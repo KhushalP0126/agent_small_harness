@@ -1108,11 +1108,16 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState) {
 
     frame.render_widget(activity_status_line(state), rows[0]);
 
-    let log_lines: Vec<Line> = state
-        .logs
-        .iter()
-        .flat_map(|line| styled_log_lines(line))
-        .collect();
+    let mut log_lines: Vec<Line> = Vec::new();
+    let mut previous_role: Option<&str> = None;
+    for line in &state.logs {
+        let role = log_role(line);
+        if role.is_some() && role != previous_role && !log_lines.is_empty() {
+            log_lines.push(Line::default());
+        }
+        log_lines.extend(styled_log_lines(line));
+        previous_role = role;
+    }
     let viewport_height = usize::from(top[0].height.saturating_sub(2));
     let max_log_offset = log_lines.len().saturating_sub(viewport_height);
     let from_bottom = state.log_scroll.min(max_log_offset);
@@ -1128,6 +1133,7 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState) {
     frame.render_widget(
         Paragraph::new(Text::from(log_lines))
             .style(Style::default().fg(theme_foreground()))
+            .wrap(Wrap { trim: false })
             .scroll((log_offset, 0))
             .block(pane_block(
                 format!(" OUTPUT · {} · {scroll_status} ", state.engine),
@@ -1441,6 +1447,19 @@ fn styled_log_lines(line: &str) -> Vec<Line<'static>> {
         ])
     }));
     rendered
+}
+
+fn log_role(line: &str) -> Option<&'static str> {
+    [
+        "[you] ",
+        "[assistant] ",
+        "[memory] ",
+        "[error] ",
+        "[warning] ",
+        "[protocol warning] ",
+    ]
+    .into_iter()
+    .find(|prefix| line.starts_with(prefix))
 }
 
 fn draw_validated_source(frame: &mut ratatui::Frame, state: &AppState) {

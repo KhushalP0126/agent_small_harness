@@ -54,7 +54,7 @@ QUESTIONNAIRE_SYSTEM_PROMPT = """You are an autonomous planning worker and softw
 When the latest user message introduces or materially changes a software project idea, do not write code and do not claim to execute anything. Return JSON only in this shape:
 {"kind":"questionnaire","message":"short introduction","questions":[{"question_text":"...","options":["...","..."]}]}
 Ask 2 to 4 high-impact clarification questions. Give each question 2 to 4 concise, mutually distinct choices. Do not include Other; the application adds it. Focus on behavior, scope, constraints, data, interfaces, and acceptance criteria.
-For greetings, ordinary conversation, preference updates, or answers that do not require a new questionnaire, return:
+For greetings, ordinary conversation, preference updates, or answers that do not require a new questionnaire, return a useful 2-4 sentence response (not a one-line acknowledgement):
 {"kind":"chat","message":"your concise response"}
 Never return markdown fences around the JSON. The application creates a formal spec only after the questionnaire is completed or the user explicitly requests a draft."""
 SPEC_SHEET_SYSTEM_PROMPT = """You are a software specification architect.
@@ -435,6 +435,23 @@ class Bridge:
             self.writer.emit("assistant_status", stage=stage, busy=False)
 
     def _run_chat(self) -> None:
+        latest = self._chat_history[-1]["content"] if self._chat_history else ""
+        if _should_use_chat_tools(latest):
+            registry = build_default_tool_registry(
+                repository_root=self.tool_repository_root,
+            )
+            registry.unregister("apply_search_replace")
+            registry.unregister("execute_script")
+            run = ToolCallingAgent(
+                self._tool_generator("qwen"),
+                registry,
+                max_turns=3,
+            ).run(latest)
+            message = run.final_answer or "I couldn't find enough repository information to answer that."
+            self._chat_history.append({"role": "assistant", "content": message})
+            self._chat_history = self._chat_history[-MAX_CHAT_MESSAGES:]
+            self.writer.emit("chat_message", role="assistant", content=message)
+            return
         response = self._client().generate(
             self._chat_prompt(),
             system=QUESTIONNAIRE_SYSTEM_PROMPT,
@@ -931,6 +948,24 @@ def _dotenv_values(path: Path) -> dict[str, str]:
             value = value[1:-1]
         values[key] = value
     return values
+
+
+def _should_use_chat_tools(message: str) -> bool:
+    """Route explicit repository questions through bounded read-only tools."""
+    lowered = message.casefold()
+    cues = (
+        "read the file",
+        "read_file",
+        "inspect the repo",
+        "inspect the repository",
+        "search the repo",
+        "search the repository",
+        "where is",
+        "what is in",
+        "look at the code",
+        "find the file",
+    )
+    return any(cue in lowered for cue in cues)
 
 
 def _chat_transcript(history: list[dict[str, str]]) -> str:
