@@ -24,13 +24,13 @@ IMAGE ?= agent-small-harness:local
 ARTIFACT_ARGS = $(if $(filter 1 true yes,$(SAVE_ARTIFACTS)),--save-artifacts --artifact-root "$(ARTIFACT_ROOT)",)
 DOC_ARGS = --doc-agent "$(DOC_AGENT)" $(if $(DOC_MODEL),--doc-model "$(DOC_MODEL)",) $(if $(DOC_OUTPUT),--doc-output "$(DOC_OUTPUT)",)
 
-.PHONY: help setup install install-formal install-kernel env-path init-env api-dev tui rust-tui tui_rust test-rust docker-build sandbox-run agent-benchmark test test-engine-expansion compute-shield test-claude-fixes test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-fixture resume-coding-capability test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-worker-limit-architect resume-worker-limit test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-python-ladder-stateful test-python-ladder-stateful-architect test-plan-mode-ladder test-raw-vs-harness test-raw-vs-harness-architect test-raw-vs-harness-repeated test-raw-vs-harness-ablation test-formal-experiment structured-spec structured-spec-plan resume-structured-spec repo-map review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library tool-agent ollama-smoke inference-smoke live-repair day1 clean-history
+.PHONY: help bootstrap setup install install-formal install-kernel env-path init-env api-dev tui rust-tui tui_rust test-rust docker-build sandbox-run agent-benchmark test test-engine-expansion compute-shield test-claude-fixes test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-fixture resume-coding-capability test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-worker-limit-architect resume-worker-limit test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-python-ladder-stateful test-python-ladder-stateful-architect test-plan-mode-ladder test-raw-vs-harness test-raw-vs-harness-architect test-raw-vs-harness-repeated test-raw-vs-harness-ablation test-formal-experiment structured-spec structured-spec-plan resume-structured-spec repo-map review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library tool-agent ollama-smoke inference-smoke live-repair day1 clean-history
 
 help:
 	@printf "Agent Small Harness commands\n"
 	@printf "\nSetup:\n"
 	@printf "  make setup                           Install Python dependencies and create .env from .env.example\n"
-	@printf "  ./install.sh [dir]                  Clone/update, install, and build the Rust TUI\n"
+	@printf "  make bootstrap                      Create .venv, install deps, create .env, and build Rust\n"
 	@printf "  make install                         Install optional tree-sitter deps for C/C++ support\n"
 	@printf "  make install-formal                  Install optional Deal/CrossHair formal-verification deps\n"
 	@printf "  make install-kernel                  Install optional Kernel browser documentation deps\n"
@@ -121,6 +121,14 @@ help:
 	@printf "  make test-worker-limit-auto SAVE_ARTIFACTS=1\n"
 	@printf "  make test-worker-limit-architect MODEL=qwen2.5-coder:1.5b SAVE_ARTIFACTS=1\n"
 	@printf "  make review-run RUN=worker_limit_6\n"
+
+bootstrap:
+	@test -d .venv || python3 -m venv .venv
+	.venv/bin/python -m pip install --upgrade pip
+	.venv/bin/python -m pip install -r requirements.txt
+	@test -f .env || cp .env.example .env
+	cargo build --release --manifest-path rust/Cargo.toml
+	@printf "\nSetup complete. Run: source .venv/bin/activate && make rust-tui REPO_ROOT=.\n"
 
 setup: install init-env
 
