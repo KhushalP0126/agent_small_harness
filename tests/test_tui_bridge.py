@@ -18,6 +18,7 @@ from harness_kernel.tui_bridge import (
     _dotenv_values,
     _parse_questionnaire_response,
     _render_spec_sheet,
+    _should_start_planning,
     _validated_args,
 )
 
@@ -345,6 +346,35 @@ class TuiBridgeTests(unittest.TestCase):
         self.assertEqual(messages[-1]["role"], "assistant")
         self.assertIsNone(bridge._process)
 
+    def test_plain_chat_cannot_open_a_questionnaire(self) -> None:
+        client = MagicMock()
+        client.generate.return_value = json.dumps(
+            {
+                "kind": "questionnaire",
+                "message": "This must stay chat.",
+                "questions": [
+                    {"question_text": "Target?", "options": ["CLI", "Web"]},
+                    {"question_text": "Storage?", "options": ["JSON", "SQLite"]},
+                ],
+            }
+        )
+        bridge = Bridge(EventWriter(self.output), architect_client=client)
+        bridge._chat_history.append({"role": "user", "content": "hello"})
+        bridge._run_chat()
+
+        self.assertFalse(any(event["type"] == "questionnaire" for event in self.events()))
+        self.assertEqual(self.events()[-1]["content"], "This must stay chat.")
+        self.assertIn("Do not create a questionnaire", client.generate.call_args.kwargs["system"])
+
+    def test_planning_intent_is_explicit(self) -> None:
+        self.assertTrue(_should_start_planning("Help me plan a terminal app"))
+        self.assertTrue(_should_start_planning("I want to build a task manager"))
+        self.assertTrue(_should_start_planning("We are planning a CLI tool"))
+        self.assertFalse(_should_start_planning("hello"))
+        self.assertFalse(_should_start_planning("what does this repository do?"))
+        self.assertFalse(_should_start_planning("Plan a vacation to Japan"))
+        self.assertFalse(_should_start_planning("Make a presentation for Friday"))
+
     def test_questionnaire_response_is_normalized_with_other_fallback(self) -> None:
         message, questions = _parse_questionnaire_response(
             json.dumps(
@@ -397,6 +427,31 @@ class TuiBridgeTests(unittest.TestCase):
         self.assertEqual(len(event["questions"]), 2)
         self.assertEqual(event["questions"][0]["options"][-1]["text"], "Other")
         self.assertIsNone(bridge._process)
+
+    def test_planning_tool_task_uses_the_same_spec_intake(self) -> None:
+        client = MagicMock()
+        client.generate.return_value = json.dumps(
+            {
+                "kind": "questionnaire",
+                "message": "Let me clarify the project.",
+                "questions": [
+                    {"question_text": "Target?", "options": ["CLI", "Web"]},
+                    {"question_text": "Storage?", "options": ["JSON", "SQLite"]},
+                ],
+            }
+        )
+        bridge = Bridge(EventWriter(self.output), architect_client=client)
+        bridge.start_tool_task("Build a task manager")
+        event = self.wait_for_event("questionnaire")
+
+        self.assertEqual(len(event["questions"]), 2)
+        self.assertTrue(
+            any(
+                item.get("msg") == "planning request routed to spec intake"
+                for item in self.events()
+                if item["type"] == "log"
+            )
+        )
 
     def test_questionnaire_completion_drafts_spec_without_execution(self) -> None:
         client = MagicMock()

@@ -74,7 +74,6 @@ struct AppState {
     repo_map_url: Option<String>,
     repo_content: String,
     repo_mode: String,
-    repo_focused: bool,
     repo_files: Vec<FileEntry>,
     repo_variables: Vec<VariableEntry>,
     repo_selected: usize,
@@ -120,7 +119,6 @@ impl Default for AppState {
             repo_map_url: None,
             repo_content: "m map · r vars · t files".into(),
             repo_mode: "diagram".into(),
-            repo_focused: false,
             repo_files: Vec::new(),
             repo_variables: Vec::new(),
             repo_selected: 0,
@@ -155,15 +153,24 @@ impl Default for AppState {
 }
 
 impl AppState {
-    fn context_remaining(&self) -> usize {
-        const CONTEXT_BUDGET: usize = 8_192;
+    const CONTEXT_BUDGET: usize = 8_192;
+
+    fn context_used(&self) -> usize {
         let used = self
             .logs
             .iter()
             .map(|line| line.len())
             .sum::<usize>()
             .div_ceil(4);
-        CONTEXT_BUDGET.saturating_sub(used)
+        used.min(Self::CONTEXT_BUDGET)
+    }
+
+    fn context_remaining(&self) -> usize {
+        Self::CONTEXT_BUDGET.saturating_sub(self.context_used())
+    }
+
+    fn context_remaining_percent(&self) -> u8 {
+        ((self.context_remaining() * 100) / Self::CONTEXT_BUDGET) as u8
     }
 
     fn persist_context(&self, repo_root: &std::path::Path) {
@@ -347,7 +354,6 @@ impl AppState {
             }
             HarnessEvent::RepoMapUrl { url } => {
                 self.repo_map_url = Some(url.clone());
-                self.repo_focused = true;
                 self.logs.push(format!("repository map ready · press o to open {url}"));
             }
             HarnessEvent::RepoMapView { mode, content } => {
@@ -464,7 +470,6 @@ impl AppState {
 
     fn main_output_active(&self) -> bool {
         !self.prompt_active
-            && !self.repo_focused
             && !self.history_visible
             && !self.validated_source_visible
             && !matches!(
@@ -486,45 +491,6 @@ impl AppState {
     fn clamp_repo_selection(&mut self) {
         let len = self.repo_files.len().max(self.repo_variables.len());
         self.repo_selected = self.repo_selected.min(len.saturating_sub(1));
-    }
-
-    fn selected_repo_detail(&self) -> String {
-        match self.repo_mode.as_str() {
-            "files" => self
-                .repo_files
-                .get(self.repo_selected)
-                .map(|entry| {
-                    format!(
-                        "{}\n\n{}\n\nsymbols\n{}",
-                        entry.path,
-                        entry.summary,
-                        if entry.symbols.is_empty() {
-                            "  none".into()
-                        } else {
-                            entry
-                                .symbols
-                                .iter()
-                                .map(|symbol| format!("  {symbol}"))
-                                .collect::<Vec<_>>()
-                                .join("\n")
-                        }
-                    )
-                })
-                .unwrap_or_else(|| "No file selected.".into()),
-            "variables" => self
-                .repo_variables
-                .get(self.repo_selected)
-                .map(|entry| {
-                    format!(
-                        "{}\n\nimports\n{}\n\nvariables\n{}",
-                        entry.path,
-                        indented_or_none(&entry.imports),
-                        indented_or_none(&entry.variables)
-                    )
-                })
-                .unwrap_or_else(|| "No file selected.".into()),
-            _ => self.repo_content.clone(),
-        }
     }
 
     fn select_numbered_option(&mut self, digit: char) -> bool {
@@ -627,18 +593,6 @@ fn contains_numbered_options(content: &str) -> bool {
     seen.into_iter().filter(|present| *present).count() >= 2
 }
 
-fn indented_or_none(values: &[String]) -> String {
-    if values.is_empty() {
-        "  none".into()
-    } else {
-        values
-            .iter()
-            .map(|value| format!("  {value}"))
-            .collect::<Vec<_>>()
-            .join("\n")
-    }
-}
-
 struct TerminalGuard;
 
 impl Drop for TerminalGuard {
@@ -715,7 +669,10 @@ async fn run_loop(
     repo_root: &std::path::Path,
 ) -> Result<()> {
     let mut state = AppState::default();
-    state.working_directory = repo_root.display().to_string();
+    state.working_directory = std::fs::canonicalize(repo_root)
+        .unwrap_or_else(|_| repo_root.to_path_buf())
+        .display()
+        .to_string();
     state.persist_context(repo_root);
     let mut term_events = EventStream::new();
     let mut tick = tokio::time::interval(Duration::from_millis(33));
@@ -951,7 +908,6 @@ async fn run_loop(
                         KeyCode::Char(digit @ '1'..='5')
                             if state.select_numbered_option(digit) => {}
                         KeyCode::Char('m') => {
-                            state.repo_focused = true;
                             state.repo_mode = "diagram".into();
                             send_command(
                                 child_stdin,
@@ -963,7 +919,7 @@ async fn run_loop(
                             ).await?;
                             state.logs.push("building browser map…".into());
                         }
-                        KeyCode::Char('o') if state.repo_focused => {
+                        KeyCode::Char('o') => {
                             if let Some(url) = state.repo_map_url.as_deref() {
                                 open_localhost(url);
                             } else {
@@ -1037,9 +993,6 @@ async fn run_loop(
                             state.history_visible = false;
                             state.history_detail = None;
                         }
-                        KeyCode::Esc if state.repo_focused => {
-                            state.repo_focused = false;
-                        }
                         _ => {}
                     }
                 }
@@ -1085,127 +1038,46 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState) {
     );
     let rows = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([
-            Constraint::Length(1),
-            Constraint::Min(0),
-            Constraint::Length(6),
-        ])
+        .constraints([Constraint::Min(0), Constraint::Length(1)])
         .split(frame.area());
-    let top = Layout::horizontal([
-        Constraint::Percentage(74),
-        Constraint::Length(1),
-        Constraint::Min(0),
-    ])
-    .split(rows[1]);
-    let bottom = Layout::horizontal([
-        Constraint::Percentage(22),
-        Constraint::Length(1),
-        Constraint::Percentage(53),
-        Constraint::Length(1),
-        Constraint::Min(0),
-    ])
-    .split(rows[2]);
-
-    frame.render_widget(activity_status_line(state), rows[0]);
-
-    let mut log_lines: Vec<Line> = Vec::new();
-    let mut previous_role: Option<&str> = None;
-    for line in &state.logs {
-        let role = log_role(line);
-        if role.is_some() && role != previous_role && !log_lines.is_empty() {
-            log_lines.push(Line::default());
-        }
-        log_lines.extend(styled_log_lines(line));
-        previous_role = role;
-    }
-    let viewport_height = usize::from(top[0].height.saturating_sub(2));
+    let log_lines = stream_lines(state);
+    let viewport_height = usize::from(rows[0].height);
     let max_log_offset = log_lines.len().saturating_sub(viewport_height);
     let from_bottom = state.log_scroll.min(max_log_offset);
     let log_offset = max_log_offset
         .saturating_sub(from_bottom)
         .min(u16::MAX as usize) as u16;
-    let main_active = state.main_output_active();
-    let scroll_status = if from_bottom == 0 {
-        "follow".to_owned()
-    } else {
-        format!("{from_bottom} line(s) back")
-    };
     frame.render_widget(
         Paragraph::new(Text::from(log_lines))
             .style(Style::default().fg(theme_foreground()))
             .wrap(Wrap { trim: false })
-            .scroll((log_offset, 0))
-            .block(pane_block(
-                format!(" OUTPUT · {} · {scroll_status} ", state.engine),
-                main_active,
-            )),
-        top[0],
-    );
-    let workspace = format!("{}\n\n[m] map · [o] browser", state.working_directory);
-    frame.render_widget(
-        Paragraph::new(workspace)
-            .style(Style::default().fg(theme_foreground()))
-            .wrap(Wrap { trim: false })
-            .block(pane_block(" WORKSPACE ", false)),
-        top[2],
+            .scroll((log_offset, 0)),
+        rows[0],
     );
 
-    let context = format!(
-        "{} · {}\n{} prefs\n~{} ctx left",
-        state.mode.label(),
-        if state.deepseek_configured {
-            "DeepSeek"
-        } else {
-            "no key"
-        },
-        state.preference_count,
-        state.context_remaining(),
-    );
+    let prompt_text = Line::from(vec![
+        Span::styled(
+            "> ",
+            Style::default()
+                .fg(Color::LightCyan)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            if state.prompt.is_empty() && !state.prompt_active {
+                "type a message".to_owned()
+            } else {
+                state.prompt.clone()
+            },
+            Style::default().fg(if state.prompt.is_empty() {
+                theme_muted()
+            } else {
+                theme_foreground()
+            }),
+        ),
+    ]);
     frame.render_widget(
-        Paragraph::new(context)
-            .style(Style::default().fg(theme_foreground()))
-            .block(pane_block_accent(" CONTEXT ", false, theme_context())),
-        bottom[0],
-    );
-    let prompt_title = if state.questionnaire_other_active {
-        " ANSWER · Enter "
-    } else if state.tool_prompt_active {
-        " TOOLS · Enter "
-    } else if state.prompt_active {
-        " CHAT · Enter "
-    } else if state.assistant_busy {
-        " CHAT · thinking "
-    } else if state.mode == AppMode::Executing {
-        " RUNNING "
-    } else if state.mode == AppMode::DraftingSpec {
-        " DRAFTING "
-    } else if matches!(state.mode, AppMode::SpecReview { .. }) {
-        " REVIEW · y/n "
-    } else if matches!(state.mode, AppMode::ToolDiffReview { .. }) {
-        " DIFF · y/n "
-    } else {
-        " CHAT "
-    };
-    let prompt_text = if state.prompt.is_empty() && !state.prompt_active {
-        Text::from(Line::from(vec![
-            Span::styled("  ", Style::default().bg(Color::LightCyan)),
-            Span::raw("  c chat · s spec · a tools · d history"),
-        ]))
-    } else {
-        Text::from(state.prompt.as_str())
-    };
-    frame.render_widget(
-        Paragraph::new(prompt_text)
-            .style(Style::default().fg(theme_foreground()))
-            .block(pane_block(prompt_title, state.prompt_active)),
-        bottom[2],
-    );
-    frame.render_widget(
-        Paragraph::new(format!("memory · {} saved", state.preference_count))
-            .style(Style::default().fg(theme_foreground()))
-            .wrap(Wrap { trim: true })
-            .block(pane_block_accent(" SETTINGS ", false, theme_settings())),
-        bottom[4],
+        Paragraph::new(prompt_text).style(Style::default().bg(theme_panel())),
+        rows[1],
     );
 
     if let AppMode::SpecReview { spec_text } = &state.mode {
@@ -1335,7 +1207,7 @@ fn draw_questionnaire(frame: &mut ratatui::Frame, state: &AppState) {
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
 }
 
-fn activity_status_line(state: &AppState) -> Paragraph<'static> {
+fn stream_lines(state: &AppState) -> Vec<Line<'static>> {
     let busy = state.assistant_busy || state.running;
     let spinner = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
     let marker = if busy {
@@ -1346,24 +1218,117 @@ fn activity_status_line(state: &AppState) -> Paragraph<'static> {
     let status = if state.assistant_busy {
         state.engine.clone()
     } else if state.running {
-        format!("{} · {}%", state.engine, state.pct)
+        format!("{} {}%", state.engine, state.pct)
     } else {
         "ready".into()
     };
-    Paragraph::new(Line::from(vec![
+    let mut lines = vec![
+        Line::from(vec![
+            Span::styled(
+                format!("agent {marker}"),
+                Style::default()
+                    .fg(Color::LightCyan)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                format!(
+                    " · {status} · ctx {}% · {}",
+                    state.context_remaining_percent(),
+                    compact_path(&state.working_directory)
+                ),
+                Style::default().fg(theme_muted()),
+            ),
+        ]),
+        stream_divider(),
+    ];
+    if state.logs.is_empty() {
+        lines.push(Line::styled(
+            "• ready",
+            Style::default().fg(if busy {
+                Color::Cyan
+            } else {
+                theme_foreground()
+            }),
+        ));
+        lines.push(Line::styled(
+            "└ type a message",
+            Style::default().fg(theme_muted()),
+        ));
+        return lines;
+    }
+    for (index, line) in state.logs.iter().enumerate() {
+        if index > 0 && line.starts_with("[you] ") {
+            lines.push(stream_divider());
+        }
+        lines.extend(stream_log_lines(line));
+    }
+    lines
+}
+
+fn stream_divider() -> Line<'static> {
+    Line::styled("─".repeat(72), Style::default().fg(Color::DarkGray))
+}
+
+fn stream_log_lines(line: &str) -> Vec<Line<'static>> {
+    let trimmed = line.trim_start();
+    if trimmed.len() != line.len() {
+        return vec![Line::from(vec![
+            Span::styled("└ ", Style::default().fg(theme_muted())),
+            Span::styled(trimmed.to_owned(), Style::default().fg(theme_foreground())),
+        ])];
+    }
+    let role = [
+        ("[you] ", "you", Color::Green, Color::White),
+        ("[assistant] ", "assistant", Color::Cyan, Color::LightCyan),
+        ("[memory] ", "memory", Color::Magenta, Color::White),
+        ("[error] ", "error", Color::LightRed, Color::LightRed),
+        ("[warning] ", "warning", Color::Yellow, Color::Yellow),
+        (
+            "[protocol warning] ",
+            "warning",
+            Color::Yellow,
+            Color::Yellow,
+        ),
+    ]
+    .into_iter()
+    .find(|(prefix, _, _, _)| line.starts_with(prefix));
+
+    let (label, label_color, content, content_color) =
+        if let Some((prefix, label, label_color, content_color)) = role {
+            (label, label_color, &line[prefix.len()..], content_color)
+        } else {
+            ("event", theme_muted(), line, theme_foreground())
+        };
+    let mut content_lines = content.lines();
+    let first = content_lines.next().unwrap_or_default();
+    let mut rendered = vec![Line::from(vec![
+        Span::styled("• ", Style::default().fg(label_color)),
         Span::styled(
-            format!(" {marker} "),
+            format!("{label}  "),
             Style::default()
-                .fg(if busy { Color::Black } else { Color::Cyan })
-                .bg(if busy { Color::Cyan } else { Color::Reset })
+                .fg(label_color)
                 .add_modifier(Modifier::BOLD),
         ),
-        Span::styled(
-            format!(" {status} "),
-            Style::default().fg(if busy { Color::LightCyan } else { Color::Gray }),
-        ),
-    ]))
-    .style(Style::default().bg(theme_background()).fg(theme_muted()))
+        Span::styled(first.to_owned(), Style::default().fg(content_color)),
+    ])];
+    rendered.extend(content_lines.map(|continuation| {
+        Line::from(vec![
+            Span::styled("└ ", Style::default().fg(theme_muted())),
+            Span::styled(continuation.to_owned(), Style::default().fg(content_color)),
+        ])
+    }));
+    rendered
+}
+
+fn compact_path(path: &str) -> String {
+    let components = std::path::Path::new(path)
+        .components()
+        .filter_map(|component| component.as_os_str().to_str())
+        .collect::<Vec<_>>();
+    if components.len() <= 3 {
+        return path.to_owned();
+    }
+    format!("…/{}", components[components.len() - 3..].join("/"))
 }
 
 fn theme_background() -> Color {
@@ -1380,14 +1345,6 @@ fn theme_foreground() -> Color {
 
 fn theme_muted() -> Color {
     Color::Rgb(148, 163, 184)
-}
-
-fn theme_context() -> Color {
-    Color::Rgb(96, 165, 250)
-}
-
-fn theme_settings() -> Color {
-    Color::Rgb(192, 132, 252)
 }
 
 fn pane_block<'a>(title: impl Into<Line<'a>>, active: bool) -> Block<'a> {
@@ -1407,59 +1364,6 @@ fn pane_block_accent<'a>(title: impl Into<Line<'a>>, active: bool, accent: Color
         .padding(Padding::horizontal(1))
         .title(title)
         .title_style(Style::default().fg(color).add_modifier(Modifier::BOLD))
-}
-
-fn styled_log_lines(line: &str) -> Vec<Line<'static>> {
-    let role = [
-        ("[you] ", Color::Green, Color::White),
-        ("[assistant] ", Color::Cyan, Color::LightCyan),
-        ("[memory] ", Color::Magenta, Color::White),
-        ("[error] ", Color::LightRed, Color::LightRed),
-        ("[warning] ", Color::Yellow, Color::Yellow),
-        ("[protocol warning] ", Color::Yellow, Color::Yellow),
-    ]
-    .into_iter()
-    .find(|(prefix, _, _)| line.starts_with(prefix));
-
-    let Some((prefix, prefix_color, content_color)) = role else {
-        return line
-            .lines()
-            .map(|value| Line::raw(value.to_owned()))
-            .collect();
-    };
-    let content = &line[prefix.len()..];
-    let mut source_lines = content.lines();
-    let first = source_lines.next().unwrap_or_default();
-    let mut rendered = vec![Line::from(vec![
-        Span::styled(
-            prefix.to_owned(),
-            Style::default()
-                .fg(prefix_color)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(first.to_owned(), Style::default().fg(content_color)),
-    ])];
-    let indent = " ".repeat(prefix.chars().count());
-    rendered.extend(source_lines.map(|continuation| {
-        Line::from(vec![
-            Span::raw(indent.clone()),
-            Span::styled(continuation.to_owned(), Style::default().fg(content_color)),
-        ])
-    }));
-    rendered
-}
-
-fn log_role(line: &str) -> Option<&'static str> {
-    [
-        "[you] ",
-        "[assistant] ",
-        "[memory] ",
-        "[error] ",
-        "[warning] ",
-        "[protocol warning] ",
-    ]
-    .into_iter()
-    .find(|prefix| line.starts_with(prefix))
 }
 
 fn draw_validated_source(frame: &mut ratatui::Frame, state: &AppState) {
@@ -1703,6 +1607,11 @@ mod tests {
     #[test]
     fn configuration_and_memory_status_are_visible_in_state() {
         let mut state = AppState::default();
+        assert_eq!(state.context_remaining_percent(), 100);
+        state
+            .logs
+            .push("x".repeat(AppState::CONTEXT_BUDGET / 2 * 4));
+        assert_eq!(state.context_remaining_percent(), 50);
         state.apply(HarnessEvent::ConfigStatus {
             deepseek_configured: true,
             source: ".env:DEEPSEEK_API_KEY".into(),
@@ -1856,7 +1765,7 @@ mod tests {
     }
 
     #[test]
-    fn structured_repo_entries_drive_local_file_details() {
+    fn structured_repo_entries_are_retained_for_browser_mapping() {
         let mut state = AppState::default();
         state.apply(HarnessEvent::RepoMapFiles {
             entries: vec![
@@ -1887,11 +1796,11 @@ mod tests {
             ],
         });
         state.repo_selected = 1;
-        state.repo_mode = "files".into();
-        assert!(state.selected_repo_detail().contains("Second file"));
-        state.repo_mode = "variables".into();
-        let detail = state.selected_repo_detail();
-        assert!(detail.contains("json"));
-        assert!(detail.contains("DATA"));
+        assert_eq!(state.repo_files[state.repo_selected].summary, "Second file");
+        assert_eq!(state.repo_variables[state.repo_selected].imports, ["json"]);
+        assert_eq!(
+            state.repo_variables[state.repo_selected].variables,
+            ["DATA"]
+        );
     }
 }

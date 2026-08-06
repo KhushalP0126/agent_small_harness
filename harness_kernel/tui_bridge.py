@@ -51,12 +51,14 @@ MAX_PREFERENCES = 50
 MAX_QUESTIONS = 4
 MAX_OPTIONS_PER_QUESTION = 5
 QUESTIONNAIRE_SYSTEM_PROMPT = """You are an autonomous planning worker and software architect.
-When the latest user message introduces or materially changes a software project idea, do not write code and do not claim to execute anything. Return JSON only in this shape:
+The user has explicitly asked to plan, build, create, design, implement, or change software. Do not write code and do not claim to execute anything. Return JSON only in this shape:
 {"kind":"questionnaire","message":"short introduction","questions":[{"question_text":"...","options":["...","..."]}]}
 Ask 2 to 4 high-impact clarification questions. Give each question 2 to 4 concise, mutually distinct choices. Do not include Other; the application adds it. Focus on behavior, scope, constraints, data, interfaces, and acceptance criteria.
-For greetings, ordinary conversation, preference updates, or answers that do not require a new questionnaire, return a useful 2-4 sentence response (not a one-line acknowledgement):
-{"kind":"chat","message":"your concise response"}
 Never return markdown fences around the JSON. The application creates a formal spec only after the questionnaire is completed or the user explicitly requests a draft."""
+CHAT_SYSTEM_PROMPT = """You are a concise local coding assistant.
+The user has not asked to plan or build software. Respond conversationally in 1 to 3 useful sentences. Do not create a questionnaire, specification, implementation plan, or code unless the user explicitly asks to plan, build, create, design, implement, or change software. Return JSON only in this shape:
+{"kind":"chat","message":"your concise response"}
+Never return markdown fences around the JSON."""
 SPEC_SHEET_SYSTEM_PROMPT = """You are a software specification architect.
 Fill out the supplied execution spec sheet from the conversation and questionnaire answers.
 Return JSON only, with no markdown fence and no commentary, using exactly this shape:
@@ -306,6 +308,14 @@ class Bridge:
         if self._assistant_busy:
             self.writer.emit("log", level="warning", msg="an assistant task is already running")
             return
+        if _should_start_planning(task):
+            self.writer.emit(
+                "log",
+                level="info",
+                msg="planning request routed to spec intake",
+            )
+            self.start_chat(task)
+            return
         selected_provider = provider.strip().lower()
         if selected_provider not in {"qwen", "deepseek"}:
             self.writer.emit(
@@ -436,7 +446,8 @@ class Bridge:
 
     def _run_chat(self) -> None:
         latest = self._chat_history[-1]["content"] if self._chat_history else ""
-        if _should_use_chat_tools(latest):
+        planning_requested = _should_start_planning(latest)
+        if _should_use_chat_tools(latest) and not planning_requested:
             registry = build_default_tool_registry(
                 repository_root=self.tool_repository_root,
             )
@@ -454,9 +465,11 @@ class Bridge:
             return
         response = self._client().generate(
             self._chat_prompt(),
-            system=QUESTIONNAIRE_SYSTEM_PROMPT,
+            system=(QUESTIONNAIRE_SYSTEM_PROMPT if planning_requested else CHAT_SYSTEM_PROMPT),
         ).strip()
         message, questions = _parse_questionnaire_response(response)
+        if not planning_requested:
+            questions = []
         history_content = (
             _questionnaire_transcript(message, questions) if questions else message
         )
@@ -966,6 +979,55 @@ def _should_use_chat_tools(message: str) -> bool:
         "find the file",
     )
     return any(cue in lowered for cue in cues)
+
+
+def _should_start_planning(message: str) -> bool:
+    """Require an explicit software-planning request before opening spec review."""
+    lowered = message.casefold()
+    has_planning_intent = bool(
+        re.search(
+            r"\b(?:plan|planning|build|create|make|design|implement|develop|scaffold)\b",
+            lowered,
+        )
+    )
+    has_change_intent = any(
+        phrase in lowered for phrase in ("add a feature", "add feature", "change the ", "fix the ")
+    )
+    if not (has_planning_intent or has_change_intent):
+        return False
+    coding_targets = (
+        "software",
+        "code",
+        "coding",
+        "app",
+        "application",
+        "api",
+        "cli",
+        "tui",
+        "website",
+        "web app",
+        "script",
+        "program",
+        "game",
+        "repository",
+        "repo",
+        "feature",
+        "function",
+        "module",
+        "package",
+        "library",
+        "database",
+        "bot",
+        "automation",
+        "terminal",
+        "task manager",
+        "dashboard",
+        "service",
+    )
+    return any(
+        re.search(rf"\b{re.escape(target)}\b", lowered) is not None
+        for target in coding_targets
+    )
 
 
 def _chat_transcript(history: list[dict[str, str]]) -> str:

@@ -112,11 +112,12 @@ in-process SVG-to-PNG pipeline and Kitty/iTerm2/quadrant-block terminal
 renderers. Run Cargo directly with `cargo --manifest-path rust/Cargo.toml`
 when you need a Rust-specific command.
 
-The primary view keeps main output and repository context above persistent
-context, chat, and settings panels. Press `c` or `p` to chat with the architect
-without executing anything. New project ideas automatically open a typed 2–4
-question clarification flow. Each question has numbered choices plus a mandatory
-`Other` option; `1`–`5` answers locally, while `Other` opens free-text input.
+The primary view is a quiet, linear event stream: a compact session line, `─`
+turn dividers, and `•`/`└` event trees. A single `>` prompt remains pinned at
+the bottom. Press `c` or `p` to chat with the architect without executing
+anything. New project ideas automatically open a typed 2–4 question
+clarification flow. Each question has numbered choices plus a mandatory `Other`
+option; `1`–`5` answers locally, while `Other` opens free-text input.
 Completing the final question asks DeepSeek to fill a strict JSON execution
 sheet from the conversation and answers. The bridge validates that sheet and
 renders deterministic planner-compatible Markdown with explicit files,
@@ -133,16 +134,16 @@ spec-sheet components provide a validated local contract queue and execution
 continues with a warning. Execution only stops when neither source can produce
 a contract queue.
 
-The main output pane follows the newest event while a run is active. Use
-`Up`/`Down`, `PageUp`/`PageDown`, or the mouse wheel to inspect earlier output;
+The event stream follows the newest event while a run is active. Use `Up`/`Down`,
+`PageUp`/`PageDown`, or the mouse wheel to inspect earlier output;
 `Home` jumps to the beginning and `End` resumes live following. After every
 successfully completed engine and integration-validation pass, the TUI opens a
 line-numbered validated-code view. That view supports vertical and horizontal
 arrow scrolling, `PageUp`/`PageDown`, and `v`/`Esc` to close; press `v` from the
 main view to reopen the latest validated source.
 
-The context panel reports whether DeepSeek was configured from the environment
-or repository `.env`; it never displays the key. Explicit phrases such as
+The session line reports whether DeepSeek was configured from the environment
+or repository `.env` without displaying the key. Explicit phrases such as
 `/remember keep responses concise`, `remember that ...`, or `I prefer ...`
 store a bounded preference in ignored `.tui_memory.json`. Those preferences are
 injected into later chat and spec-drafting prompts. The Rust TUI also refreshes
@@ -152,18 +153,24 @@ API-key-looking values are redacted and the journal is never sent to the model
 automatically. Messages containing credential-like preferences are refused by
 the memory extractor.
 
-The workspace panel shows the active directory and map controls; it no longer
-renders the diagram or file browser. The context panel includes an approximate
-remaining-token count for the current visible transcript. Press `m` to build a
-map on loopback, then `o` to open its temporary browser page.
+The session line shows the active directory and current status; the terminal no
+longer renders the diagram or file browser. It also includes an approximate
+remaining-context percentage for the current visible transcript.
+Planning questions only begin for an explicit software request: the message
+must include both planning/build intent and a coding target such as an app,
+script, API, CLI, game, repository, or feature. Non-coding requests stay in
+ordinary chat. Press `m` to build a map on loopback, then `o` to open its
+temporary browser page.
+
+Chat and tools share this intake rule: a planning request sent through tools is
+routed to the same questionnaire and spec-review path before any tool calls.
 
 Chat roles are visually distinct: user labels are green, assistant labels and
 responses are cyan, saved-memory notices are magenta, and warnings/errors keep
-their yellow/red emphasis. The focused pane uses a cyan accent while inactive
-context and settings panes use subdued borders. A one-line status strip animates
-while DeepSeek or an approved harness run is active without blocking keyboard
-input. Typed questionnaire events use immediate `1`–`5` selection without an
-IPC request per answer. Plain assistant messages that contain at least two
+their yellow/red emphasis. A compact spinner in the session line animates while
+DeepSeek or an approved harness run is active without blocking keyboard input.
+Typed questionnaire events use immediate `1`–`5` selection without an IPC
+request per answer. Plain assistant messages that contain at least two
 repository-inspection cues are routed through a bounded, read-only local tool
 loop (search/read only); edits and script execution still require the explicit
 tools mode and review gate. Plain assistant messages that contain at least two
@@ -175,12 +182,12 @@ Outside repository focus, `r` retains the coding-capability shortcut. `d` opens
 run history, `Esc` leaves the current focus/overlay, and `q` cancels before
 exiting.
 
-Kitty and Ghostty use the directly emitted Kitty graphics protocol; iTerm2 and
-WezTerm use directly emitted iTerm2 inline images. Other terminals, including
-Apple Terminal and Windows Terminal, use the built-in quadrant-block renderer,
-which represents a 2×2 pixel region in every colored terminal cell. Renderer
-detection uses terminal environment markers and does not perform a blocking
-stdio capability query.
+The retained renderer module supports Kitty/Ghostty graphics, iTerm2/WezTerm
+inline images, and a 2×2 quadrant-block fallback for Apple Terminal and Windows
+Terminal. The current repository-map path is browser-first, so these renderers
+are not invoked by `m`; they remain available for a future native image view.
+Renderer detection uses terminal environment markers and does not perform a
+blocking stdio capability query.
 The Python bridge allowlists
 entrypoints and flags and wraps child output in typed log events so ordinary
 CLI text cannot corrupt the protocol.
