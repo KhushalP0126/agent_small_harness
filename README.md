@@ -112,9 +112,13 @@ in-process SVG-to-PNG pipeline and Kitty/iTerm2/quadrant-block terminal
 renderers. Run Cargo directly with `cargo --manifest-path rust/Cargo.toml`
 when you need a Rust-specific command.
 
-The primary view is a quiet, linear event stream: a compact session line, `─`
-turn dividers, and `•`/`└` event trees. A single `>` prompt remains pinned at
-the bottom. Press `c`, `p`, or `a` to focus the same unified prompt. Every
+The primary view is a high-contrast, Codex-inspired linear event stream: a
+compact session line, `─` turn dividers, and `•`/`└` event trees. A persistent
+status strip above the bottom composer shows activity, repository directory,
+remaining context, and the local `qwen2.5-coder:1.5b` model. Press `c`, `p`,
+or `a` to focus the same unified multi-line composer; `Enter` adds a line and
+`Ctrl+Enter` sends. Its footer exposes keyboard-first `send`, `/tools`, and
+`/spec` actions. Every
 non-planning message goes through the local Qwen 1.5B assistant with bounded,
 read-only repository tools available when they help; ordinary conversation
 finishes directly without a tool call. New project ideas automatically open a typed 2–4 question

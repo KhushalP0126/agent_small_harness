@@ -13,8 +13,8 @@ use anyhow::{Context, Result};
 use crossterm::{
     cursor::Show,
     event::{
-        DisableMouseCapture, EnableMouseCapture, Event as CtEvent, EventStream, KeyCode,
-        MouseEventKind,
+        DisableMouseCapture, EnableMouseCapture, Event as CtEvent, EventStream, KeyCode, KeyEvent,
+        KeyModifiers, MouseEventKind,
     },
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
@@ -731,11 +731,16 @@ async fn run_loop(
                                     state.mode = AppMode::DraftingSpec;
                                 }
                             }
-                            KeyCode::Enter if !state.prompt.trim().is_empty() && !state.assistant_busy => {
+                            KeyCode::Enter
+                                if composer_should_submit(&key)
+                                    && !state.prompt.trim().is_empty()
+                                    && !state.assistant_busy =>
+                            {
                                 let text = std::mem::take(&mut state.prompt);
                                 send_prompt_command(child_stdin, &mut state, text, repo_root).await?;
                                 state.prompt_active = false;
                             }
+                            KeyCode::Enter => state.prompt.push('\n'),
                             KeyCode::Char(digit @ '1'..='5')
                                 if state.prompt.is_empty()
                                     && state.select_numbered_option(digit) => {}
@@ -1111,7 +1116,11 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState) {
     );
     let rows = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Min(0), Constraint::Length(1)])
+        .constraints([
+            Constraint::Min(0),
+            Constraint::Length(1),
+            Constraint::Length(6),
+        ])
         .split(frame.area());
     let log_lines = stream_lines(state);
     let viewport_height = usize::from(rows[0].height);
@@ -1128,30 +1137,8 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState) {
         rows[0],
     );
 
-    let prompt_text = Line::from(vec![
-        Span::styled(
-            "> ",
-            Style::default()
-                .fg(Color::LightCyan)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(
-            if state.prompt.is_empty() && !state.prompt_active {
-                "type a message".to_owned()
-            } else {
-                state.prompt.clone()
-            },
-            Style::default().fg(if state.prompt.is_empty() {
-                theme_muted()
-            } else {
-                theme_foreground()
-            }),
-        ),
-    ]);
-    frame.render_widget(
-        Paragraph::new(prompt_text).style(Style::default().bg(theme_panel())),
-        rows[1],
-    );
+    draw_status_row(frame, state, rows[1]);
+    draw_composer(frame, state, rows[2]);
 
     if let AppMode::SpecReview { spec_text } = &state.mode {
         draw_spec_review(frame, spec_text);
@@ -1214,6 +1201,99 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState) {
     if state.validated_source_visible {
         draw_validated_source(frame, state);
     }
+}
+
+fn draw_status_row(frame: &mut ratatui::Frame, state: &AppState, area: Rect) {
+    let busy = state.assistant_busy || state.running;
+    let activity = if busy { "working" } else { "ready" };
+    let status = if state.assistant_busy {
+        state.engine.as_str()
+    } else if state.running {
+        "running"
+    } else {
+        activity
+    };
+    let line = Line::from(vec![
+        Span::styled(
+            " ● ",
+            Style::default().fg(if busy { theme_cyan() } else { Color::Green }),
+        ),
+        Span::styled(
+            status.to_owned(),
+            Style::default()
+                .fg(theme_foreground())
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled("  ·  ", Style::default().fg(theme_muted())),
+        Span::styled(
+            compact_path(&state.working_directory),
+            Style::default().fg(theme_muted()),
+        ),
+        Span::styled("  ·  ", Style::default().fg(theme_muted())),
+        Span::styled(
+            format!("ctx {}%", state.context_remaining_percent()),
+            Style::default().fg(theme_cyan()),
+        ),
+        Span::styled("  ·  ", Style::default().fg(theme_muted())),
+        Span::styled("qwen2.5-coder:1.5b", Style::default().fg(theme_purple())),
+    ]);
+    frame.render_widget(
+        Paragraph::new(line).style(Style::default().bg(theme_status())),
+        area,
+    );
+}
+
+fn draw_composer(frame: &mut ratatui::Frame, state: &AppState, area: Rect) {
+    let active = state.prompt_active;
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(if active { theme_cyan() } else { theme_border() }))
+        .style(Style::default().bg(theme_panel()))
+        .padding(Padding::horizontal(1));
+    frame.render_widget(block, area);
+    let input_area = Rect {
+        x: area.x.saturating_add(2),
+        y: area.y.saturating_add(1),
+        width: area.width.saturating_sub(4),
+        height: area.height.saturating_sub(3),
+    };
+    frame.render_widget(
+        Paragraph::new(composer_text(state))
+            .style(Style::default().bg(theme_panel()))
+            .wrap(Wrap { trim: false }),
+        input_area,
+    );
+    let footer_area = Rect {
+        x: area.x.saturating_add(2),
+        y: area.y.saturating_add(area.height.saturating_sub(2)),
+        width: area.width.saturating_sub(4),
+        height: 1,
+    };
+    let footer = Line::from(vec![
+        Span::styled(
+            "Ctrl+Enter ",
+            Style::default()
+                .fg(theme_cyan())
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled("send", Style::default().fg(theme_foreground())),
+        Span::styled(
+            "   /tools ",
+            Style::default()
+                .fg(theme_purple())
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled("inspect", Style::default().fg(theme_muted())),
+        Span::styled(
+            "   /spec ",
+            Style::default()
+                .fg(theme_purple())
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled("plan", Style::default().fg(theme_muted())),
+        Span::styled("   Esc close", Style::default().fg(theme_muted())),
+    ]);
+    frame.render_widget(Paragraph::new(footer), footer_area);
 }
 
 fn draw_questionnaire(frame: &mut ratatui::Frame, state: &AppState) {
@@ -1280,6 +1360,52 @@ fn draw_questionnaire(frame: &mut ratatui::Frame, state: &AppState) {
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
 }
 
+fn composer_should_submit(key: &KeyEvent) -> bool {
+    key.code == KeyCode::Enter && key.modifiers.contains(KeyModifiers::CONTROL)
+}
+
+fn composer_text(state: &AppState) -> Text<'static> {
+    if state.prompt.is_empty() {
+        let placeholder = if state.prompt_active {
+            "Describe a task, inspect the repository, or type /help▍"
+        } else {
+            "Press c to compose a message"
+        };
+        return Text::from(Line::styled(
+            placeholder,
+            Style::default().fg(theme_muted()),
+        ));
+    }
+    let mut lines = state
+        .prompt
+        .lines()
+        .enumerate()
+        .map(|(index, line)| {
+            Line::from(vec![
+                Span::styled(
+                    if index == 0 { "> " } else { "  " },
+                    Style::default()
+                        .fg(theme_cyan())
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::styled(line.to_owned(), Style::default().fg(theme_foreground())),
+            ])
+        })
+        .collect::<Vec<_>>();
+    if state.prompt.ends_with('\n') {
+        lines.push(Line::from(vec![
+            Span::styled("  ", Style::default().fg(theme_cyan())),
+            Span::styled("▍", Style::default().fg(theme_cyan())),
+        ]));
+    } else if state.prompt_active {
+        if let Some(last) = lines.last_mut() {
+            last.spans
+                .push(Span::styled("▍", Style::default().fg(theme_cyan())));
+        }
+    }
+    Text::from(lines)
+}
+
 fn stream_lines(state: &AppState) -> Vec<Line<'static>> {
     let busy = state.assistant_busy || state.running;
     let spinner = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
@@ -1298,17 +1424,13 @@ fn stream_lines(state: &AppState) -> Vec<Line<'static>> {
     let mut lines = vec![
         Line::from(vec![
             Span::styled(
-                format!("agent {marker}"),
+                format!("codex {marker}"),
                 Style::default()
-                    .fg(Color::LightCyan)
+                    .fg(theme_cyan())
                     .add_modifier(Modifier::BOLD),
             ),
             Span::styled(
-                format!(
-                    " · {status} · ctx {}% · {}",
-                    state.context_remaining_percent(),
-                    compact_path(&state.working_directory)
-                ),
+                format!(" · {status} · stream",),
                 Style::default().fg(theme_muted()),
             ),
         ]),
@@ -1324,7 +1446,7 @@ fn stream_lines(state: &AppState) -> Vec<Line<'static>> {
             }),
         ));
         lines.push(Line::styled(
-            "└ type a message",
+            "└ press c to compose · Ctrl+Enter sends · /help lists commands",
             Style::default().fg(theme_muted()),
         ));
         return lines;
@@ -1405,19 +1527,35 @@ fn compact_path(path: &str) -> String {
 }
 
 fn theme_background() -> Color {
-    Color::Rgb(9, 13, 20)
+    Color::Rgb(3, 7, 18)
 }
 
 fn theme_panel() -> Color {
-    Color::Rgb(15, 23, 34)
+    Color::Rgb(8, 15, 29)
+}
+
+fn theme_status() -> Color {
+    Color::Rgb(10, 20, 38)
 }
 
 fn theme_foreground() -> Color {
-    Color::Rgb(226, 232, 240)
+    Color::Rgb(229, 237, 248)
 }
 
 fn theme_muted() -> Color {
-    Color::Rgb(148, 163, 184)
+    Color::Rgb(126, 145, 169)
+}
+
+fn theme_border() -> Color {
+    Color::Rgb(43, 67, 96)
+}
+
+fn theme_cyan() -> Color {
+    Color::Rgb(0, 210, 255)
+}
+
+fn theme_purple() -> Color {
+    Color::Rgb(182, 128, 255)
 }
 
 fn pane_block<'a>(title: impl Into<Line<'a>>, active: bool) -> Block<'a> {
@@ -1425,11 +1563,7 @@ fn pane_block<'a>(title: impl Into<Line<'a>>, active: bool) -> Block<'a> {
 }
 
 fn pane_block_accent<'a>(title: impl Into<Line<'a>>, active: bool, accent: Color) -> Block<'a> {
-    let color = if active {
-        Color::Rgb(45, 212, 191)
-    } else {
-        accent
-    };
+    let color = if active { theme_cyan() } else { accent };
     Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(color))
@@ -1730,6 +1864,32 @@ mod tests {
         assert!(!state.numbered_options_available);
         assert!(!state.select_numbered_option('5'));
         assert!(!state.prompt_active);
+    }
+
+    #[test]
+    fn composer_keeps_multiline_text_and_only_control_enter_submits() {
+        let mut state = AppState::default();
+        state.prompt_active = true;
+        state.prompt = "inspect the repository\nthen summarize it".into();
+        let text = composer_text(&state);
+        assert_eq!(text.lines.len(), 2);
+        assert!(text.lines[0]
+            .spans
+            .iter()
+            .any(|span| span.content == "inspect the repository"));
+        assert!(text.lines[1]
+            .spans
+            .iter()
+            .any(|span| span.content == "then summarize it"));
+        assert!(text.lines[1].spans.iter().any(|span| span.content == "▍"));
+        assert!(!composer_should_submit(&KeyEvent::new(
+            KeyCode::Enter,
+            KeyModifiers::SHIFT,
+        )));
+        assert!(composer_should_submit(&KeyEvent::new(
+            KeyCode::Enter,
+            KeyModifiers::CONTROL,
+        )));
     }
 
     #[test]
