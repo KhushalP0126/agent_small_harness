@@ -11,6 +11,7 @@ from __future__ import annotations
 import ast
 import json
 import os
+import platform
 import re
 import subprocess
 import sys
@@ -55,10 +56,6 @@ The user has explicitly asked to plan, build, create, design, implement, or chan
 {"kind":"questionnaire","message":"short introduction","questions":[{"question_text":"...","options":["...","..."]}]}
 Ask 2 to 4 high-impact clarification questions. Give each question 2 to 4 concise, mutually distinct choices. Do not include Other; the application adds it. Focus on behavior, scope, constraints, data, interfaces, and acceptance criteria.
 Never return markdown fences around the JSON. The application creates a formal spec only after the questionnaire is completed or the user explicitly requests a draft."""
-CHAT_SYSTEM_PROMPT = """You are a concise local coding assistant.
-The user has not asked to plan or build software. Respond conversationally in 1 to 3 useful sentences. Do not create a questionnaire, specification, implementation plan, or code unless the user explicitly asks to plan, build, create, design, implement, or change software. Return JSON only in this shape:
-{"kind":"chat","message":"your concise response"}
-Never return markdown fences around the JSON."""
 SPEC_SHEET_SYSTEM_PROMPT = """You are a software specification architect.
 Fill out the supplied execution spec sheet from the conversation and questionnaire answers.
 Return JSON only, with no markdown fence and no commentary, using exactly this shape:
@@ -325,14 +322,40 @@ class Bridge:
             )
             return
         self._pending_tool_diff = None
-        self.writer.emit("chat_message", role="user", content=f"[repository task] {task}")
+        self._chat_history.append({"role": "user", "content": task})
+        self._chat_history = self._chat_history[-MAX_CHAT_MESSAGES:]
+        self.writer.emit("chat_message", role="user", content=task)
         self._start_assistant_task(
             "repository_tools",
-            lambda: self._run_tool_task(task, selected_provider),
+            lambda: self._run_tool_task(
+                task,
+                selected_provider,
+                allowed_tools=(
+                    "search_directory",
+                    "read_file",
+                    "apply_search_replace",
+                    "execute_script",
+                ),
+            ),
         )
 
-    def _run_tool_task(self, task: str, provider: str) -> None:
+    def _run_tool_task(
+        self,
+        task: str,
+        provider: str,
+        *,
+        allowed_tools: tuple[str, ...] | None = None,
+    ) -> None:
         proposals: list[ApplySearchReplaceResponse] = []
+        if allowed_tools is None:
+            allowed_tools = (
+                "search_directory",
+                "read_file",
+                "apply_search_replace",
+            ) if _is_filesystem_mutation_request(task) else (
+                "search_directory",
+                "read_file",
+            )
 
         def on_tool_result(record: ToolCallRecord, raw_value: Any) -> None:
             ok = bool(record.result.get("ok"))
@@ -352,10 +375,14 @@ class Bridge:
             build_default_tool_registry(repository_root=self.tool_repository_root),
             max_turns=8,
             on_tool_result=on_tool_result,
+            allowed_tools=allowed_tools,
         ).run(task)
+        answer = run.final_answer or "I could not produce a final answer."
+        self._chat_history.append({"role": "assistant", "content": answer})
+        self._chat_history = self._chat_history[-MAX_CHAT_MESSAGES:]
         self.writer.emit(
             "tool_answer",
-            answer=run.final_answer,
+            answer=answer,
             exhausted=run.exhausted,
             call_count=len(run.calls),
         )
@@ -381,7 +408,10 @@ class Bridge:
         if provider == "deepseek":
             return lambda prompt: self._client().generate(
                 prompt,
-                system="Return one repository tool-call JSON object only.",
+                system=(
+                    "Return one repository tool-call JSON object only. "
+                    f"Host operating system: {_host_operating_system()}."
+                ),
             )
         client = OllamaClient()
         return lambda prompt: client.generate(
@@ -392,7 +422,10 @@ class Bridge:
                 num_predict=1200,
                 num_ctx=8192,
             ),
-            system="Return one repository tool-call JSON object only.",
+            system=(
+                "Return one repository tool-call JSON object only. "
+                f"Host operating system: {_host_operating_system()}."
+            ),
         )
 
     def resolve_tool_diff(self, approved: bool) -> None:
@@ -447,25 +480,12 @@ class Bridge:
     def _run_chat(self) -> None:
         latest = self._chat_history[-1]["content"] if self._chat_history else ""
         planning_requested = _should_start_planning(latest)
-        if _should_use_chat_tools(latest) and not planning_requested:
-            registry = build_default_tool_registry(
-                repository_root=self.tool_repository_root,
-            )
-            registry.unregister("apply_search_replace")
-            registry.unregister("execute_script")
-            run = ToolCallingAgent(
-                self._tool_generator("qwen"),
-                registry,
-                max_turns=3,
-            ).run(latest)
-            message = run.final_answer or "I couldn't find enough repository information to answer that."
-            self._chat_history.append({"role": "assistant", "content": message})
-            self._chat_history = self._chat_history[-MAX_CHAT_MESSAGES:]
-            self.writer.emit("chat_message", role="assistant", content=message)
+        if not planning_requested:
+            self._run_tool_task(latest, "qwen")
             return
         response = self._client().generate(
             self._chat_prompt(),
-            system=(QUESTIONNAIRE_SYSTEM_PROMPT if planning_requested else CHAT_SYSTEM_PROMPT),
+            system=QUESTIONNAIRE_SYSTEM_PROMPT,
         ).strip()
         message, questions = _parse_questionnaire_response(response)
         if not planning_requested:
@@ -496,6 +516,7 @@ class Bridge:
     def _chat_prompt(self) -> str:
         return "\n\n".join(
             [
+                f"HOST OPERATING SYSTEM: {_host_operating_system()}",
                 _preference_context(self._load_preferences()),
                 "CONVERSATION:\n" + _chat_transcript(self._chat_history),
                 "Respond to the latest user message.",
@@ -963,22 +984,33 @@ def _dotenv_values(path: Path) -> dict[str, str]:
     return values
 
 
-def _should_use_chat_tools(message: str) -> bool:
-    """Route explicit repository questions through bounded read-only tools."""
+def _is_filesystem_mutation_request(message: str) -> bool:
     lowered = message.casefold()
-    cues = (
-        "read the file",
-        "read_file",
-        "inspect the repo",
-        "inspect the repository",
-        "search the repo",
-        "search the repository",
-        "where is",
-        "what is in",
-        "look at the code",
-        "find the file",
+    filesystem_cues = (
+        "create a file",
+        "create file",
+        "create a directory",
+        "create directory",
+        "make a directory",
+        "make directory",
+        "mkdir ",
+        "write a file",
+        "add a file",
+        "delete file",
+        "delete a file",
+        "remove file",
+        "remove a file",
+        "touch ",
     )
-    return any(cue in lowered for cue in cues)
+    return any(cue in lowered for cue in filesystem_cues)
+
+
+def _host_operating_system() -> str:
+    system = platform.system()
+    return {"Darwin": "macOS", "Windows": "Windows", "Linux": "Linux"}.get(
+        system,
+        system or "unknown",
+    )
 
 
 def _should_start_planning(message: str) -> bool:

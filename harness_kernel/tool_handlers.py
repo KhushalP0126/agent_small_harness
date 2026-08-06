@@ -124,6 +124,7 @@ class ApplySearchReplaceRequest:
     path: str
     search: str
     replace: str
+    operation: str = "replace"
 
 
 @dataclass(frozen=True)
@@ -133,6 +134,8 @@ class ApplySearchReplaceResponse:
     replacements: int
     proposed_content: str
     original_sha256: str
+    operation: str = "replace"
+    original_exists: bool = True
     applied: bool = False
 
 
@@ -384,18 +387,38 @@ def _make_apply_search_replace_handler(
             repository_root,
             requested if requested.is_absolute() else request.root / requested,
         )
-        if not path.is_file():
-            raise ToolError(f"File does not exist: {request.path}", kind="not_file")
-        if not request.search:
-            raise ToolError("Search text cannot be empty", kind="invalid_search")
-        original = path.read_text(encoding="utf-8")
-        replacements = original.count(request.search)
-        if replacements == 0:
+        operation = request.operation.casefold().strip() or "replace"
+        if operation not in {"replace", "create", "delete"}:
             raise ToolError(
-                f"Search text was not found in {request.path}",
-                kind="search_not_found",
+                f"Unsupported file operation: {request.operation}",
+                kind="invalid_operation",
             )
-        proposed = original.replace(request.search, request.replace)
+        exists = path.exists()
+        if exists and not path.is_file():
+            raise ToolError(f"Path is not a regular file: {request.path}", kind="not_file")
+        if operation == "create":
+            if exists:
+                raise ToolError(f"File already exists: {request.path}", kind="already_exists")
+            original = ""
+            proposed = request.replace
+            replacements = 1
+        else:
+            if not path.is_file():
+                raise ToolError(f"File does not exist: {request.path}", kind="not_file")
+            original = path.read_text(encoding="utf-8")
+            if operation == "delete":
+                proposed = ""
+                replacements = 1
+            else:
+                if not request.search:
+                    raise ToolError("Search text cannot be empty", kind="invalid_search")
+                replacements = original.count(request.search)
+                if replacements == 0:
+                    raise ToolError(
+                        f"Search text was not found in {request.path}",
+                        kind="search_not_found",
+                    )
+                proposed = original.replace(request.search, request.replace)
         relative = repository_relative(repository_root, path)
         diff = "".join(
             difflib.unified_diff(
@@ -411,6 +434,8 @@ def _make_apply_search_replace_handler(
             replacements=replacements,
             proposed_content=proposed,
             original_sha256=hashlib.sha256(original.encode("utf-8")).hexdigest(),
+            operation=operation,
+            original_exists=exists,
             applied=False,
         )
 
@@ -419,7 +444,7 @@ def _make_apply_search_replace_handler(
         request_type=ApplySearchReplaceRequest,
         response_type=ApplySearchReplaceResponse,
         invoke=invoke,
-        description="Prepare a unified diff for explicit review; never write the repository file.",
+        description="Prepare a reviewed create, replace, or delete diff; never write repository files directly.",
     )
 
 
@@ -435,16 +460,24 @@ def apply_reviewed_search_replace(
         return proposal
     root = Path(repository_root).resolve()
     path = resolve_within_root(root, proposal.path)
-    if not path.is_file():
-        raise ToolError(f"File does not exist: {proposal.path}", kind="not_file")
-    current = path.read_text(encoding="utf-8")
-    current_sha256 = hashlib.sha256(current.encode("utf-8")).hexdigest()
-    if current_sha256 != proposal.original_sha256:
-        raise ToolError(
-            f"File changed after diff review: {proposal.path}",
-            kind="stale_diff",
-        )
-    path.write_text(proposal.proposed_content, encoding="utf-8")
+    if proposal.original_exists:
+        if not path.is_file():
+            raise ToolError(f"File does not exist: {proposal.path}", kind="not_file")
+        current = path.read_text(encoding="utf-8")
+        current_sha256 = hashlib.sha256(current.encode("utf-8")).hexdigest()
+        if current_sha256 != proposal.original_sha256:
+            raise ToolError(
+                f"File changed after diff review: {proposal.path}",
+                kind="stale_diff",
+            )
+    elif path.exists():
+        raise ToolError(f"File appeared after diff review: {proposal.path}", kind="stale_diff")
+
+    if proposal.operation == "delete":
+        path.unlink()
+    else:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(proposal.proposed_content, encoding="utf-8")
     return dataclass_replace(proposal, applied=True)
 
 

@@ -114,8 +114,10 @@ when you need a Rust-specific command.
 
 The primary view is a quiet, linear event stream: a compact session line, `─`
 turn dividers, and `•`/`└` event trees. A single `>` prompt remains pinned at
-the bottom. Press `c` or `p` to chat with the architect without executing
-anything. New project ideas automatically open a typed 2–4 question
+the bottom. Press `c`, `p`, or `a` to focus the same unified prompt. Every
+non-planning message goes through the local Qwen 1.5B assistant with bounded,
+read-only repository tools available when they help; ordinary conversation
+finishes directly without a tool call. New project ideas automatically open a typed 2–4 question
 clarification flow. Each question has numbered choices plus a mandatory `Other`
 option; `1`–`5` answers locally, while `Other` opens free-text input.
 Completing the final question asks DeepSeek to fill a strict JSON execution
@@ -162,20 +164,23 @@ script, API, CLI, game, repository, or feature. Non-coding requests stay in
 ordinary chat. Press `m` to build a map on loopback, then `o` to open its
 temporary browser page.
 
-Chat and tools share this intake rule: a planning request sent through tools is
-routed to the same questionnaire and spec-review path before any tool calls.
+Chat and tools share one intake rule: an explicit software-planning request is
+routed to the same questionnaire and spec-review path before any repository
+tool calls. Requests to create, replace, or delete a file can propose a diff,
+but remain blocked until the user presses `y`.
 
 Chat roles are visually distinct: user labels are green, assistant labels and
 responses are cyan, saved-memory notices are magenta, and warnings/errors keep
 their yellow/red emphasis. A compact spinner in the session line animates while
 DeepSeek or an approved harness run is active without blocking keyboard input.
 Typed questionnaire events use immediate `1`–`5` selection without an IPC
-request per answer. Plain assistant messages that contain at least two
-repository-inspection cues are routed through a bounded, read-only local tool
-loop (search/read only); edits and script execution still require the explicit
-tools mode and review gate. Plain assistant messages that contain at least two
-numbered choices retain the lighter quick-reference behavior. Ordinary numbers
-retain their normal typing behavior everywhere else.
+request per answer. The chat prompt includes the detected host OS, so command
+guidance does not need an OS follow-up. Explicit repository inspection and
+filesystem requests route through the bounded local tool loop. Create, replace,
+and delete actions always produce a reviewable diff; `y` is still required
+before the local repository changes. Plain assistant messages that contain at
+least two numbered choices retain the lighter quick-reference behavior.
+Ordinary numbers retain their normal typing behavior everywhere else.
 
 `m` prepares the repository map on loopback; `o` opens it in the browser.
 Outside repository focus, `r` retains the coding-capability shortcut. `d` opens
@@ -310,10 +315,11 @@ The typed registry also exposes four repository-scoped model tools:
   skipping generated and dependency directories.
 - `read_file` returns bounded repository-relative file content with an explicit
   truncation marker.
-- `apply_search_replace` prepares a unified diff and proposed content but never
-  writes it; `applied` remains false until a separate human approval path is
-  invoked. The approval helper verifies the file hash again before writing, so
-  an approved but stale diff is rejected.
+- `apply_search_replace` prepares a unified diff and proposed content for
+  replacement, file creation, or deletion but never writes it; `applied`
+  remains false until a separate human approval path is invoked. The approval
+  helper verifies the file state again before writing, so a stale diff is
+  rejected.
 - `execute_script` runs generated source in a disposable Docker sandbox by
   default: the repository is mounted read-only, networking is disabled, API
   keys are not inherited, and CPU/memory/process/output/time limits are
@@ -336,11 +342,14 @@ make sandbox-run SOURCE=/tmp/candidate.py LANGUAGE=python
 The returned JSON contains the final answer and every typed call/result. Diffs
 remain review-only; this command cannot approve or apply them.
 
-The Rust TUI exposes the same loop with `a`. Enter a repository inspection or
-change request and the bridge streams each typed tool call into the main output.
-Read-only tasks finish with an assistant answer. A proposed search/replace opens
-a diff modal; `y` applies it only after the repository path and reviewed file
-hash are checked again, while `n` or `Esc` discards it without writing.
+The Rust TUI sends all messages through the same loop. Enter a repository
+inspection or change request and the bridge streams each typed tool call into
+the main output. Read-only tasks finish with an assistant answer. A proposed
+create/replace/delete diff opens a review modal; `y` applies it only after the
+repository path and reviewed file state are checked again, while `n` or `Esc`
+discards it without writing. The prompt also accepts `/help`, `/map`, `/open`,
+`/check <task>`, `/history`, `/spec`, `/model`, `/remember <note>`,
+`/mention <path>`, and `/tools <task>`.
 
 ### Hardened execution and language adapters
 

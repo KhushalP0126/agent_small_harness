@@ -139,6 +139,53 @@ class TuiBridgeTests(unittest.TestCase):
         self.assertEqual(diff["path"], "main.py")
         self.assertTrue(resolved["applied"])
 
+    def test_chat_filesystem_request_uses_a_reviewed_tool_diff(self) -> None:
+        responses = iter(
+            [
+                json.dumps(
+                    {
+                        "action": "tool",
+                        "tool": "execute_script",
+                        "arguments": {"root": ".", "source": "print('wrong tool')"},
+                    }
+                ),
+                json.dumps(
+                    {
+                        "action": "tool",
+                        "tool": "apply_search_replace",
+                        "arguments": {
+                            "root": ".",
+                            "path": "exp/hello.txt",
+                            "operation": "create",
+                            "search": "",
+                            "replace": "hello world\n",
+                        },
+                    }
+                ),
+                json.dumps({"action": "final", "answer": "diff ready"}),
+            ]
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            path = root / "exp" / "hello.txt"
+            bridge = Bridge(
+                EventWriter(self.output),
+                tool_generate_text=lambda _prompt: next(responses),
+                tool_repository_root=root,
+            )
+            bridge.start_chat("Create a directory called exp and add hello world in a text file")
+            diff = self.wait_for_event("tool_diff")
+            self.assertFalse(path.exists())
+            bridge.handle({"cmd": "apply_tool_diff", "approved": True})
+            resolved = self.wait_for_event("tool_diff_resolved")
+
+            self.assertEqual(path.read_text(encoding="utf-8"), "hello world\n")
+        self.assertEqual(diff["path"], "exp/hello.txt")
+        self.assertTrue(resolved["applied"])
+        rejected = next(event for event in self.events() if event["type"] == "tool_call")
+        self.assertFalse(rejected["ok"])
+        self.assertIn("declared tool", rejected["summary"])
+
     def test_profile_samples_emits_typed_result(self) -> None:
         self.bridge.handle(
             {
@@ -326,13 +373,13 @@ class TuiBridgeTests(unittest.TestCase):
         self.assertEqual(self.events()[-1], {"type": "done", "status": "failed"})
 
     def test_chat_is_non_mutating_and_emits_assistant_reply(self) -> None:
-        client = MagicMock()
-        client.generate.return_value = "Hello. What would you like to plan?"
         with tempfile.TemporaryDirectory() as tmpdir:
             bridge = Bridge(
                 EventWriter(self.output),
                 memory_path=Path(tmpdir) / "memory.json",
-                architect_client=client,
+                tool_generate_text=lambda _prompt: json.dumps(
+                    {"action": "final", "answer": "Hello. How can I help?"}
+                ),
             )
             bridge.handle({"cmd": "chat", "text": "hello"})
             reply = self.wait_for_event("chat_message")
@@ -342,29 +389,28 @@ class TuiBridgeTests(unittest.TestCase):
             ) < 2:
                 time.sleep(0.01)
         messages = [event for event in self.events() if event["type"] == "chat_message"]
+        answer = self.wait_for_event("tool_answer")
         self.assertEqual(reply["role"], "user")
-        self.assertEqual(messages[-1]["role"], "assistant")
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(answer["answer"], "Hello. How can I help?")
         self.assertIsNone(bridge._process)
 
-    def test_plain_chat_cannot_open_a_questionnaire(self) -> None:
-        client = MagicMock()
-        client.generate.return_value = json.dumps(
-            {
-                "kind": "questionnaire",
-                "message": "This must stay chat.",
-                "questions": [
-                    {"question_text": "Target?", "options": ["CLI", "Web"]},
-                    {"question_text": "Storage?", "options": ["JSON", "SQLite"]},
-                ],
-            }
+    def test_plain_chat_uses_the_same_read_only_tool_loop(self) -> None:
+        bridge = Bridge(
+            EventWriter(self.output),
+            tool_generate_text=lambda _prompt: json.dumps(
+                {"action": "final", "answer": "This must stay chat."}
+            ),
         )
-        bridge = Bridge(EventWriter(self.output), architect_client=client)
         bridge._chat_history.append({"role": "user", "content": "hello"})
         bridge._run_chat()
 
         self.assertFalse(any(event["type"] == "questionnaire" for event in self.events()))
-        self.assertEqual(self.events()[-1]["content"], "This must stay chat.")
-        self.assertIn("Do not create a questionnaire", client.generate.call_args.kwargs["system"])
+        self.assertEqual(self.events()[-1]["answer"], "This must stay chat.")
+        self.assertEqual(
+            bridge._chat_history[-1],
+            {"role": "assistant", "content": "This must stay chat."},
+        )
 
     def test_planning_intent_is_explicit(self) -> None:
         self.assertTrue(_should_start_planning("Help me plan a terminal app"))
@@ -478,12 +524,15 @@ class TuiBridgeTests(unittest.TestCase):
 
     def test_draft_spec_uses_chat_history_without_executing(self) -> None:
         client = MagicMock()
-        client.generate.side_effect = ["Let's plan it.", completed_spec_sheet()]
+        client.generate.return_value = completed_spec_sheet()
         with tempfile.TemporaryDirectory() as tmpdir:
             bridge = Bridge(
                 EventWriter(self.output),
                 memory_path=Path(tmpdir) / "memory.json",
                 architect_client=client,
+                tool_generate_text=lambda _prompt: json.dumps(
+                    {"action": "final", "answer": "Let's plan it."}
+                ),
             )
             bridge.start_chat("Build a parser")
             self.wait_for_event("assistant_status")

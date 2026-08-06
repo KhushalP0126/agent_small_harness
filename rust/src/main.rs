@@ -5,7 +5,7 @@ mod protocol;
 use std::fs;
 use std::io;
 use std::panic;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::time::Duration;
 
@@ -84,7 +84,6 @@ struct AppState {
     history_detail: Option<String>,
     prompt: String,
     prompt_active: bool,
-    tool_prompt_active: bool,
     assistant_busy: bool,
     numbered_options_available: bool,
     clarification_questions: Vec<ClarificationQuestion>,
@@ -129,7 +128,6 @@ impl Default for AppState {
             history_detail: None,
             prompt: String::new(),
             prompt_active: false,
-            tool_prompt_active: false,
             assistant_busy: false,
             numbered_options_available: false,
             clarification_questions: Vec::new(),
@@ -418,8 +416,14 @@ impl AppState {
                 exhausted,
                 call_count,
             } => self.logs.push(format!(
-                "[assistant] repository task {} after {call_count} tool call(s): {answer}",
-                if exhausted { "stopped at its limit" } else { "finished" }
+                "[assistant] {answer}{}",
+                if call_count == 0 {
+                    String::new()
+                } else if exhausted {
+                    format!(" (tool loop stopped after {call_count} call(s))")
+                } else {
+                    format!(" ({call_count} tool call(s))")
+                }
             )),
             HarnessEvent::ToolDiff {
                 path,
@@ -705,7 +709,6 @@ async fn run_loop(
                         match key.code {
                             KeyCode::Esc => {
                                 state.prompt_active = false;
-                                state.tool_prompt_active = false;
                                 state.questionnaire_other_active = false;
                                 state.prompt.clear();
                             }
@@ -730,21 +733,8 @@ async fn run_loop(
                             }
                             KeyCode::Enter if !state.prompt.trim().is_empty() && !state.assistant_busy => {
                                 let text = std::mem::take(&mut state.prompt);
-                                if state.tool_prompt_active {
-                                    send_command(
-                                        child_stdin,
-                                        &HarnessCommand::ToolTask {
-                                            text,
-                                            provider: "qwen".into(),
-                                        },
-                                    )
-                                    .await?;
-                                    state.logs.push("repository tool task started…".into());
-                                } else {
-                                    send_command(child_stdin, &HarnessCommand::Chat { text }).await?;
-                                }
+                                send_prompt_command(child_stdin, &mut state, text, repo_root).await?;
                                 state.prompt_active = false;
-                                state.tool_prompt_active = false;
                             }
                             KeyCode::Char(digit @ '1'..='5')
                                 if state.prompt.is_empty()
@@ -896,14 +886,12 @@ async fn run_loop(
                             if state.mode == AppMode::Chat && !state.assistant_busy =>
                         {
                             state.prompt_active = true;
-                            state.tool_prompt_active = false;
                         }
                         KeyCode::Char('a')
                             if state.mode == AppMode::Chat && !state.assistant_busy =>
                         {
                             state.prompt.clear();
                             state.prompt_active = true;
-                            state.tool_prompt_active = true;
                         }
                         KeyCode::Char(digit @ '1'..='5')
                             if state.select_numbered_option(digit) => {}
@@ -1017,6 +1005,91 @@ async fn send_command(stdin: &mut ChildStdin, command: &HarnessCommand) -> Resul
     encoded.push(b'\n');
     stdin.write_all(&encoded).await?;
     stdin.flush().await?;
+    Ok(())
+}
+
+async fn send_prompt_command(
+    stdin: &mut ChildStdin,
+    state: &mut AppState,
+    text: String,
+    repo_root: &Path,
+) -> Result<()> {
+    let trimmed = text.trim();
+    let (command, argument) = trimmed
+        .split_once(char::is_whitespace)
+        .map_or((trimmed, ""), |(command, argument)| {
+            (command, argument.trim())
+        });
+    match command {
+        "/help" => state.logs.push(
+            "commands: /map /open /check <task> /history /spec /model /remember <note> /mention <path> /tools <task>"
+                .into(),
+        ),
+        "/map" => {
+            state.repo_mode = "diagram".into();
+            send_command(
+                stdin,
+                &HarnessCommand::RepoMap {
+                    root: repo_root.display().to_string(),
+                    focus: String::new(),
+                    mode: "diagram".into(),
+                },
+            )
+            .await?;
+            state.logs.push("building browser map…".into());
+        }
+        "/open" => {
+            if let Some(url) = state.repo_map_url.as_deref() {
+                open_localhost(url);
+            } else {
+                state.logs.push("map is not ready yet; use /map first".into());
+            }
+        }
+        "/history" => {
+            send_command(
+                stdin,
+                &HarnessCommand::History {
+                    run_id: None,
+                    limit: None,
+                },
+            )
+            .await?;
+            state.logs.push("loading run history…".into());
+        }
+        "/spec" => {
+            send_command(stdin, &HarnessCommand::DraftSpec).await?;
+            state.mode = AppMode::DraftingSpec;
+        }
+        "/model" => state.logs.push("model: qwen2.5-coder:1.5b (local)".into()),
+        "/check" | "/tools" if argument.is_empty() => {
+            state.logs.push(format!("usage: {command} <repository task>"));
+        }
+        "/check" => {
+            send_command(
+                stdin,
+                &HarnessCommand::Chat {
+                    text: format!("Inspect and check the repository for: {argument}"),
+                },
+            )
+            .await?;
+        }
+        "/tools" => {
+            send_command(
+                stdin,
+                &HarnessCommand::Chat {
+                    text: argument.to_owned(),
+                },
+            )
+            .await?;
+        }
+        "/remember" | "/mention" => {
+            send_command(stdin, &HarnessCommand::Chat { text }).await?;
+        }
+        command if command.starts_with('/') => {
+            state.logs.push(format!("unknown command: {command}; use /help"));
+        }
+        _ => send_command(stdin, &HarnessCommand::Chat { text }).await?,
+    }
     Ok(())
 }
 

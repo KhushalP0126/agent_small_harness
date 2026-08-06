@@ -56,12 +56,14 @@ class ToolCallingAgent:
         max_turns: int = 8,
         transcript_max_chars: int = DEFAULT_TRANSCRIPT_MAX_CHARS,
         on_tool_result: ToolResultCallback | None = None,
+        allowed_tools: tuple[str, ...] = TOOL_NAMES,
     ) -> None:
         self.generate_text = generate_text
         self.registry = registry
         self.max_turns = max(1, min(int(max_turns), 20))
         self.transcript_max_chars = max(256, int(transcript_max_chars))
         self.on_tool_result = on_tool_result
+        self.allowed_tools = tuple(tool for tool in allowed_tools if tool in TOOL_NAMES)
 
     def run(self, task: str, *, max_turns_override: int | None = None) -> ToolCallingRun:
         transcript: list[dict] = []
@@ -70,7 +72,14 @@ class ToolCallingAgent:
         turn_limit = self.max_turns if max_turns_override is None else max(1, min(int(max_turns_override), 20))
         for turn in range(1, turn_limit + 1):
             response = self.generate_text(
-                _tool_prompt(task, transcript, turn, turn_limit, self.transcript_max_chars)
+                _tool_prompt(
+                    task,
+                    transcript,
+                    turn,
+                    turn_limit,
+                    self.transcript_max_chars,
+                    self.allowed_tools,
+                )
             )
             action = _parse_action(response)
             if action["action"] == "final":
@@ -101,7 +110,7 @@ class ToolCallingAgent:
                     "error_kind": "repeated_tool_call",
                     "error": "This exact tool call was already made. Return a final answer or choose a different tool.",
                 }
-            elif tool not in TOOL_NAMES or not isinstance(arguments, dict):
+            elif tool not in self.allowed_tools or not isinstance(arguments, dict):
                 result_payload = {
                     "ok": False,
                     "error_kind": "invalid_tool_call",
@@ -191,21 +200,53 @@ def _tool_prompt(
     turn: int,
     max_turns: int,
     transcript_max_chars: int = DEFAULT_TRANSCRIPT_MAX_CHARS,
+    allowed_tools: tuple[str, ...] = TOOL_NAMES,
 ) -> str:
-    return "\n".join(
+    instructions = [
+        "UNIFIED CLI ASSISTANT",
+        "Answer ordinary conversation directly. Use the declared repository tools only when they add useful evidence or perform a requested reviewed change.",
+        f"Available tools: {', '.join(allowed_tools)}.",
+        "No tool writes repository files. apply_search_replace returns an unapplied diff for human review.",
+    ]
+    if "execute_script" in allowed_tools:
+        instructions.append(
+            "execute_script runs generated source in a disposable Docker sandbox with no network by default; language defaults to Python and may be python, c, cpp, rust, or javascript."
+        )
+    elif "apply_search_replace" in allowed_tools:
+        instructions.append(
+            "For a filesystem change, use apply_search_replace with operation=create, replace, or delete; execute_script is unavailable."
+        )
+    instructions.extend(
         [
-            "REPOSITORY TOOL-CALLING MODE",
-            "Inspect and reason about the repository using only the declared tools.",
-            "No tool writes repository files. apply_search_replace returns an unapplied diff for human review.",
-            "execute_script runs generated source in a disposable Docker sandbox with no network by default; language defaults to Python and may be python, c, cpp, rust, or javascript.",
+            "For a greeting, explanation, or other non-repository question, return action=final immediately without a tool call.",
             "If the latest tool result answers the task, return action=final immediately. Never repeat an identical tool call.",
             "On the final allowed turn, return action=final now; do not call another tool.",
             "Return exactly one JSON object and no markdown.",
             "To call a tool:",
-            '{"action":"tool","tool":"search_directory","arguments":{"root":".","pattern":"*.py","max_results":50}}',
-            '{"action":"tool","tool":"read_file","arguments":{"root":".","path":"src/main.py","max_bytes":64000}}',
-            '{"action":"tool","tool":"apply_search_replace","arguments":{"root":".","path":"src/main.py","search":"old","replace":"new"}}',
-            '{"action":"tool","tool":"execute_script","arguments":{"root":".","language":"python","source":"print(1)","timeout_seconds":10}}',
+        ]
+    )
+    if "search_directory" in allowed_tools:
+        instructions.append(
+            '{"action":"tool","tool":"search_directory","arguments":{"root":".","pattern":"*.py","max_results":50}}'
+        )
+    if "read_file" in allowed_tools:
+        instructions.append(
+            '{"action":"tool","tool":"read_file","arguments":{"root":".","path":"src/main.py","max_bytes":64000}}'
+        )
+    if "apply_search_replace" in allowed_tools:
+        instructions.extend(
+            [
+                '{"action":"tool","tool":"apply_search_replace","arguments":{"root":".","path":"src/main.py","search":"old","replace":"new"}}',
+                '{"action":"tool","tool":"apply_search_replace","arguments":{"root":".","path":"exp/hello.txt","operation":"create","search":"","replace":"hello world\\n"}}',
+                '{"action":"tool","tool":"apply_search_replace","arguments":{"root":".","path":"obsolete.txt","operation":"delete","search":"","replace":""}}',
+            ]
+        )
+    if "execute_script" in allowed_tools:
+        instructions.append(
+            '{"action":"tool","tool":"execute_script","arguments":{"root":".","language":"python","source":"print(1)","timeout_seconds":10}}'
+        )
+    instructions.extend(
+        [
             "When finished:",
             '{"action":"final","answer":"concise evidence-based answer"}',
             f"Turn: {turn}/{max_turns}",
@@ -215,6 +256,7 @@ def _tool_prompt(
             _bounded_transcript(transcript, transcript_max_chars),
         ]
     )
+    return "\n".join(instructions)
 
 
 def _parse_action(response: str) -> dict:
@@ -252,6 +294,7 @@ def _request_from_arguments(tool: str, arguments: dict):
             path=str(arguments.get("path") or ""),
             search=str(arguments.get("search") or ""),
             replace=str(arguments.get("replace") or ""),
+            operation=str(arguments.get("operation") or "replace"),
         )
     return ExecuteScriptRequest(
         root=root,

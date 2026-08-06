@@ -255,6 +255,43 @@ class ToolRegistryTests(unittest.TestCase):
             self.assertFalse(unsafe.ok)
             self.assertEqual(unsafe.error_kind, "unsafe_script")
 
+    def test_reviewed_file_create_and_delete_are_deferred_until_approval(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            registry = build_default_tool_registry(repository_root=root)
+            created_path = root / "exp" / "hello.txt"
+
+            create = registry.dispatch(
+                "apply_search_replace",
+                ApplySearchReplaceRequest(
+                    root=Path("."),
+                    path="exp/hello.txt",
+                    search="",
+                    replace="hello world\n",
+                    operation="create",
+                ),
+            )
+            self.assertTrue(create.ok)
+            self.assertFalse(created_path.exists())
+            self.assertIn("+hello world", create.value.diff)
+            apply_reviewed_search_replace(root, create.value, approved=True)
+            self.assertEqual(created_path.read_text(encoding="utf-8"), "hello world\n")
+
+            delete = registry.dispatch(
+                "apply_search_replace",
+                ApplySearchReplaceRequest(
+                    root=Path("."),
+                    path="exp/hello.txt",
+                    search="",
+                    replace="",
+                    operation="delete",
+                ),
+            )
+            self.assertTrue(delete.ok)
+            self.assertTrue(created_path.exists())
+            apply_reviewed_search_replace(root, delete.value, approved=True)
+            self.assertFalse(created_path.exists())
+
     def test_repository_tools_reject_path_and_symlink_escape(self) -> None:
         with TemporaryDirectory() as tmpdir, TemporaryDirectory() as outside_dir:
             root = Path(tmpdir)
