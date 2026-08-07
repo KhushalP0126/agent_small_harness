@@ -97,6 +97,38 @@ class ToolCallingAgentTests(unittest.TestCase):
         self.assertFalse(run.exhausted)
         self.assertIn("diff is prepared", run.final_answer)
 
+    def test_new_file_proposal_finalizes_after_redundant_verification(self) -> None:
+        responses = iter(
+            [
+                json.dumps(
+                    {
+                        "action": "tool",
+                        "tool": "create_file",
+                        "arguments": {
+                            "root": ".",
+                            "path": "docs/notes.md",
+                            "content": "# Notes\n",
+                        },
+                    }
+                ),
+                json.dumps(
+                    {
+                        "action": "tool",
+                        "tool": "search_directory",
+                        "arguments": {"root": ".", "pattern": "docs/notes.md"},
+                    }
+                ),
+            ]
+        )
+        with TemporaryDirectory() as tmpdir:
+            run = ToolCallingAgent(
+                lambda _prompt: next(responses),
+                build_default_tool_registry(repository_root=Path(tmpdir)),
+            ).run("Create documentation notes")
+
+        self.assertFalse(run.exhausted)
+        self.assertIn("diff is prepared", run.final_answer)
+
     def test_model_can_search_read_and_finish_across_turns(self) -> None:
         responses = iter(
             [

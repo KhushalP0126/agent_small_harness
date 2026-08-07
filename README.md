@@ -115,7 +115,10 @@ when you need a Rust-specific command.
 The primary view is a high-contrast, Codex-inspired linear event stream: a
 compact session line, `─` turn dividers, and `•`/`└` event trees. A persistent
 status strip above the bottom composer shows activity, repository directory,
-remaining context, and the local `qwen2.5-coder:1.5b` model. Press `c`, `p`,
+reported local context, the local `qwen2.5-coder:1.5b` model, and DeepSeek API
+availability. `ctx —` means no local generation has completed yet; after a
+generation it shows the backend-reported token total and remaining share of its
+configured context window. Press `c`, `p`,
 or `a` to focus the same unified multi-line composer; `Enter` adds a line and
 `Ctrl+Enter` sends. Its footer exposes keyboard-first `send`, `/tools`, and
 `/spec` actions. Every
@@ -160,8 +163,11 @@ automatically. Messages containing credential-like preferences are refused by
 the memory extractor.
 
 The session line shows the active directory and current status; the terminal no
-longer renders the diagram or file browser. It also includes an approximate
-remaining-context percentage for the current visible transcript.
+longer renders the diagram or file browser. Context is never inferred from the
+visible log: Ollama reports its prompt/evaluation token counts, while the
+architect API reports its response usage. The local and API records, plus the
+running API cost estimate when available, are persisted in the ignored
+`context.md` session journal.
 Planning questions only begin for an explicit software request: the message
 must include both planning/build intent and a coding target such as an app,
 script, API, CLI, game, repository, or feature. Non-coding requests stay in
@@ -313,7 +319,7 @@ results persist beside behavior and formal evidence.
 
 ### Repository tool-calling agent
 
-The typed registry also exposes four repository-scoped model tools:
+The typed registry exposes six repository-scoped tools:
 
 - `search_directory` performs bounded glob/substring file discovery while
   skipping generated and dependency directories.
@@ -324,6 +330,11 @@ The typed registry also exposes four repository-scoped model tools:
   remains false until a separate human approval path is invoked. The approval
   helper verifies the file state again before writing, so a stale diff is
   rejected.
+- `create_file` is the explicit new-file path. It prepares an empty-to-content
+  unified diff and remains review-only until the same `y` approval gate.
+- `check_code` runs the registered structural and lint engines against one
+  supported repository file (`.py`, `.c`, `.cc`, `.cpp`, or `.cxx`) and returns
+  typed findings without asking a model to guess whether the code passed.
 - `execute_script` runs generated source in a disposable Docker sandbox by
   default: the repository is mounted read-only, networking is disabled, API
   keys are not inherited, and CPU/memory/process/output/time limits are
@@ -352,8 +363,12 @@ the main output. Read-only tasks finish with an assistant answer. A proposed
 create/replace/delete diff opens a review modal; `y` applies it only after the
 repository path and reviewed file state are checked again, while `n` or `Esc`
 discards it without writing. The prompt also accepts `/help`, `/map`, `/open`,
-`/check <task>`, `/history`, `/spec`, `/model`, `/remember <note>`,
+`/check <repository-file>`, `/history`, `/spec`, `/model`, `/remember <note>`,
 `/mention <path>`, and `/tools <task>`.
+
+`/check` is an inline deterministic validation command, not a model prompt. It
+streams the registered engines' pass/fail result and findings for the specified
+repository-relative file into the event stream.
 
 ### Hardened execution and language adapters
 
@@ -864,8 +879,12 @@ make approve-library LIB=clang.cindex
   remain authoritative.
 - [x] Uniform typed dispatch for lint, sandbox execution, both model backends,
   and Deal/CrossHair formal verification.
-- [x] Repository-scoped search/read/diff/script tools plus a bounded Qwen or
-  DeepSeek tool-calling loop; generated diffs remain unapplied for review.
+- [x] Repository-scoped search/read/review-diff/create-file/check/script tools
+  plus a bounded Qwen or DeepSeek tool-calling loop; generated diffs remain
+  unapplied until explicit review.
+- [x] Dual-backend context telemetry: the Rust TUI displays backend-reported
+  local/API usage rather than estimating from visible logs, and records the
+  latest local/API usage plus accumulated API cost in ignored `context.md`.
 - [x] Formal CI dependencies installed on every run so Deal/CrossHair coverage
   does not silently remain skipped.
 - [x] Durable repeated paired comparisons that retain raw drafts, repaired

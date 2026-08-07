@@ -25,7 +25,11 @@ from typing import Any, TextIO
 from agents.artifact_manager import ArtifactManager
 from agents.repo_map_agent import RepoMapAgent
 from agents.tool_calling_agent import ToolCallRecord, ToolCallingAgent
-from backends.architect_client import ArchitectApiClient, ArchitectConfig
+from backends.architect_client import (
+    DEFAULT_ARCHITECT_MODEL,
+    ArchitectApiClient,
+    ArchitectConfig,
+)
 from backends.ollama_client import (
     DEFAULT_OLLAMA_MODEL,
     OllamaClient,
@@ -37,6 +41,10 @@ from harness_kernel.profiling import ProfileResult
 from harness_kernel.event_stream import EVENT_FD_ENV
 from harness_kernel.tool_handlers import (
     ApplySearchReplaceResponse,
+    CheckCodeRequest,
+    CheckCodeResponse,
+    CreateFileResponse,
+    apply_reviewed_create_file,
     apply_reviewed_search_replace,
     build_default_tool_registry,
 )
@@ -51,6 +59,8 @@ MAX_CHAT_MESSAGES = 24
 MAX_PREFERENCES = 50
 MAX_QUESTIONS = 4
 MAX_OPTIONS_PER_QUESTION = 5
+LOCAL_CONTEXT_WINDOW = 8_192
+ARCHITECT_CONTEXT_WINDOW = 65_536
 QUESTIONNAIRE_SYSTEM_PROMPT = """You are an autonomous planning worker and software architect.
 The user has explicitly asked to plan, build, create, design, implement, or change software. Do not write code and do not claim to execute anything. Return JSON only in this shape:
 {"kind":"questionnaire","message":"short introduction","questions":[{"question_text":"...","options":["...","..."]}]}
@@ -134,7 +144,7 @@ class Bridge:
         self._architect_client = architect_client
         self._tool_generate_text = tool_generate_text
         self.tool_repository_root = Path(tool_repository_root or REPO_ROOT).resolve()
-        self._pending_tool_diff: ApplySearchReplaceResponse | None = None
+        self._pending_tool_diff: ApplySearchReplaceResponse | CreateFileResponse | None = None
         self._chat_history: list[dict[str, str]] = []
         self._assistant_busy = False
         self._process: subprocess.Popen[str] | None = None
@@ -187,6 +197,8 @@ class Bridge:
             )
         elif kind == "apply_tool_diff":
             self.resolve_tool_diff(bool(command.get("approved")))
+        elif kind == "check":
+            self.check_code(str(command.get("path") or ""))
         elif kind == "cancel":
             self.cancel()
         elif kind == "repo_map":
@@ -334,6 +346,7 @@ class Bridge:
                     "search_directory",
                     "read_file",
                     "apply_search_replace",
+                    "create_file",
                     "execute_script",
                 ),
             ),
@@ -346,12 +359,13 @@ class Bridge:
         *,
         allowed_tools: tuple[str, ...] | None = None,
     ) -> None:
-        proposals: list[ApplySearchReplaceResponse] = []
+        proposals: list[ApplySearchReplaceResponse | CreateFileResponse] = []
         if allowed_tools is None:
             allowed_tools = (
                 "search_directory",
                 "read_file",
                 "apply_search_replace",
+                "create_file",
             ) if _is_filesystem_mutation_request(task) else (
                 "search_directory",
                 "read_file",
@@ -367,7 +381,7 @@ class Bridge:
                 ok=ok,
                 summary="completed" if ok else error,
             )
-            if isinstance(raw_value, ApplySearchReplaceResponse):
+            if isinstance(raw_value, (ApplySearchReplaceResponse, CreateFileResponse)):
                 proposals.append(raw_value)
 
         run = ToolCallingAgent(
@@ -399,14 +413,14 @@ class Bridge:
                 "tool_diff",
                 path=proposal.path,
                 diff=proposal.diff,
-                replacements=proposal.replacements,
+                replacements=getattr(proposal, "replacements", 1),
             )
 
     def _tool_generator(self, provider: str):
         if self._tool_generate_text is not None:
             return self._tool_generate_text
         if provider == "deepseek":
-            return lambda prompt: self._client().generate(
+            return lambda prompt: self._generate_architect(
                 prompt,
                 system=(
                     "Return one repository tool-call JSON object only. "
@@ -414,18 +428,73 @@ class Bridge:
                 ),
             )
         client = OllamaClient()
-        return lambda prompt: client.generate(
+        return lambda prompt: self._generate_local(
+            client,
+            prompt,
+            system=(
+                "Return one repository tool-call JSON object only. "
+                f"Host operating system: {_host_operating_system()}."
+            ),
+        )
+
+    def _generate_local(self, client: OllamaClient, prompt: str, *, system: str) -> str:
+        response = client.generate(
             prompt,
             model=DEFAULT_OLLAMA_MODEL,
             config=OllamaGenerationConfig(
                 temperature=0.0,
                 num_predict=1200,
-                num_ctx=8192,
+                num_ctx=LOCAL_CONTEXT_WINDOW,
             ),
-            system=(
-                "Return one repository tool-call JSON object only. "
-                f"Host operating system: {_host_operating_system()}."
-            ),
+            system=system,
+        )
+        usage = client.last_usage
+        self._emit_context_usage(
+            backend="local",
+            model=DEFAULT_OLLAMA_MODEL,
+            prompt_tokens=usage.get("prompt_tokens", 0),
+            completion_tokens=usage.get("completion_tokens", 0),
+            context_window=LOCAL_CONTEXT_WINDOW,
+            estimated_cost_usd=0.0,
+        )
+        return response
+
+    def _generate_architect(self, prompt: str, *, system: str) -> str:
+        client = self._client()
+        response = client.generate(prompt, system=system)
+        usage = getattr(client, "last_usage", None)
+        prompt_tokens = getattr(usage, "prompt_tokens", 0)
+        completion_tokens = getattr(usage, "completion_tokens", 0)
+        if isinstance(prompt_tokens, int) and isinstance(completion_tokens, int):
+            self._emit_context_usage(
+                backend="api",
+                model=str(getattr(usage, "model", DEFAULT_ARCHITECT_MODEL)),
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                context_window=ARCHITECT_CONTEXT_WINDOW,
+                estimated_cost_usd=float(getattr(usage, "estimated_cost_usd", 0.0) or 0.0),
+            )
+        return response
+
+    def _emit_context_usage(
+        self,
+        *,
+        backend: str,
+        model: str,
+        prompt_tokens: int,
+        completion_tokens: int,
+        context_window: int,
+        estimated_cost_usd: float,
+    ) -> None:
+        self.writer.emit(
+            "context_usage",
+            backend=backend,
+            model=model,
+            prompt_tokens=max(0, int(prompt_tokens)),
+            completion_tokens=max(0, int(completion_tokens)),
+            total_tokens=max(0, int(prompt_tokens)) + max(0, int(completion_tokens)),
+            context_window=max(1, int(context_window)),
+            estimated_cost_usd=max(0.0, float(estimated_cost_usd)),
         )
 
     def resolve_tool_diff(self, approved: bool) -> None:
@@ -434,11 +503,18 @@ class Bridge:
             self.writer.emit("log", level="warning", msg="no tool diff is pending review")
             return
         try:
-            result = apply_reviewed_search_replace(
-                self.tool_repository_root,
-                proposal,
-                approved=approved,
-            )
+            if isinstance(proposal, CreateFileResponse):
+                result = apply_reviewed_create_file(
+                    self.tool_repository_root,
+                    proposal,
+                    approved=approved,
+                )
+            else:
+                result = apply_reviewed_search_replace(
+                    self.tool_repository_root,
+                    proposal,
+                    approved=approved,
+                )
         except Exception as exc:  # noqa: BLE001 - protocol boundary
             self.writer.emit(
                 "tool_diff_resolved",
@@ -453,6 +529,31 @@ class Bridge:
             path=result.path,
             applied=result.applied,
             message="diff applied" if result.applied else "diff discarded",
+        )
+
+    def check_code(self, path: str) -> None:
+        requested = path.strip()
+        if not requested:
+            self.writer.emit("log", level="warning", msg="/check requires a repository file path")
+            return
+        result = build_default_tool_registry(
+            repository_root=self.tool_repository_root,
+        ).dispatch(
+            "check_code",
+            CheckCodeRequest(root=Path("."), path=requested),
+        )
+        if not result.ok or not isinstance(result.value, CheckCodeResponse):
+            self.writer.emit(
+                "log",
+                level="error",
+                msg=result.error or "check_code did not return a result",
+            )
+            return
+        self.writer.emit(
+            "check_result",
+            path=result.value.path,
+            passed=result.value.passed,
+            findings=result.value.findings,
         )
 
     def _start_assistant_task(self, stage: str, target: Any) -> None:
@@ -483,7 +584,7 @@ class Bridge:
         if not planning_requested:
             self._run_tool_task(latest, "qwen")
             return
-        response = self._client().generate(
+        response = self._generate_architect(
             self._chat_prompt(),
             system=QUESTIONNAIRE_SYSTEM_PROMPT,
         ).strip()
@@ -500,7 +601,7 @@ class Bridge:
             self.writer.emit("questionnaire", questions=questions)
 
     def _run_spec_draft(self) -> None:
-        response = self._client().generate(
+        response = self._generate_architect(
             self._spec_prompt(),
             system=SPEC_SHEET_SYSTEM_PROMPT,
         ).strip()

@@ -102,6 +102,62 @@ class TuiBridgeTests(unittest.TestCase):
         self.assertTrue(call["ok"])
         self.assertEqual(answer["answer"], "inspection complete")
 
+    def test_check_command_streams_real_structural_result(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / "broken.py").write_text("def broken(:\n", encoding="utf-8")
+            bridge = Bridge(EventWriter(self.output), tool_repository_root=root)
+            bridge.handle({"cmd": "check", "path": "broken.py"})
+        event = self.events()[-1]
+        self.assertEqual(event["type"], "check_result")
+        self.assertFalse(event["passed"])
+        self.assertEqual(event["findings"][0]["engine"], "engine-parse-contract")
+
+    def test_context_usage_event_uses_reported_backend_tokens(self) -> None:
+        self.bridge._emit_context_usage(
+            backend="local",
+            model="qwen2.5-coder:1.5b",
+            prompt_tokens=3200,
+            completion_tokens=896,
+            context_window=8192,
+            estimated_cost_usd=0.0,
+        )
+        self.assertEqual(
+            self.events(),
+            [
+                {
+                    "type": "context_usage",
+                    "backend": "local",
+                    "model": "qwen2.5-coder:1.5b",
+                    "prompt_tokens": 3200,
+                    "completion_tokens": 896,
+                    "total_tokens": 4096,
+                    "context_window": 8192,
+                    "estimated_cost_usd": 0.0,
+                }
+            ],
+        )
+
+    def test_local_generation_emits_ollama_usage(self) -> None:
+        class OllamaStub:
+            last_usage = {"prompt_tokens": 321, "completion_tokens": 89}
+
+            def generate(self, *_args, **_kwargs) -> str:
+                return '{"action":"final","answer":"done"}'
+
+        response = self.bridge._generate_local(
+            OllamaStub(),
+            "inspect this file",
+            system="tool JSON only",
+        )
+
+        self.assertIn('"action":"final"', response)
+        event = self.events()[-1]
+        self.assertEqual(event["type"], "context_usage")
+        self.assertEqual(event["prompt_tokens"], 321)
+        self.assertEqual(event["completion_tokens"], 89)
+        self.assertEqual(event["context_window"], 8192)
+
     def test_tool_diff_requires_explicit_approval(self) -> None:
         responses = iter(
             [

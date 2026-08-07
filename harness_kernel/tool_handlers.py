@@ -7,7 +7,7 @@ import difflib
 import fnmatch
 import hashlib
 import os
-from dataclasses import dataclass, field, replace as dataclass_replace
+from dataclasses import asdict, dataclass, field, replace as dataclass_replace
 from pathlib import Path
 
 from agents.execution_agent import ExecutionAgent
@@ -137,6 +137,35 @@ class ApplySearchReplaceResponse:
     operation: str = "replace"
     original_exists: bool = True
     applied: bool = False
+
+
+@dataclass(frozen=True)
+class CreateFileRequest:
+    root: Path
+    path: str
+    content: str
+
+
+@dataclass(frozen=True)
+class CreateFileResponse:
+    path: str
+    diff: str
+    proposed_content: str
+    original_sha256: str
+    applied: bool = False
+
+
+@dataclass(frozen=True)
+class CheckCodeRequest:
+    root: Path
+    path: str
+
+
+@dataclass(frozen=True)
+class CheckCodeResponse:
+    path: str
+    passed: bool
+    findings: list[dict[str, object]] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -448,6 +477,109 @@ def _make_apply_search_replace_handler(
     )
 
 
+def _make_create_file_handler(
+    repository_root: Path,
+) -> ToolHandler[CreateFileRequest, CreateFileResponse]:
+    def invoke(request: CreateFileRequest) -> CreateFileResponse:
+        requested = Path(request.path)
+        path = resolve_within_root(
+            repository_root,
+            requested if requested.is_absolute() else request.root / requested,
+        )
+        if path.exists():
+            raise ToolError(f"File already exists: {request.path}", kind="already_exists")
+        relative = repository_relative(repository_root, path)
+        content = request.content
+        diff = "".join(
+            difflib.unified_diff(
+                [],
+                content.splitlines(keepends=True),
+                fromfile=f"a/{relative}",
+                tofile=f"b/{relative}",
+            )
+        )
+        return CreateFileResponse(
+            path=relative,
+            diff=diff,
+            proposed_content=content,
+            original_sha256=hashlib.sha256(b"").hexdigest(),
+            applied=False,
+        )
+
+    return ToolHandler(
+        name="create_file",
+        request_type=CreateFileRequest,
+        response_type=CreateFileResponse,
+        invoke=invoke,
+        description="Prepare a new file for explicit review; never write until approved.",
+    )
+
+
+def apply_reviewed_create_file(
+    repository_root: Path | str,
+    proposal: CreateFileResponse,
+    *,
+    approved: bool,
+) -> CreateFileResponse:
+    """Apply a reviewed new-file proposal only after an explicit approval."""
+
+    reviewed = ApplySearchReplaceResponse(
+        path=proposal.path,
+        diff=proposal.diff,
+        replacements=1,
+        proposed_content=proposal.proposed_content,
+        original_sha256=proposal.original_sha256,
+        operation="create",
+        original_exists=False,
+        applied=proposal.applied,
+    )
+    applied = apply_reviewed_search_replace(
+        repository_root,
+        reviewed,
+        approved=approved,
+    )
+    return dataclass_replace(proposal, applied=applied.applied)
+
+
+def _make_check_code_handler(
+    repository_root: Path,
+) -> ToolHandler[CheckCodeRequest, CheckCodeResponse]:
+    def invoke(request: CheckCodeRequest) -> CheckCodeResponse:
+        requested = Path(request.path)
+        path = resolve_within_root(
+            repository_root,
+            requested if requested.is_absolute() else request.root / requested,
+        )
+        if not path.is_file():
+            raise ToolError(f"File does not exist: {request.path}", kind="not_file")
+        language = {".py": "python", ".c": "c", ".cc": "cpp", ".cpp": "cpp", ".cxx": "cpp"}.get(
+            path.suffix.casefold()
+        )
+        if language is None:
+            raise ToolError(
+                f"No structural checker is registered for: {request.path}",
+                kind="unsupported_language",
+            )
+        from agents.engine_registry import EngineRegistry
+
+        source = path.read_text(encoding="utf-8")
+        findings = EngineRegistry.default().findings_for(source, language)
+        payload = [asdict(finding) for finding in findings]
+        return CheckCodeResponse(
+            path=repository_relative(repository_root, path),
+            passed=not any(finding.severity in {"High", "Fatal"} for finding in findings),
+            findings=payload,
+        )
+
+    return ToolHandler(
+        name="check_code",
+        request_type=CheckCodeRequest,
+        response_type=CheckCodeResponse,
+        invoke=invoke,
+        description="Run the registered structural and lint checks for one repository file.",
+    )
+
+
 def apply_reviewed_search_replace(
     repository_root: Path | str,
     proposal: ApplySearchReplaceResponse,
@@ -570,6 +702,8 @@ def build_default_tool_registry(
     registry.register(_make_search_directory_handler(trusted_root))
     registry.register(_make_read_file_handler(trusted_root))
     registry.register(_make_apply_search_replace_handler(trusted_root))
+    registry.register(_make_create_file_handler(trusted_root))
+    registry.register(_make_check_code_handler(trusted_root))
     registry.register(
         _make_execute_script_handler(
             trusted_root,

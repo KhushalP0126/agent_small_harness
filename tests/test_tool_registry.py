@@ -11,6 +11,8 @@ from harness_kernel.tool_handlers import (
     ArchitectGenerateRequest,
     ApplySearchReplaceRequest,
     ApplySearchReplaceResponse,
+    CheckCodeRequest,
+    CreateFileRequest,
     ExecuteScriptRequest,
     ExecuteScriptResponse,
     ExecutionRequest,
@@ -25,6 +27,7 @@ from harness_kernel.tool_handlers import (
     SearchDirectoryRequest,
     SearchDirectoryResponse,
     apply_reviewed_search_replace,
+    apply_reviewed_create_file,
     build_default_tool_registry,
 )
 from harness_kernel.container_sandbox import SandboxResult
@@ -291,6 +294,38 @@ class ToolRegistryTests(unittest.TestCase):
             self.assertTrue(created_path.exists())
             apply_reviewed_search_replace(root, delete.value, approved=True)
             self.assertFalse(created_path.exists())
+
+    def test_create_file_tool_is_reviewed_before_writing(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            registry = build_default_tool_registry(repository_root=root)
+            path = root / "notes" / "hello.txt"
+            proposal = registry.dispatch(
+                "create_file",
+                CreateFileRequest(
+                    root=Path("."),
+                    path="notes/hello.txt",
+                    content="hello world\n",
+                ),
+            )
+            self.assertTrue(proposal.ok)
+            self.assertFalse(path.exists())
+            self.assertIn("+hello world", proposal.value.diff)
+            apply_reviewed_create_file(root, proposal.value, approved=True)
+            self.assertEqual(path.read_text(encoding="utf-8"), "hello world\n")
+
+    def test_check_code_runs_registered_structural_checks(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            path = root / "broken.py"
+            path.write_text("def broken(:\n", encoding="utf-8")
+            result = build_default_tool_registry(repository_root=root).dispatch(
+                "check_code",
+                CheckCodeRequest(root=Path("."), path="broken.py"),
+            )
+        self.assertTrue(result.ok)
+        self.assertFalse(result.value.passed)
+        self.assertEqual(result.value.findings[0]["engine"], "engine-parse-contract")
 
     def test_repository_tools_reject_path_and_symlink_escape(self) -> None:
         with TemporaryDirectory() as tmpdir, TemporaryDirectory() as outside_dir:

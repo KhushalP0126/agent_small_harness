@@ -48,6 +48,16 @@ enum AppMode {
     Executing,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+struct BackendContext {
+    model: String,
+    prompt_tokens: u32,
+    completion_tokens: u32,
+    total_tokens: u32,
+    context_window: u32,
+    estimated_cost_usd: f64,
+}
+
 impl AppMode {
     fn label(&self) -> &'static str {
         match self {
@@ -102,6 +112,9 @@ struct AppState {
     code_scroll_y: usize,
     code_scroll_x: usize,
     tool_diff_scroll: usize,
+    local_context: Option<BackendContext>,
+    api_context: Option<BackendContext>,
+    session_cost_usd: f64,
 }
 
 impl Default for AppState {
@@ -146,29 +159,20 @@ impl Default for AppState {
             code_scroll_y: 0,
             code_scroll_x: 0,
             tool_diff_scroll: 0,
+            local_context: None,
+            api_context: None,
+            session_cost_usd: 0.0,
         }
     }
 }
 
 impl AppState {
-    const CONTEXT_BUDGET: usize = 8_192;
-
-    fn context_used(&self) -> usize {
-        let used = self
-            .logs
-            .iter()
-            .map(|line| line.len())
-            .sum::<usize>()
-            .div_ceil(4);
-        used.min(Self::CONTEXT_BUDGET)
-    }
-
-    fn context_remaining(&self) -> usize {
-        Self::CONTEXT_BUDGET.saturating_sub(self.context_used())
-    }
-
     fn context_remaining_percent(&self) -> u8 {
-        ((self.context_remaining() * 100) / Self::CONTEXT_BUDGET) as u8
+        let Some(context) = &self.local_context else {
+            return 100;
+        };
+        let remaining = context.context_window.saturating_sub(context.total_tokens);
+        ((u64::from(remaining) * 100) / u64::from(context.context_window)) as u8
     }
 
     fn persist_context(&self, repo_root: &std::path::Path) {
@@ -177,6 +181,15 @@ impl AppState {
             "".to_string(),
             format!("Mode: {}", self.mode.label()),
             format!("Engine: {} · {}%", self.engine, self.pct),
+            format!(
+                "Local context: {}",
+                context_summary(self.local_context.as_ref())
+            ),
+            format!(
+                "API context: {}",
+                context_summary(self.api_context.as_ref())
+            ),
+            format!("Session API cost: ${:.4}", self.session_cost_usd),
             format!(
                 "DeepSeek: {}",
                 if self.deepseek_configured {
@@ -227,6 +240,30 @@ impl AppState {
                 self.deepseek_source = source;
                 self.memory_path = memory_path;
                 self.preference_count = preference_count;
+            }
+            HarnessEvent::ContextUsage {
+                backend,
+                model,
+                prompt_tokens,
+                completion_tokens,
+                total_tokens,
+                context_window,
+                estimated_cost_usd,
+            } => {
+                let context = BackendContext {
+                    model,
+                    prompt_tokens,
+                    completion_tokens,
+                    total_tokens,
+                    context_window: context_window.max(1),
+                    estimated_cost_usd: estimated_cost_usd.max(0.0),
+                };
+                if backend == "api" {
+                    self.session_cost_usd += context.estimated_cost_usd;
+                    self.api_context = Some(context);
+                } else {
+                    self.local_context = Some(context);
+                }
             }
             HarnessEvent::AssistantStatus { stage, busy } => {
                 self.assistant_busy = busy;
@@ -446,6 +483,23 @@ impl AppState {
                     if applied { "applied" } else { "not applied" }
                 ));
                 self.mode = AppMode::Chat;
+            }
+            HarnessEvent::CheckResult {
+                path,
+                passed,
+                findings,
+            } => {
+                self.logs.push(format!(
+                    "[check] {path}: {} · {} finding(s)",
+                    if passed { "pass" } else { "fail" },
+                    findings.len()
+                ));
+                for finding in findings.into_iter().take(12) {
+                    self.logs.push(format!(
+                        "  [{}] {} · {}",
+                        finding.severity, finding.engine, finding.summary
+                    ));
+                }
             }
             HarnessEvent::ProtocolError { line, error } => {
                 self.logs
@@ -1066,17 +1120,20 @@ async fn send_prompt_command(
             state.mode = AppMode::DraftingSpec;
         }
         "/model" => state.logs.push("model: qwen2.5-coder:1.5b (local)".into()),
-        "/check" | "/tools" if argument.is_empty() => {
-            state.logs.push(format!("usage: {command} <repository task>"));
+        "/check" if argument.is_empty() => {
+            state.logs.push("usage: /check <repository-file>".into());
         }
         "/check" => {
             send_command(
                 stdin,
-                &HarnessCommand::Chat {
-                    text: format!("Inspect and check the repository for: {argument}"),
+                &HarnessCommand::Check {
+                    path: argument.to_owned(),
                 },
             )
             .await?;
+        }
+        "/tools" if argument.is_empty() => {
+            state.logs.push("usage: /tools <repository task>".into());
         }
         "/tools" => {
             send_command(
@@ -1231,11 +1288,24 @@ fn draw_status_row(frame: &mut ratatui::Frame, state: &AppState, area: Rect) {
         ),
         Span::styled("  ·  ", Style::default().fg(theme_muted())),
         Span::styled(
-            format!("ctx {}%", state.context_remaining_percent()),
+            context_summary(state.local_context.as_ref()),
             Style::default().fg(theme_cyan()),
         ),
         Span::styled("  ·  ", Style::default().fg(theme_muted())),
         Span::styled("qwen2.5-coder:1.5b", Style::default().fg(theme_purple())),
+        Span::styled("  ·  ", Style::default().fg(theme_muted())),
+        Span::styled(
+            if state.deepseek_configured {
+                "DeepSeek API"
+            } else {
+                "DeepSeek off"
+            },
+            Style::default().fg(if state.deepseek_configured {
+                Color::Green
+            } else {
+                theme_muted()
+            }),
+        ),
     ]);
     frame.render_widget(
         Paragraph::new(line).style(Style::default().bg(theme_status())),
@@ -1524,6 +1594,19 @@ fn compact_path(path: &str) -> String {
         return path.to_owned();
     }
     format!("…/{}", components[components.len() - 3..].join("/"))
+}
+
+fn context_summary(context: Option<&BackendContext>) -> String {
+    let Some(context) = context else {
+        return "ctx —".into();
+    };
+    format!(
+        "ctx {}% · {}/{}",
+        ((u64::from(context.context_window.saturating_sub(context.total_tokens)) * 100)
+            / u64::from(context.context_window)) as u8,
+        context.total_tokens,
+        context.context_window
+    )
 }
 
 fn theme_background() -> Color {
@@ -1815,10 +1898,30 @@ mod tests {
     fn configuration_and_memory_status_are_visible_in_state() {
         let mut state = AppState::default();
         assert_eq!(state.context_remaining_percent(), 100);
-        state
-            .logs
-            .push("x".repeat(AppState::CONTEXT_BUDGET / 2 * 4));
+        state.apply(HarnessEvent::ContextUsage {
+            backend: "local".into(),
+            model: "qwen2.5-coder:1.5b".into(),
+            prompt_tokens: 3_200,
+            completion_tokens: 896,
+            total_tokens: 4_096,
+            context_window: 8_192,
+            estimated_cost_usd: 0.0,
+        });
         assert_eq!(state.context_remaining_percent(), 50);
+        state.apply(HarnessEvent::ContextUsage {
+            backend: "api".into(),
+            model: "deepseek-v4-pro".into(),
+            prompt_tokens: 540,
+            completion_tokens: 900,
+            total_tokens: 1_440,
+            context_window: 65_536,
+            estimated_cost_usd: 0.0091,
+        });
+        assert_eq!(
+            state.api_context.as_ref().map(|usage| usage.model.as_str()),
+            Some("deepseek-v4-pro")
+        );
+        assert!((state.session_cost_usd - 0.0091).abs() < f64::EPSILON);
         state.apply(HarnessEvent::ConfigStatus {
             deepseek_configured: true,
             source: ".env:DEEPSEEK_API_KEY".into(),

@@ -10,6 +10,7 @@ from typing import Any, Callable
 
 from harness_kernel.tool_handlers import (
     ApplySearchReplaceRequest,
+    CreateFileRequest,
     ExecuteScriptRequest,
     ReadFileRequest,
     SearchDirectoryRequest,
@@ -23,6 +24,7 @@ TOOL_NAMES = (
     "search_directory",
     "read_file",
     "apply_search_replace",
+    "create_file",
     "execute_script",
 )
 JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)```", re.IGNORECASE | re.DOTALL)
@@ -180,10 +182,13 @@ def _doc_edit_is_complete(
     proposals = [
         call
         for call in calls
-        if call.tool == "apply_search_replace"
+        if call.tool in {"apply_search_replace", "create_file"}
         and call.result.get("ok")
         and isinstance(call.result.get("value"), dict)
-        and int(call.result["value"].get("replacements", 0)) > 0
+        and (
+            call.tool == "create_file"
+            or int(call.result["value"].get("replacements", 0)) > 0
+        )
     ]
     if not proposals:
         return False
@@ -212,9 +217,9 @@ def _tool_prompt(
         instructions.append(
             "execute_script runs generated source in a disposable Docker sandbox with no network by default; language defaults to Python and may be python, c, cpp, rust, or javascript."
         )
-    elif "apply_search_replace" in allowed_tools:
+    elif "apply_search_replace" in allowed_tools or "create_file" in allowed_tools:
         instructions.append(
-            "For a filesystem change, use apply_search_replace with operation=create, replace, or delete; execute_script is unavailable."
+            "For a filesystem change, use create_file for new files and apply_search_replace for replace or delete; execute_script is unavailable."
         )
     instructions.extend(
         [
@@ -237,9 +242,12 @@ def _tool_prompt(
         instructions.extend(
             [
                 '{"action":"tool","tool":"apply_search_replace","arguments":{"root":".","path":"src/main.py","search":"old","replace":"new"}}',
-                '{"action":"tool","tool":"apply_search_replace","arguments":{"root":".","path":"exp/hello.txt","operation":"create","search":"","replace":"hello world\\n"}}',
                 '{"action":"tool","tool":"apply_search_replace","arguments":{"root":".","path":"obsolete.txt","operation":"delete","search":"","replace":""}}',
             ]
+        )
+    if "create_file" in allowed_tools:
+        instructions.append(
+            '{"action":"tool","tool":"create_file","arguments":{"root":".","path":"exp/hello.txt","content":"hello world\\n"}}'
         )
     if "execute_script" in allowed_tools:
         instructions.append(
@@ -295,6 +303,12 @@ def _request_from_arguments(tool: str, arguments: dict):
             search=str(arguments.get("search") or ""),
             replace=str(arguments.get("replace") or ""),
             operation=str(arguments.get("operation") or "replace"),
+        )
+    if tool == "create_file":
+        return CreateFileRequest(
+            root=root,
+            path=str(arguments.get("path") or ""),
+            content=str(arguments.get("content") or ""),
         )
     return ExecuteScriptRequest(
         root=root,

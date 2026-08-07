@@ -32,6 +32,9 @@ pub enum HarnessCommand {
     ApplyToolDiff {
         approved: bool,
     },
+    Check {
+        path: String,
+    },
     Cancel,
     RepoMap {
         root: String,
@@ -109,6 +112,15 @@ pub struct VariableEntry {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CheckFinding {
+    pub engine: String,
+    pub severity: String,
+    pub summary: String,
+    #[serde(default)]
+    pub details: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct QuestionOption {
     pub id: u8,
     pub text: String,
@@ -145,6 +157,16 @@ pub enum HarnessEvent {
         source: String,
         memory_path: String,
         preference_count: u32,
+    },
+    ContextUsage {
+        backend: String,
+        model: String,
+        prompt_tokens: u32,
+        completion_tokens: u32,
+        total_tokens: u32,
+        context_window: u32,
+        #[serde(default)]
+        estimated_cost_usd: f64,
     },
     AssistantStatus {
         stage: String,
@@ -258,6 +280,11 @@ pub enum HarnessEvent {
         applied: bool,
         message: String,
     },
+    CheckResult {
+        path: String,
+        passed: bool,
+        findings: Vec<CheckFinding>,
+    },
     ProtocolError {
         line: String,
         error: String,
@@ -309,6 +336,15 @@ mod tests {
                 source: ".env:DEEPSEEK_API_KEY".into(),
                 memory_path: ".tui_memory.json".into(),
                 preference_count: 2,
+            },
+            HarnessEvent::ContextUsage {
+                backend: "local".into(),
+                model: "qwen2.5-coder:1.5b".into(),
+                prompt_tokens: 10,
+                completion_tokens: 5,
+                total_tokens: 15,
+                context_window: 8192,
+                estimated_cost_usd: 0.0,
             },
             HarnessEvent::AssistantStatus {
                 stage: "chat".into(),
@@ -443,6 +479,16 @@ mod tests {
                 applied: true,
                 message: "diff applied".into(),
             },
+            HarnessEvent::CheckResult {
+                path: "src/main.py".into(),
+                passed: false,
+                findings: vec![CheckFinding {
+                    engine: "engine-parse-contract".into(),
+                    severity: "High".into(),
+                    summary: "Draft parse failure".into(),
+                    details: "invalid syntax".into(),
+                }],
+            },
             HarnessEvent::ProtocolError {
                 line: "{broken".into(),
                 error: "expected value".into(),
@@ -482,6 +528,9 @@ mod tests {
                 provider: "qwen".into(),
             },
             HarnessCommand::ApplyToolDiff { approved: true },
+            HarnessCommand::Check {
+                path: "src/main.py".into(),
+            },
             HarnessCommand::RepoMap {
                 root: ".".into(),
                 focus: String::new(),
