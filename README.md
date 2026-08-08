@@ -133,9 +133,9 @@ reported local context, the local `qwen2.5-coder:1.5b` model, and DeepSeek API
 availability. `ctx —` means no local generation has completed yet; after a
 generation it shows the backend-reported token total and remaining share of its
 configured context window. Press `c`, `p`,
-or `a` to focus the same unified multi-line composer; `Enter` adds a line and
-`Ctrl+Enter` sends. Its footer exposes keyboard-first `send`, `/tools`, and
-`/spec` actions. Every
+or `a` to focus the same composer; pressing `Enter` from chat opens it, and
+pressing `Enter` again sends. Its footer exposes keyboard-first `send`,
+`/tools`, and `/spec` actions. Every
 non-planning message goes through the local Qwen 1.5B assistant with bounded,
 read-only repository tools available when they help; ordinary conversation
 finishes directly without a tool call. New project ideas automatically open a typed 2–4 question
@@ -190,26 +190,30 @@ temporary browser page.
 
 Chat and tools share one intake rule: an explicit software-planning request is
 routed to the same questionnaire and spec-review path before any repository
-tool calls. Requests to create, replace, or delete a file can propose a diff,
-but remain blocked until the user presses `y`.
+tool calls. Code restructuring, file removal, and GitHub history requests first
+open a clear `y`/`n` permission gate. Approving it starts only the reviewed
+proposal flow; a separate diff review still requires `y` before a file is
+written.
 
 Chat roles are visually distinct: user labels are green, assistant labels and
-responses are cyan, saved-memory notices are magenta, and warnings/errors keep
-their yellow/red emphasis. A compact spinner in the session line animates while
+responses are cyan, work steps are purple, typed tool calls are blue, and
+permissions/warnings/errors keep their yellow/red emphasis. Code blocks use a
+lighter blue; reviewed diffs use green additions and red removals. A compact spinner in the session line animates while
 DeepSeek or an approved harness run is active without blocking keyboard input.
 Typed questionnaire events use immediate `1`–`5` selection without an IPC
 request per answer. The chat prompt includes the detected host OS, so command
 guidance does not need an OS follow-up. Explicit repository inspection and
 filesystem requests route through the bounded local tool loop. Create, replace,
-and delete actions always produce a reviewable diff; `y` is still required
-before the local repository changes. Plain assistant messages that contain at
+delete, rename, and move actions always produce a reviewable inline diff; `y`
+is still required before the local repository changes. File reads show bounded,
+line-numbered source excerpts in the same stream. Plain assistant messages that contain at
 least two numbered choices retain the lighter quick-reference behavior.
 Ordinary numbers retain their normal typing behavior everywhere else.
 
 `m` prepares the repository map on loopback; `o` opens it in the browser.
 Outside repository focus, `r` retains the coding-capability shortcut. `d` opens
-run history, `Esc` leaves the current focus/overlay, and `q` cancels before
-exiting.
+an inline run-history selector; `Esc` closes the active selector, and `q`
+cancels before exiting.
 
 The retained renderer module supports Kitty/Ghostty graphics, iTerm2/WezTerm
 inline images, and a 2×2 quadrant-block fallback for Apple Terminal and Windows
@@ -334,7 +338,7 @@ results persist beside behavior and formal evidence.
 
 ### Repository tool-calling agent
 
-The typed registry exposes six repository-scoped tools:
+The typed registry exposes seven repository-scoped tools:
 
 - `search_directory` performs bounded glob/substring file discovery while
   skipping generated and dependency directories.
@@ -347,6 +351,8 @@ The typed registry exposes six repository-scoped tools:
   rejected.
 - `create_file` is the explicit new-file path. It prepares an empty-to-content
   unified diff and remains review-only until the same `y` approval gate.
+- `move_file` prepares a reviewed file rename or move. It root-checks both
+  paths and rechecks the source hash and destination absence at approval time.
 - `check_code` runs the registered structural and lint engines against one
   supported repository file (`.py`, `.c`, `.cc`, `.cpp`, or `.cxx`) and returns
   typed findings without asking a model to guess whether the code passed.
@@ -374,10 +380,13 @@ remain review-only; this command cannot approve or apply them.
 
 The Rust TUI sends all messages through the same loop. Enter a repository
 inspection or change request and the bridge streams each typed tool call into
-the main output. Read-only tasks finish with an assistant answer. A proposed
-create/replace/delete diff opens a review modal; `y` applies it only after the
-repository path and reviewed file state are checked again, while `n` or `Esc`
-discards it without writing. The prompt also accepts `/help`, `/map`, `/open`,
+the main output. Restructuring, file removal, and GitHub requests first open a
+permission gate; `y` starts a reviewed proposal and `n` or `Esc` cancels
+without calling tools. Read-only tasks finish with an assistant answer. A
+proposed create/replace/delete/rename/move diff stays in the same stream; `y`
+applies it only after the repository path and reviewed file state are checked
+again, while `n` or `Esc` discards it without writing. Read-file calls append
+bounded line-numbered excerpts as evidence. The prompt also accepts `/help`, `/map`, `/open`,
 `/check <repository-file>`, `/history`, `/spec`, `/model`, `/remember <note>`,
 `/mention <path>`, and `/tools <task>`.
 

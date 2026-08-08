@@ -12,6 +12,7 @@ from harness_kernel.tool_handlers import (
     ApplySearchReplaceRequest,
     CreateFileRequest,
     ExecuteScriptRequest,
+    MoveFileRequest,
     ReadFileRequest,
     SearchDirectoryRequest,
 )
@@ -25,6 +26,7 @@ TOOL_NAMES = (
     "read_file",
     "apply_search_replace",
     "create_file",
+    "move_file",
     "execute_script",
 )
 JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)```", re.IGNORECASE | re.DOTALL)
@@ -182,7 +184,7 @@ def _doc_edit_is_complete(
     proposals = [
         call
         for call in calls
-        if call.tool in {"apply_search_replace", "create_file"}
+        if call.tool in {"apply_search_replace", "create_file", "move_file"}
         and call.result.get("ok")
         and isinstance(call.result.get("value"), dict)
         and (
@@ -217,9 +219,13 @@ def _tool_prompt(
         instructions.append(
             "execute_script runs generated source in a disposable Docker sandbox with no network by default; language defaults to Python and may be python, c, cpp, rust, or javascript."
         )
-    elif "apply_search_replace" in allowed_tools or "create_file" in allowed_tools:
+    elif (
+        "apply_search_replace" in allowed_tools
+        or "create_file" in allowed_tools
+        or "move_file" in allowed_tools
+    ):
         instructions.append(
-            "For a filesystem change, use create_file for new files and apply_search_replace for replace or delete; execute_script is unavailable."
+            "For a filesystem change, use create_file for new files, apply_search_replace for replace or delete, and move_file for a reviewed rename or move; execute_script is unavailable."
         )
     instructions.extend(
         [
@@ -248,6 +254,10 @@ def _tool_prompt(
     if "create_file" in allowed_tools:
         instructions.append(
             '{"action":"tool","tool":"create_file","arguments":{"root":".","path":"exp/hello.txt","content":"hello world\\n"}}'
+        )
+    if "move_file" in allowed_tools:
+        instructions.append(
+            '{"action":"tool","tool":"move_file","arguments":{"root":".","path":"src/old_name.py","destination":"src/new_name.py"}}'
         )
     if "execute_script" in allowed_tools:
         instructions.append(
@@ -309,6 +319,12 @@ def _request_from_arguments(tool: str, arguments: dict):
             root=root,
             path=str(arguments.get("path") or ""),
             content=str(arguments.get("content") or ""),
+        )
+    if tool == "move_file":
+        return MoveFileRequest(
+            root=root,
+            path=str(arguments.get("path") or ""),
+            destination=str(arguments.get("destination") or ""),
         )
     return ExecuteScriptRequest(
         root=root,

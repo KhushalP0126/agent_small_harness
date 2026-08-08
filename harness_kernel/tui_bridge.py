@@ -17,6 +17,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+from dataclasses import dataclass
 from html import escape
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -44,7 +45,10 @@ from harness_kernel.tool_handlers import (
     CheckCodeRequest,
     CheckCodeResponse,
     CreateFileResponse,
+    MoveFileResponse,
+    ReadFileResponse,
     apply_reviewed_create_file,
+    apply_reviewed_move_file,
     apply_reviewed_search_replace,
     build_default_tool_registry,
 )
@@ -88,6 +92,14 @@ ENTRYPOINTS = {
     "worker_limit": REPO_ROOT / "scripts" / "run_worker_limit.py",
     "structured_spec": REPO_ROOT / "scripts" / "run_structured_spec.py",
 }
+
+
+@dataclass(frozen=True)
+class PendingActionApproval:
+    text: str
+    reason: str
+    route: str
+    provider: str = "qwen"
 ALLOWED_FLAGS = {
     "--artifact-root",
     "--architect-after-repair-attempts",
@@ -144,7 +156,10 @@ class Bridge:
         self._architect_client = architect_client
         self._tool_generate_text = tool_generate_text
         self.tool_repository_root = Path(tool_repository_root or REPO_ROOT).resolve()
-        self._pending_tool_diff: ApplySearchReplaceResponse | CreateFileResponse | None = None
+        self._pending_tool_diff: (
+            ApplySearchReplaceResponse | CreateFileResponse | MoveFileResponse | None
+        ) = None
+        self._pending_action_approval: PendingActionApproval | None = None
         self._chat_history: list[dict[str, str]] = []
         self._assistant_busy = False
         self._process: subprocess.Popen[str] | None = None
@@ -197,6 +212,8 @@ class Bridge:
             )
         elif kind == "apply_tool_diff":
             self.resolve_tool_diff(bool(command.get("approved")))
+        elif kind == "approve_action":
+            self.resolve_action_approval(bool(command.get("approved")))
         elif kind == "check":
             self.check_code(str(command.get("path") or ""))
         elif kind == "cancel":
@@ -225,7 +242,7 @@ class Bridge:
         else:
             self.writer.emit("log", level="error", msg=f"unknown command: {kind}")
 
-    def start_chat(self, text: str) -> None:
+    def start_chat(self, text: str, *, approved: bool = False, already_visible: bool = False) -> None:
         text = text.strip()
         if not text:
             self.writer.emit("log", level="warning", msg="chat message cannot be empty")
@@ -233,9 +250,16 @@ class Bridge:
         if self._assistant_busy:
             self.writer.emit("log", level="warning", msg="DeepSeek is already responding")
             return
+        reason = _action_approval_reason(text)
+        if reason and not approved:
+            self._pending_action_approval = PendingActionApproval(text, reason, "chat")
+            self.writer.emit("chat_message", role="user", content=text)
+            self.writer.emit("action_approval", request=text, reason=reason)
+            return
         self._chat_history.append({"role": "user", "content": text})
         self._chat_history = self._chat_history[-MAX_CHAT_MESSAGES:]
-        self.writer.emit("chat_message", role="user", content=text)
+        if not already_visible:
+            self.writer.emit("chat_message", role="user", content=text)
         remembered = self._preference_from_message(text)
         if remembered:
             added = self._remember_preference(remembered)
@@ -309,7 +333,14 @@ class Bridge:
             cleanup_path=spec_path,
         )
 
-    def start_tool_task(self, text: str, provider: str = "qwen") -> None:
+    def start_tool_task(
+        self,
+        text: str,
+        provider: str = "qwen",
+        *,
+        approved: bool = False,
+        already_visible: bool = False,
+    ) -> None:
         task = text.strip()
         if not task:
             self.writer.emit("log", level="warning", msg="tool task cannot be empty")
@@ -317,13 +348,24 @@ class Bridge:
         if self._assistant_busy:
             self.writer.emit("log", level="warning", msg="an assistant task is already running")
             return
+        reason = _action_approval_reason(task)
+        if reason and not approved:
+            self._pending_action_approval = PendingActionApproval(
+                task,
+                reason,
+                "tool_task",
+                provider,
+            )
+            self.writer.emit("chat_message", role="user", content=task)
+            self.writer.emit("action_approval", request=task, reason=reason)
+            return
         if _should_start_planning(task):
             self.writer.emit(
                 "log",
                 level="info",
                 msg="planning request routed to spec intake",
             )
-            self.start_chat(task)
+            self.start_chat(task, approved=approved, already_visible=already_visible)
             return
         selected_provider = provider.strip().lower()
         if selected_provider not in {"qwen", "deepseek"}:
@@ -336,7 +378,8 @@ class Bridge:
         self._pending_tool_diff = None
         self._chat_history.append({"role": "user", "content": task})
         self._chat_history = self._chat_history[-MAX_CHAT_MESSAGES:]
-        self.writer.emit("chat_message", role="user", content=task)
+        if not already_visible:
+            self.writer.emit("chat_message", role="user", content=task)
         self._start_assistant_task(
             "repository_tools",
             lambda: self._run_tool_task(
@@ -347,6 +390,7 @@ class Bridge:
                     "read_file",
                     "apply_search_replace",
                     "create_file",
+                    "move_file",
                     "execute_script",
                 ),
             ),
@@ -359,13 +403,14 @@ class Bridge:
         *,
         allowed_tools: tuple[str, ...] | None = None,
     ) -> None:
-        proposals: list[ApplySearchReplaceResponse | CreateFileResponse] = []
+        proposals: list[ApplySearchReplaceResponse | CreateFileResponse | MoveFileResponse] = []
         if allowed_tools is None:
             allowed_tools = (
                 "search_directory",
                 "read_file",
                 "apply_search_replace",
                 "create_file",
+                "move_file",
             ) if _is_filesystem_mutation_request(task) else (
                 "search_directory",
                 "read_file",
@@ -381,7 +426,19 @@ class Bridge:
                 ok=ok,
                 summary="completed" if ok else error,
             )
-            if isinstance(raw_value, (ApplySearchReplaceResponse, CreateFileResponse)):
+            if isinstance(raw_value, ReadFileResponse):
+                excerpt, start_line, truncated = _code_excerpt(raw_value.content)
+                self.writer.emit(
+                    "code_excerpt",
+                    path=raw_value.path,
+                    start_line=start_line,
+                    content=excerpt,
+                    truncated=raw_value.truncated or truncated,
+                )
+            if isinstance(
+                raw_value,
+                (ApplySearchReplaceResponse, CreateFileResponse, MoveFileResponse),
+            ):
                 proposals.append(raw_value)
 
         run = ToolCallingAgent(
@@ -411,7 +468,11 @@ class Bridge:
             proposal = self._pending_tool_diff
             self.writer.emit(
                 "tool_diff",
-                path=proposal.path,
+                path=(
+                    f"{proposal.path} → {proposal.destination}"
+                    if isinstance(proposal, MoveFileResponse)
+                    else proposal.path
+                ),
                 diff=proposal.diff,
                 replacements=getattr(proposal, "replacements", 1),
             )
@@ -509,6 +570,12 @@ class Bridge:
                     proposal,
                     approved=approved,
                 )
+            elif isinstance(proposal, MoveFileResponse):
+                result = apply_reviewed_move_file(
+                    self.tool_repository_root,
+                    proposal,
+                    approved=approved,
+                )
             else:
                 result = apply_reviewed_search_replace(
                     self.tool_repository_root,
@@ -530,6 +597,34 @@ class Bridge:
             applied=result.applied,
             message="diff applied" if result.applied else "diff discarded",
         )
+
+    def resolve_action_approval(self, approved: bool) -> None:
+        pending = self._pending_action_approval
+        if pending is None:
+            self.writer.emit("log", level="warning", msg="no action is pending approval")
+            return
+        self._pending_action_approval = None
+        if not approved:
+            self.writer.emit(
+                "log",
+                level="info",
+                msg="requested repository action declined; no tool or file operation was started",
+            )
+            return
+        self.writer.emit(
+            "log",
+            level="info",
+            msg="repository action approved; preparing the requested work",
+        )
+        if pending.route == "tool_task":
+            self.start_tool_task(
+                pending.text,
+                pending.provider,
+                approved=True,
+                already_visible=True,
+            )
+        else:
+            self.start_chat(pending.text, approved=True, already_visible=True)
 
     def check_code(self, path: str) -> None:
         requested = path.strip()
@@ -1101,9 +1196,57 @@ def _is_filesystem_mutation_request(message: str) -> bool:
         "delete a file",
         "remove file",
         "remove a file",
+        "rename file",
+        "rename a file",
+        "move file",
+        "move a file",
+        "rearrange files",
         "touch ",
     )
     return any(cue in lowered for cue in filesystem_cues)
+
+
+def _code_excerpt(content: str, max_lines: int = 32) -> tuple[str, int, bool]:
+    """Return bounded source evidence suitable for a readable terminal stream."""
+
+    lines = content.splitlines()
+    if len(lines) <= max_lines:
+        return "\n".join(
+            f"{number:>4} │ {line}" for number, line in enumerate(lines, start=1)
+        ), 1, False
+    head_lines = max(1, max_lines - 8)
+    tail_lines = 6
+    rendered = [
+        *(f"{number:>4} │ {line}" for number, line in enumerate(lines[:head_lines], start=1)),
+        f"     │ … {len(lines) - head_lines - tail_lines} line(s) omitted …",
+        *(
+            f"{number:>4} │ {line}"
+            for number, line in enumerate(lines[-tail_lines:], start=len(lines) - tail_lines + 1)
+        ),
+    ]
+    return "\n".join(rendered), 1, True
+
+
+def _action_approval_reason(message: str) -> str | None:
+    """Return a human-facing reason when a request can alter the repository."""
+
+    lowered = message.casefold()
+    if re.search(
+        r"\b(?:push|publish|commit|merge|open|create)\b.{0,40}\b(?:github|pull request|pr|branch)\b",
+        lowered,
+    ) or re.search(r"\b(?:github|pull request|pr|branch)\b.{0,40}\b(?:push|publish|commit|merge|open|create)\b", lowered):
+        return "GitHub actions can publish or change repository history."
+    if re.search(
+        r"\b(?:refactor|restructure|reorganize|reorganise|rename|move)\b.{0,48}\b(?:code|repo|repository|file|files|folder|directory|module)\b",
+        lowered,
+    ):
+        return "Restructuring can change several files and imports."
+    if re.search(
+        r"\b(?:delete|remove)\b.{0,48}\b(?:file|files|folder|directory|module|repo|repository)\b",
+        lowered,
+    ):
+        return "Deleting files or directories is destructive."
+    return None
 
 
 def _host_operating_system() -> str:

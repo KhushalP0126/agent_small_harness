@@ -13,8 +13,8 @@ use anyhow::{Context, Result};
 use crossterm::{
     cursor::Show,
     event::{
-        DisableMouseCapture, EnableMouseCapture, Event as CtEvent, EventStream, KeyCode, KeyEvent,
-        KeyModifiers, MouseEventKind,
+        DisableMouseCapture, EnableMouseCapture, Event as CtEvent, EventStream, KeyCode,
+        MouseEventKind,
     },
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
@@ -29,7 +29,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span, Text},
-    widgets::{Block, Borders, Clear, List, ListItem, Padding, Paragraph, Wrap},
+    widgets::{Block, Borders, Clear, Padding, Paragraph, Wrap},
     Terminal,
 };
 use tokio::{
@@ -44,6 +44,7 @@ enum AppMode {
     Questionnaire,
     DraftingSpec,
     SpecReview { spec_text: String },
+    ActionApproval { request: String, reason: String },
     ToolDiffReview { path: String, diff: String },
     Executing,
 }
@@ -65,6 +66,7 @@ impl AppMode {
             Self::Questionnaire => "questionnaire",
             Self::DraftingSpec => "drafting spec",
             Self::SpecReview { .. } => "spec review",
+            Self::ActionApproval { .. } => "approval required",
             Self::ToolDiffReview { .. } => "tool diff review",
             Self::Executing => "executing",
         }
@@ -111,7 +113,6 @@ struct AppState {
     validated_source_visible: bool,
     code_scroll_y: usize,
     code_scroll_x: usize,
-    tool_diff_scroll: usize,
     local_context: Option<BackendContext>,
     api_context: Option<BackendContext>,
     session_cost_usd: f64,
@@ -158,7 +159,6 @@ impl Default for AppState {
             validated_source_visible: false,
             code_scroll_y: 0,
             code_scroll_x: 0,
-            tool_diff_scroll: 0,
             local_context: None,
             api_context: None,
             session_cost_usd: 0.0,
@@ -267,7 +267,12 @@ impl AppState {
             }
             HarnessEvent::AssistantStatus { stage, busy } => {
                 self.assistant_busy = busy;
-                self.engine = if busy { stage } else { "idle".into() };
+                self.engine = if busy { stage.clone() } else { "idle".into() };
+                self.logs.push(format!(
+                    "[work] {} {}",
+                    humanize_stage(&stage),
+                    if busy { "started" } else { "complete" }
+                ));
             }
             HarnessEvent::ChatMessage { role, content } => {
                 let label = if role == "user" { "you" } else { "assistant" };
@@ -277,6 +282,12 @@ impl AppState {
                     self.numbered_options_available = false;
                 }
                 self.logs.push(format!("[{label}] {content}"));
+            }
+            HarnessEvent::ActionApproval { request, reason } => {
+                self.logs.push(format!(
+                    "[approval] {reason}\nrequest: {request}\ny continue to a reviewed proposal · n cancel"
+                ));
+                self.mode = AppMode::ActionApproval { request, reason };
             }
             HarnessEvent::Questionnaire { questions } => {
                 if questions.is_empty() {
@@ -404,7 +415,7 @@ impl AppState {
                 self.clamp_repo_selection();
             }
             HarnessEvent::HistoryList { runs } => {
-                self.logs.push(format!("run history: {} run(s)", runs.len()));
+                self.logs.push(format!("[history] {} run(s) loaded", runs.len()));
                 self.history_runs = runs;
                 self.history_selected = 0;
                 self.history_detail = None;
@@ -415,7 +426,7 @@ impl AppState {
                     .unwrap_or_else(|_| "<unrenderable checkpoint>".into());
                 self.history_detail = Some(format!("run {run_id}\n\n{body}"));
                 self.history_visible = true;
-                self.logs.push(format!("run detail: {run_id}"));
+                self.logs.push(format!("[history] loaded detail for {run_id}"));
             }
             HarnessEvent::Result { status, .. } => {
                 self.logs.push(format!("result: {status}"));
@@ -440,7 +451,7 @@ impl AppState {
                 ok,
                 summary,
             } => self.logs.push(format!(
-                "[tool {turn}] {tool}: {}{}",
+                "[tool] #{turn} {tool} · {}{}",
                 if ok { "completed" } else { "failed" },
                 if summary.is_empty() {
                     String::new()
@@ -454,13 +465,20 @@ impl AppState {
                 call_count,
             } => self.logs.push(format!(
                 "[assistant] {answer}{}",
-                if call_count == 0 {
-                    String::new()
-                } else if exhausted {
+                if exhausted {
                     format!(" (tool loop stopped after {call_count} call(s))")
                 } else {
-                    format!(" ({call_count} tool call(s))")
+                    String::new()
                 }
+            )),
+            HarnessEvent::CodeExcerpt {
+                path,
+                start_line,
+                content,
+                truncated,
+            } => self.logs.push(format!(
+                "[code] {path} · line {start_line}{}\n{content}",
+                if truncated { " · excerpt" } else { "" }
             )),
             HarnessEvent::ToolDiff {
                 path,
@@ -468,9 +486,8 @@ impl AppState {
                 replacements,
             } => {
                 self.logs.push(format!(
-                    "tool proposed {replacements} replacement(s) in {path}; review with y/n"
+                    "[diff] {path} · {replacements} reviewed change(s)\n{diff}\ny apply · n discard"
                 ));
-                self.tool_diff_scroll = 0;
                 self.mode = AppMode::ToolDiffReview { path, diff };
             }
             HarnessEvent::ToolDiffResolved {
@@ -528,13 +545,10 @@ impl AppState {
 
     fn main_output_active(&self) -> bool {
         !self.prompt_active
-            && !self.history_visible
             && !self.validated_source_visible
             && !matches!(
                 self.mode,
-                AppMode::Questionnaire
-                    | AppMode::SpecReview { .. }
-                    | AppMode::ToolDiffReview { .. }
+                AppMode::Questionnaire | AppMode::SpecReview { .. }
             )
     }
 
@@ -786,15 +800,13 @@ async fn run_loop(
                                 }
                             }
                             KeyCode::Enter
-                                if composer_should_submit(&key)
-                                    && !state.prompt.trim().is_empty()
-                                    && !state.assistant_busy =>
+                                if !state.prompt.trim().is_empty() && !state.assistant_busy =>
                             {
                                 let text = std::mem::take(&mut state.prompt);
                                 send_prompt_command(child_stdin, &mut state, text, repo_root).await?;
                                 state.prompt_active = false;
                             }
-                            KeyCode::Enter => state.prompt.push('\n'),
+                            KeyCode::Enter => {}
                             KeyCode::Char(digit @ '1'..='5')
                                 if state.prompt.is_empty()
                                     && state.select_numbered_option(digit) => {}
@@ -883,6 +895,30 @@ async fn run_loop(
                                 .push("approved spec sent to the execution pipeline".into());
                         }
                         KeyCode::Char('y')
+                            if matches!(state.mode, AppMode::ActionApproval { .. }) =>
+                        {
+                            send_command(
+                                child_stdin,
+                                &HarnessCommand::ApproveAction { approved: true },
+                            )
+                            .await?;
+                            state.mode = AppMode::Chat;
+                            state.logs.push(
+                                "[work] permission granted; preparing the requested work".into(),
+                            );
+                        }
+                        KeyCode::Char('n') | KeyCode::Esc
+                            if matches!(state.mode, AppMode::ActionApproval { .. }) =>
+                        {
+                            send_command(
+                                child_stdin,
+                                &HarnessCommand::ApproveAction { approved: false },
+                            )
+                            .await?;
+                            state.mode = AppMode::Chat;
+                            state.logs.push("[approval] request cancelled before work started".into());
+                        }
+                        KeyCode::Char('y')
                             if matches!(state.mode, AppMode::ToolDiffReview { .. }) =>
                         {
                             send_command(
@@ -901,22 +937,6 @@ async fn run_loop(
                             )
                             .await?;
                         }
-                        KeyCode::Up if matches!(state.mode, AppMode::ToolDiffReview { .. }) => {
-                            state.tool_diff_scroll = state.tool_diff_scroll.saturating_sub(1);
-                        }
-                        KeyCode::Down if matches!(state.mode, AppMode::ToolDiffReview { .. }) => {
-                            state.tool_diff_scroll = state.tool_diff_scroll.saturating_add(1);
-                        }
-                        KeyCode::PageUp
-                            if matches!(state.mode, AppMode::ToolDiffReview { .. }) =>
-                        {
-                            state.tool_diff_scroll = state.tool_diff_scroll.saturating_sub(20);
-                        }
-                        KeyCode::PageDown
-                            if matches!(state.mode, AppMode::ToolDiffReview { .. }) =>
-                        {
-                            state.tool_diff_scroll = state.tool_diff_scroll.saturating_add(20);
-                        }
                         KeyCode::Char('n') | KeyCode::Esc
                             if matches!(state.mode, AppMode::SpecReview { .. }) =>
                         {
@@ -930,6 +950,13 @@ async fn run_loop(
                         {
                             send_command(child_stdin, &HarnessCommand::DraftSpec).await?;
                             state.mode = AppMode::DraftingSpec;
+                        }
+                        KeyCode::Enter
+                            if state.mode == AppMode::Chat
+                                && !state.assistant_busy
+                                && !state.history_visible =>
+                        {
+                            state.prompt_active = true;
                         }
                         KeyCode::Char('r') if !state.running => {
                             send_command(
@@ -977,6 +1004,7 @@ async fn run_loop(
                             if state.history_visible {
                                 state.history_visible = false;
                                 state.history_detail = None;
+                                state.logs.push("[history] closed".into());
                             } else {
                                 send_command(
                                     child_stdin,
@@ -1039,6 +1067,7 @@ async fn run_loop(
                         KeyCode::Esc if state.history_visible => {
                             state.history_visible = false;
                             state.history_detail = None;
+                            state.logs.push("[history] closed".into());
                         }
                         _ => {}
                     }
@@ -1201,58 +1230,8 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState) {
         draw_spec_review(frame, spec_text);
     }
 
-    if matches!(state.mode, AppMode::ToolDiffReview { .. }) {
-        draw_tool_diff_review(frame, state);
-    }
-
     if state.mode == AppMode::Questionnaire {
         draw_questionnaire(frame, state);
-    }
-
-    if state.history_visible {
-        let area = centered_rect(86, 86, frame.area());
-        frame.render_widget(Clear, area);
-        let title = if state.history_detail.is_some() {
-            "Run history · detail · Esc/d to close"
-        } else {
-            "Run history · Up/Down select · Enter detail · Esc/d to close"
-        };
-        frame.render_widget(pane_block(title, true), area);
-        let inner = Rect {
-            x: area.x + 1,
-            y: area.y + 1,
-            width: area.width.saturating_sub(2),
-            height: area.height.saturating_sub(2),
-        };
-        if let Some(detail) = &state.history_detail {
-            frame.render_widget(
-                Paragraph::new(detail.as_str()).wrap(Wrap { trim: false }),
-                inner,
-            );
-        } else if state.history_runs.is_empty() {
-            frame.render_widget(
-                Paragraph::new("no checkpointed runs found").wrap(Wrap { trim: true }),
-                inner,
-            );
-        } else {
-            let items: Vec<ListItem> = state
-                .history_runs
-                .iter()
-                .enumerate()
-                .map(|(index, run)| {
-                    let marker = if index == state.history_selected {
-                        "> "
-                    } else {
-                        "  "
-                    };
-                    ListItem::new(format!(
-                        "{marker}{} · {} · {} · {} attempts",
-                        run.run_id, run.target, run.final_status, run.attempt_count
-                    ))
-                })
-                .collect();
-            frame.render_widget(List::new(items), inner);
-        }
     }
 
     if state.validated_source_visible {
@@ -1314,7 +1293,11 @@ fn draw_status_row(frame: &mut ratatui::Frame, state: &AppState, area: Rect) {
 }
 
 fn draw_composer(frame: &mut ratatui::Frame, state: &AppState, area: Rect) {
-    let active = state.prompt_active;
+    let active = state.prompt_active
+        || matches!(
+            state.mode,
+            AppMode::ActionApproval { .. } | AppMode::ToolDiffReview { .. }
+        );
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(if active { theme_cyan() } else { theme_border() }))
@@ -1339,30 +1322,69 @@ fn draw_composer(frame: &mut ratatui::Frame, state: &AppState, area: Rect) {
         width: area.width.saturating_sub(4),
         height: 1,
     };
-    let footer = Line::from(vec![
-        Span::styled(
-            "Ctrl+Enter ",
-            Style::default()
-                .fg(theme_cyan())
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled("send", Style::default().fg(theme_foreground())),
-        Span::styled(
-            "   /tools ",
-            Style::default()
-                .fg(theme_purple())
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled("inspect", Style::default().fg(theme_muted())),
-        Span::styled(
-            "   /spec ",
-            Style::default()
-                .fg(theme_purple())
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled("plan", Style::default().fg(theme_muted())),
-        Span::styled("   Esc close", Style::default().fg(theme_muted())),
-    ]);
+    let footer = if matches!(state.mode, AppMode::ActionApproval { .. }) {
+        Line::from(vec![
+            Span::styled(
+                "y ",
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled("continue", Style::default().fg(theme_foreground())),
+            Span::styled(
+                "   n/Esc ",
+                Style::default()
+                    .fg(Color::LightRed)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled("cancel", Style::default().fg(theme_foreground())),
+        ])
+    } else if matches!(state.mode, AppMode::ToolDiffReview { .. }) {
+        Line::from(vec![
+            Span::styled(
+                "y ",
+                Style::default()
+                    .fg(Color::Green)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                "apply reviewed change",
+                Style::default().fg(theme_foreground()),
+            ),
+            Span::styled(
+                "   n/Esc ",
+                Style::default()
+                    .fg(Color::LightRed)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled("discard", Style::default().fg(theme_foreground())),
+        ])
+    } else {
+        Line::from(vec![
+            Span::styled(
+                "Enter ",
+                Style::default()
+                    .fg(theme_cyan())
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled("send", Style::default().fg(theme_foreground())),
+            Span::styled(
+                "   /tools ",
+                Style::default()
+                    .fg(theme_purple())
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled("inspect", Style::default().fg(theme_muted())),
+            Span::styled(
+                "   /spec ",
+                Style::default()
+                    .fg(theme_purple())
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled("plan", Style::default().fg(theme_muted())),
+            Span::styled("   Esc close", Style::default().fg(theme_muted())),
+        ])
+    };
     frame.render_widget(Paragraph::new(footer), footer_area);
 }
 
@@ -1430,16 +1452,24 @@ fn draw_questionnaire(frame: &mut ratatui::Frame, state: &AppState) {
     frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
 }
 
-fn composer_should_submit(key: &KeyEvent) -> bool {
-    key.code == KeyCode::Enter && key.modifiers.contains(KeyModifiers::CONTROL)
-}
-
 fn composer_text(state: &AppState) -> Text<'static> {
+    if matches!(state.mode, AppMode::ActionApproval { .. }) {
+        return Text::from(Line::styled(
+            "Permission requested — choose y or n in the active stream.",
+            Style::default().fg(Color::Yellow),
+        ));
+    }
+    if matches!(state.mode, AppMode::ToolDiffReview { .. }) {
+        return Text::from(Line::styled(
+            "Reviewed change ready — choose y to apply or n to discard.",
+            Style::default().fg(Color::LightCyan),
+        ));
+    }
     if state.prompt.is_empty() {
         let placeholder = if state.prompt_active {
             "Describe a task, inspect the repository, or type /help▍"
         } else {
-            "Press c to compose a message"
+            "Press Enter to compose a message"
         };
         return Text::from(Line::styled(
             placeholder,
@@ -1516,7 +1546,7 @@ fn stream_lines(state: &AppState) -> Vec<Line<'static>> {
             }),
         ));
         lines.push(Line::styled(
-            "└ press c to compose · Ctrl+Enter sends · /help lists commands",
+            "└ Enter to compose or send · /help lists commands",
             Style::default().fg(theme_muted()),
         ));
         return lines;
@@ -1527,6 +1557,86 @@ fn stream_lines(state: &AppState) -> Vec<Line<'static>> {
         }
         lines.extend(stream_log_lines(line));
     }
+    if state.history_visible {
+        lines.push(stream_divider());
+        lines.extend(stream_history_lines(state));
+    }
+    lines
+}
+
+fn stream_history_lines(state: &AppState) -> Vec<Line<'static>> {
+    if let Some(detail) = &state.history_detail {
+        let mut lines = vec![Line::from(vec![
+            Span::styled("• ", Style::default().fg(Color::Magenta)),
+            Span::styled(
+                "history  ",
+                Style::default()
+                    .fg(Color::Magenta)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(
+                "run detail · d/Esc close",
+                Style::default().fg(theme_muted()),
+            ),
+        ])];
+        lines.extend(detail.lines().map(|line| {
+            Line::from(vec![
+                Span::styled("└ ", Style::default().fg(theme_muted())),
+                Span::styled(line.to_owned(), Style::default().fg(theme_foreground())),
+            ])
+        }));
+        return lines;
+    }
+    let mut lines = vec![Line::from(vec![
+        Span::styled("• ", Style::default().fg(Color::Magenta)),
+        Span::styled(
+            "history  ",
+            Style::default()
+                .fg(Color::Magenta)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            "Up/Down select · Enter detail · d/Esc close",
+            Style::default().fg(theme_muted()),
+        ),
+    ])];
+    if state.history_runs.is_empty() {
+        lines.push(Line::styled(
+            "└ no checkpointed runs found",
+            Style::default().fg(theme_muted()),
+        ));
+        return lines;
+    }
+    lines.extend(state.history_runs.iter().enumerate().map(|(index, run)| {
+        let selected = index == state.history_selected;
+        Line::from(vec![
+            Span::styled(
+                if selected { "└ > " } else { "└   " },
+                Style::default().fg(if selected {
+                    Color::LightCyan
+                } else {
+                    theme_muted()
+                }),
+            ),
+            Span::styled(
+                format!(
+                    "{} · {} · {} · {} attempts",
+                    run.run_id, run.target, run.final_status, run.attempt_count
+                ),
+                Style::default()
+                    .fg(if selected {
+                        Color::LightCyan
+                    } else {
+                        theme_foreground()
+                    })
+                    .add_modifier(if selected {
+                        Modifier::BOLD
+                    } else {
+                        Modifier::empty()
+                    }),
+            ),
+        ])
+    }));
     lines
 }
 
@@ -1545,6 +1655,12 @@ fn stream_log_lines(line: &str) -> Vec<Line<'static>> {
     let role = [
         ("[you] ", "you", Color::Green, Color::White),
         ("[assistant] ", "assistant", Color::Cyan, Color::LightCyan),
+        ("[code] ", "code", Color::LightBlue, Color::LightBlue),
+        ("[diff] ", "diff", Color::LightCyan, Color::LightCyan),
+        ("[history] ", "history", Color::Magenta, Color::LightMagenta),
+        ("[tool] ", "tool", Color::Blue, Color::LightBlue),
+        ("[work] ", "working", Color::Magenta, Color::LightMagenta),
+        ("[approval] ", "permission", Color::Yellow, Color::Yellow),
         ("[memory] ", "memory", Color::Magenta, Color::White),
         ("[error] ", "error", Color::LightRed, Color::LightRed),
         ("[warning] ", "warning", Color::Yellow, Color::Yellow),
@@ -1564,25 +1680,74 @@ fn stream_log_lines(line: &str) -> Vec<Line<'static>> {
         } else {
             ("event", theme_muted(), line, theme_foreground())
         };
-    let mut content_lines = content.lines();
-    let first = content_lines.next().unwrap_or_default();
-    let mut rendered = vec![Line::from(vec![
-        Span::styled("• ", Style::default().fg(label_color)),
-        Span::styled(
-            format!("{label}  "),
-            Style::default()
-                .fg(label_color)
-                .add_modifier(Modifier::BOLD),
-        ),
-        Span::styled(first.to_owned(), Style::default().fg(content_color)),
-    ])];
-    rendered.extend(content_lines.map(|continuation| {
-        Line::from(vec![
-            Span::styled("└ ", Style::default().fg(theme_muted())),
-            Span::styled(continuation.to_owned(), Style::default().fg(content_color)),
-        ])
-    }));
+    let mut rendered = Vec::new();
+    let mut in_code_block = false;
+    for (index, content_line) in content.lines().enumerate() {
+        let trimmed = content_line.trim_start();
+        let is_fence = trimmed.starts_with("```");
+        let line_color = if content_line.starts_with('+') && !content_line.starts_with("+++") {
+            Color::LightGreen
+        } else if content_line.starts_with('-') && !content_line.starts_with("---") {
+            Color::LightRed
+        } else if content_line.starts_with("@@") {
+            Color::Yellow
+        } else if in_code_block || is_fence {
+            Color::LightBlue
+        } else if label == "tool" && content_line.contains("failed") {
+            Color::LightRed
+        } else if label == "tool" && content_line.contains("completed") {
+            Color::LightGreen
+        } else {
+            content_color
+        };
+        let marker = if index == 0 { "• " } else { "└ " };
+        let mut spans = vec![Span::styled(marker, Style::default().fg(label_color))];
+        if index == 0 {
+            spans.push(Span::styled(
+                format!("{label}  "),
+                Style::default()
+                    .fg(label_color)
+                    .add_modifier(Modifier::BOLD),
+            ));
+        }
+        let style =
+            if label == "diff" && content_line.starts_with('+') && !content_line.starts_with("+++")
+            {
+                Style::default()
+                    .fg(Color::LightGreen)
+                    .bg(Color::Rgb(16, 57, 37))
+            } else if label == "diff"
+                && content_line.starts_with('-')
+                && !content_line.starts_with("---")
+            {
+                Style::default()
+                    .fg(Color::LightRed)
+                    .bg(Color::Rgb(74, 29, 35))
+            } else {
+                Style::default().fg(line_color)
+            };
+        spans.push(Span::styled(content_line.to_owned(), style));
+        rendered.push(Line::from(spans));
+        if is_fence {
+            in_code_block = !in_code_block;
+        }
+    }
+    if rendered.is_empty() {
+        rendered.push(Line::from(vec![
+            Span::styled("• ", Style::default().fg(label_color)),
+            Span::styled(
+                format!("{label}  "),
+                Style::default()
+                    .fg(label_color)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ]));
+    }
     rendered
+}
+
+fn humanize_stage(stage: &str) -> String {
+    stage.replace('_', " ")
 }
 
 fn compact_path(path: &str) -> String {
@@ -1724,55 +1889,6 @@ fn draw_spec_review(frame: &mut ratatui::Frame, spec_text: &str) {
     frame.render_widget(Paragraph::new(spec_text).wrap(Wrap { trim: false }), inner);
 }
 
-fn draw_tool_diff_review(frame: &mut ratatui::Frame, state: &AppState) {
-    let AppMode::ToolDiffReview { path, diff } = &state.mode else {
-        return;
-    };
-    let area = centered_rect(92, 90, frame.area());
-    frame.render_widget(Clear, area);
-    frame.render_widget(
-        pane_block(
-            format!(" Tool diff · {path} · y apply · n/Esc discard · Up/Down/PgUp/PgDn "),
-            true,
-        ),
-        area,
-    );
-    let inner = Rect {
-        x: area.x + 1,
-        y: area.y + 1,
-        width: area.width.saturating_sub(2),
-        height: area.height.saturating_sub(2),
-    };
-    let lines: Vec<Line> = diff
-        .lines()
-        .map(|line| {
-            let color = if line.starts_with("+++") || line.starts_with("---") {
-                Color::Cyan
-            } else if line.starts_with('+') {
-                Color::Green
-            } else if line.starts_with('-') {
-                Color::Red
-            } else if line.starts_with("@@") {
-                Color::Yellow
-            } else {
-                Color::White
-            };
-            Line::styled(line.to_owned(), Style::default().fg(color))
-        })
-        .collect();
-    let max_scroll = lines.len().saturating_sub(usize::from(inner.height));
-    let scroll = state
-        .tool_diff_scroll
-        .min(max_scroll)
-        .min(u16::MAX as usize) as u16;
-    frame.render_widget(
-        Paragraph::new(Text::from(lines))
-            .scroll((scroll, 0))
-            .wrap(Wrap { trim: false }),
-        inner,
-    );
-}
-
 fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
     let vertical = Layout::vertical([
         Constraint::Percentage((100 - percent_y) / 2),
@@ -1857,7 +1973,7 @@ mod tests {
     }
 
     #[test]
-    fn tool_diff_opens_review_and_resolution_returns_to_chat() {
+    fn tool_diff_stays_inline_and_resolution_returns_to_chat() {
         let mut state = AppState::default();
         state.apply(HarnessEvent::ToolDiff {
             path: "rust_tui/src/main.rs".into(),
@@ -1871,7 +1987,8 @@ mod tests {
                 diff: "--- a/rust_tui/src/main.rs\n+++ b/rust_tui/src/main.rs\n".into(),
             }
         );
-        assert!(!state.main_output_active());
+        assert!(state.main_output_active());
+        assert!(state.logs.last().unwrap().starts_with("[diff]"));
 
         state.apply(HarnessEvent::ToolDiffResolved {
             path: "rust_tui/src/main.rs".into(),
@@ -1879,6 +1996,24 @@ mod tests {
             message: "diff discarded".into(),
         });
         assert_eq!(state.mode, AppMode::Chat);
+    }
+
+    #[test]
+    fn sensitive_action_requires_an_explicit_approval_state() {
+        let mut state = AppState::default();
+        state.apply(HarnessEvent::ActionApproval {
+            request: "Remove stale artifacts".into(),
+            reason: "Deleting files or directories is destructive.".into(),
+        });
+        assert_eq!(
+            state.mode,
+            AppMode::ActionApproval {
+                request: "Remove stale artifacts".into(),
+                reason: "Deleting files or directories is destructive.".into(),
+            }
+        );
+        assert!(state.main_output_active());
+        assert!(state.logs.last().unwrap().starts_with("[approval]"));
     }
 
     #[test]
@@ -1970,29 +2105,17 @@ mod tests {
     }
 
     #[test]
-    fn composer_keeps_multiline_text_and_only_control_enter_submits() {
+    fn composer_renders_a_single_line_prompt() {
         let mut state = AppState::default();
         state.prompt_active = true;
-        state.prompt = "inspect the repository\nthen summarize it".into();
+        state.prompt = "inspect the repository".into();
         let text = composer_text(&state);
-        assert_eq!(text.lines.len(), 2);
+        assert_eq!(text.lines.len(), 1);
         assert!(text.lines[0]
             .spans
             .iter()
             .any(|span| span.content == "inspect the repository"));
-        assert!(text.lines[1]
-            .spans
-            .iter()
-            .any(|span| span.content == "then summarize it"));
-        assert!(text.lines[1].spans.iter().any(|span| span.content == "▍"));
-        assert!(!composer_should_submit(&KeyEvent::new(
-            KeyCode::Enter,
-            KeyModifiers::SHIFT,
-        )));
-        assert!(composer_should_submit(&KeyEvent::new(
-            KeyCode::Enter,
-            KeyModifiers::CONTROL,
-        )));
+        assert!(text.lines[0].spans.iter().any(|span| span.content == "▍"));
     }
 
     #[test]
@@ -2065,7 +2188,7 @@ mod tests {
     }
 
     #[test]
-    fn history_events_drive_modal_state() {
+    fn history_events_drive_inline_state() {
         let mut state = AppState::default();
         state.apply(HarnessEvent::HistoryList {
             runs: vec![
@@ -2087,6 +2210,9 @@ mod tests {
         assert_eq!(state.history_runs.len(), 2);
         assert_eq!(state.history_selected, 0);
         assert!(state.history_detail.is_none());
+        assert!(stream_lines(&state)
+            .iter()
+            .any(|line| line.spans.iter().any(|span| span.content.contains("run-a"))));
 
         state.apply(HarnessEvent::HistoryDetail {
             run_id: "run-b".into(),
@@ -2098,6 +2224,25 @@ mod tests {
             .as_deref()
             .unwrap()
             .contains("run run-b"));
+    }
+
+    #[test]
+    fn code_excerpt_is_rendered_in_the_stream() {
+        let mut state = AppState::default();
+        state.apply(HarnessEvent::CodeExcerpt {
+            path: "src/main.py".into(),
+            start_line: 1,
+            content: "   1 │ def main():\n   2 │     return 0".into(),
+            truncated: false,
+        });
+        assert!(stream_lines(&state).iter().any(|line| line
+            .spans
+            .iter()
+            .any(|span| span.content.contains("src/main.py"))));
+        assert!(stream_lines(&state).iter().any(|line| line
+            .spans
+            .iter()
+            .any(|span| span.content.contains("return 0"))));
     }
 
     #[test]

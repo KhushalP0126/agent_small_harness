@@ -14,6 +14,8 @@ from harness_kernel.tui_bridge import (
     Bridge,
     EventWriter,
     _architect_error_event,
+    _action_approval_reason,
+    _code_excerpt,
     _contract_event_from_line,
     _dotenv_values,
     _parse_questionnaire_response,
@@ -241,6 +243,45 @@ class TuiBridgeTests(unittest.TestCase):
         rejected = next(event for event in self.events() if event["type"] == "tool_call")
         self.assertFalse(rejected["ok"])
         self.assertIn("declared tool", rejected["summary"])
+
+    def test_action_approval_identifies_sensitive_repository_requests(self) -> None:
+        self.assertIn(
+            "GitHub",
+            _action_approval_reason("Push this branch to GitHub") or "",
+        )
+        self.assertIn(
+            "Restructuring",
+            _action_approval_reason("Refactor the repository modules") or "",
+        )
+        self.assertIn(
+            "Deleting",
+            _action_approval_reason("Remove the file obsolete.py") or "",
+        )
+        self.assertIsNone(_action_approval_reason("Explain the repository layout"))
+
+    def test_rejected_action_approval_does_not_start_tools(self) -> None:
+        self.bridge.start_chat("Delete the file obsolete.py")
+        approval = self.wait_for_event("action_approval")
+        self.assertEqual(approval["request"], "Delete the file obsolete.py")
+
+        self.bridge.handle({"cmd": "approve_action", "approved": False})
+
+        self.assertFalse(any(event["type"] == "tool_call" for event in self.events()))
+        self.assertTrue(
+            any(
+                event["type"] == "log" and "declined" in event["msg"]
+                for event in self.events()
+            )
+        )
+
+    def test_code_excerpt_is_line_numbered_and_bounded(self) -> None:
+        source = "\n".join(f"line_{index}" for index in range(40))
+        excerpt, start_line, truncated = _code_excerpt(source, max_lines=12)
+        self.assertEqual(start_line, 1)
+        self.assertTrue(truncated)
+        self.assertIn("   1 │ line_0", excerpt)
+        self.assertIn("… 30 line(s) omitted …", excerpt)
+        self.assertIn("  40 │ line_39", excerpt)
 
     def test_profile_samples_emits_typed_result(self) -> None:
         self.bridge.handle(

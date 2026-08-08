@@ -156,6 +156,22 @@ class CreateFileResponse:
 
 
 @dataclass(frozen=True)
+class MoveFileRequest:
+    root: Path
+    path: str
+    destination: str
+
+
+@dataclass(frozen=True)
+class MoveFileResponse:
+    path: str
+    destination: str
+    diff: str
+    original_sha256: str
+    applied: bool = False
+
+
+@dataclass(frozen=True)
 class CheckCodeRequest:
     root: Path
     path: str
@@ -541,6 +557,99 @@ def apply_reviewed_create_file(
     return dataclass_replace(proposal, applied=applied.applied)
 
 
+def _make_move_file_handler(
+    repository_root: Path,
+) -> ToolHandler[MoveFileRequest, MoveFileResponse]:
+    def invoke(request: MoveFileRequest) -> MoveFileResponse:
+        source_requested = Path(request.path)
+        destination_requested = Path(request.destination)
+        source = resolve_within_root(
+            repository_root,
+            source_requested if source_requested.is_absolute() else request.root / source_requested,
+        )
+        destination = resolve_within_root(
+            repository_root,
+            destination_requested
+            if destination_requested.is_absolute()
+            else request.root / destination_requested,
+        )
+        if not source.is_file():
+            raise ToolError(f"File does not exist: {request.path}", kind="not_file")
+        if destination.exists():
+            raise ToolError(
+                f"Destination already exists: {request.destination}",
+                kind="destination_exists",
+            )
+        if source == destination:
+            raise ToolError("Source and destination must differ", kind="same_path")
+        content = source.read_text(encoding="utf-8")
+        source_relative = repository_relative(repository_root, source)
+        destination_relative = repository_relative(repository_root, destination)
+        diff = "".join(
+            [
+                f"rename from {source_relative}\n",
+                f"rename to {destination_relative}\n",
+                f"--- a/{source_relative}\n",
+                f"+++ b/{destination_relative}\n",
+                *[
+                    line
+                    for line in difflib.unified_diff(
+                        content.splitlines(keepends=True),
+                        content.splitlines(keepends=True),
+                        fromfile=f"a/{source_relative}",
+                        tofile=f"b/{destination_relative}",
+                    )
+                    if not line.startswith("---") and not line.startswith("+++")
+                ],
+            ]
+        )
+        return MoveFileResponse(
+            path=source_relative,
+            destination=destination_relative,
+            diff=diff,
+            original_sha256=hashlib.sha256(content.encode("utf-8")).hexdigest(),
+        )
+
+    return ToolHandler(
+        name="move_file",
+        request_type=MoveFileRequest,
+        response_type=MoveFileResponse,
+        invoke=invoke,
+        description="Prepare a reviewed repository-safe file move or rename.",
+    )
+
+
+def apply_reviewed_move_file(
+    repository_root: Path | str,
+    proposal: MoveFileResponse,
+    *,
+    approved: bool,
+) -> MoveFileResponse:
+    """Move an unchanged reviewed file only after explicit approval."""
+
+    if not approved:
+        return proposal
+    root = Path(repository_root).resolve()
+    source = resolve_within_root(root, proposal.path)
+    destination = resolve_within_root(root, proposal.destination)
+    if not source.is_file():
+        raise ToolError(f"File does not exist: {proposal.path}", kind="not_file")
+    if destination.exists():
+        raise ToolError(
+            f"Destination appeared after review: {proposal.destination}",
+            kind="stale_diff",
+        )
+    current_sha256 = hashlib.sha256(source.read_bytes()).hexdigest()
+    if current_sha256 != proposal.original_sha256:
+        raise ToolError(
+            f"File changed after review: {proposal.path}",
+            kind="stale_diff",
+        )
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    source.rename(destination)
+    return dataclass_replace(proposal, applied=True)
+
+
 def _make_check_code_handler(
     repository_root: Path,
 ) -> ToolHandler[CheckCodeRequest, CheckCodeResponse]:
@@ -703,6 +812,7 @@ def build_default_tool_registry(
     registry.register(_make_read_file_handler(trusted_root))
     registry.register(_make_apply_search_replace_handler(trusted_root))
     registry.register(_make_create_file_handler(trusted_root))
+    registry.register(_make_move_file_handler(trusted_root))
     registry.register(_make_check_code_handler(trusted_root))
     registry.register(
         _make_execute_script_handler(

@@ -28,7 +28,9 @@ from harness_kernel.tool_handlers import (
     SearchDirectoryResponse,
     apply_reviewed_search_replace,
     apply_reviewed_create_file,
+    apply_reviewed_move_file,
     build_default_tool_registry,
+    MoveFileRequest,
 )
 from harness_kernel.container_sandbox import SandboxResult
 from harness_kernel.tool_registry import ToolError, ToolHandler, ToolRegistry
@@ -313,6 +315,41 @@ class ToolRegistryTests(unittest.TestCase):
             self.assertIn("+hello world", proposal.value.diff)
             apply_reviewed_create_file(root, proposal.value, approved=True)
             self.assertEqual(path.read_text(encoding="utf-8"), "hello world\n")
+
+    def test_move_file_is_reviewed_and_rejects_stale_or_colliding_targets(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            source = root / "src" / "old.py"
+            destination = root / "archive" / "new.py"
+            source.parent.mkdir()
+            source.write_text("VALUE = 1\n", encoding="utf-8")
+            registry = build_default_tool_registry(repository_root=root)
+
+            proposal = registry.dispatch(
+                "move_file",
+                MoveFileRequest(
+                    root=Path("."),
+                    path="src/old.py",
+                    destination="archive/new.py",
+                ),
+            )
+            self.assertTrue(proposal.ok)
+            self.assertFalse(destination.exists())
+            self.assertIn("rename from src/old.py", proposal.value.diff)
+            apply_reviewed_move_file(root, proposal.value, approved=True)
+            self.assertFalse(source.exists())
+            self.assertEqual(destination.read_text(encoding="utf-8"), "VALUE = 1\n")
+
+            collision = registry.dispatch(
+                "move_file",
+                MoveFileRequest(
+                    root=Path("."),
+                    path="archive/new.py",
+                    destination="archive/new.py",
+                ),
+            )
+            self.assertFalse(collision.ok)
+            self.assertEqual(collision.error_kind, "destination_exists")
 
     def test_check_code_runs_registered_structural_checks(self) -> None:
         with TemporaryDirectory() as tmpdir:

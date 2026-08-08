@@ -32,6 +32,9 @@ pub enum HarnessCommand {
     ApplyToolDiff {
         approved: bool,
     },
+    ApproveAction {
+        approved: bool,
+    },
     Check {
         path: String,
     },
@@ -176,6 +179,10 @@ pub enum HarnessEvent {
         role: String,
         content: String,
     },
+    ActionApproval {
+        request: String,
+        reason: String,
+    },
     Questionnaire {
         questions: Vec<ClarificationQuestion>,
     },
@@ -270,6 +277,13 @@ pub enum HarnessEvent {
         exhausted: bool,
         call_count: u32,
     },
+    CodeExcerpt {
+        path: String,
+        start_line: u32,
+        content: String,
+        #[serde(default)]
+        truncated: bool,
+    },
     ToolDiff {
         path: String,
         diff: String,
@@ -353,6 +367,10 @@ mod tests {
             HarnessEvent::ChatMessage {
                 role: "assistant".into(),
                 content: "What should we build?".into(),
+            },
+            HarnessEvent::ActionApproval {
+                request: "Remove src/legacy.py".into(),
+                reason: "Deleting files or directories is destructive.".into(),
             },
             HarnessEvent::Questionnaire {
                 questions: vec![ClarificationQuestion {
@@ -469,6 +487,12 @@ mod tests {
                 exhausted: false,
                 call_count: 1,
             },
+            HarnessEvent::CodeExcerpt {
+                path: "rust_tui/src/main.rs".into(),
+                start_line: 1,
+                content: "   1 │ fn main() {}".into(),
+                truncated: false,
+            },
             HarnessEvent::ToolDiff {
                 path: "rust_tui/src/main.rs".into(),
                 diff: "--- a/rust_tui/src/main.rs\n+++ b/rust_tui/src/main.rs\n".into(),
@@ -528,6 +552,7 @@ mod tests {
                 provider: "qwen".into(),
             },
             HarnessCommand::ApplyToolDiff { approved: true },
+            HarnessCommand::ApproveAction { approved: false },
             HarnessCommand::Check {
                 path: "src/main.py".into(),
             },

@@ -106,7 +106,10 @@ the others:
 ### 2.5 Chat, specification, and execution state machine
 
 - `Chat`: `c`/`p` opens input and Enter sends a conversational architect
-  request. No subprocess execution is reachable from this transition.
+  request. Restructuring, file removal, and GitHub requests enter an explicit
+  `ActionApproval` `y`/`n` gate before tools start. Approval permits a
+  reviewed proposal only; applying a file diff remains a separate `y` action.
+  No subprocess execution is reachable from an ordinary chat transition.
 - `Questionnaire`: a project-concept response carries 2–4 typed clarification
   questions. Each contains 2–4 worker-provided choices plus an application-added
   `Other` option. `1`–`5` records answers in Rust; `Other` accepts free text.
@@ -194,9 +197,9 @@ TUI. Each reports results as a new JSON-lines event type so either TUI
 
 ### 3.0.1 Repository Tool Boundary
 
-- `search_directory`, `read_file`, `apply_search_replace`, and
-  `execute_script` are typed `ToolHandler` registrations rather than direct
-  model access to Python or the filesystem.
+- `search_directory`, `read_file`, `create_file`, `apply_search_replace`,
+  `move_file`, and `execute_script` are typed `ToolHandler` registrations
+  rather than direct model access to Python or the filesystem.
 - Every requested root and path resolves through one repository-root guard.
   Absolute paths, traversal, and symlinks that resolve outside that root fail
   with the stable `path_escape` error kind.
@@ -207,14 +210,18 @@ TUI. Each reports results as a new JSON-lines event type so either TUI
   model-facing loop cannot write it. A separate host/TUI approval call may
   apply it, but only if the file's SHA-256 still matches the reviewed version;
   otherwise it fails as `stale_diff`.
+- `move_file` returns a reviewed rename/move proposal. Both source and
+  destination are root-guarded; the source hash and destination absence are
+  rechecked before approval performs the move.
 - Qwen is the default tool selector and DeepSeek is optional. Both receive the
-  same four-tool contract and feed each typed result into the next bounded
+  same repository-tool contract and feed each typed result into the next bounded
   decision turn.
 - In the Rust TUI, `a` captures a repository task and sends `tool_task` through
   the existing JSONL bridge. Typed `tool_call` and `tool_answer` events stream
-  into the main output. A `tool_diff` event opens a blocking review modal;
-  `apply_tool_diff` is sent only after `y`, while `n`/`Esc` discards the pending
-  proposal. The bridge never exposes the approval operation as a model tool.
+  into the main output. `read_file` results append bounded line-numbered source
+  excerpts. A `tool_diff` event renders an inline reviewed diff; `apply_tool_diff`
+  is sent only after `y`, while `n`/`Esc` discards the pending proposal. The
+  bridge never exposes the approval operation as a model tool.
 
 This boundary reduces accidental repository and secret exposure but remains a
 trusted-local-development control. It is not a hardened kernel, container, or
