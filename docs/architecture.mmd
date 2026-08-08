@@ -1,0 +1,19 @@
+flowchart LR
+    user([User]) --> tui[Rust TUI]
+    tui --> routing[Routing]
+    routing --> agents[Agents]
+    agents --> engines[Validation engines]
+    agents --> sandbox[Isolated execution]
+    engines --> decision{Accepted?}
+    sandbox --> decision
+    decision -->|yes| artifacts[Artifacts and history]
+    decision -->|no| repair[Scoped repair]
+    repair --> agents
+    artifacts --> results[docs/results]
+
+    classDef primary fill:#0f172a,color:#e2e8f0,stroke:#22d3ee,stroke-width:2px;
+    classDef support fill:#172554,color:#dbeafe,stroke:#60a5fa;
+    classDef outcome fill:#052e16,color:#dcfce7,stroke:#22c55e;
+    class tui,routing,agents primary;
+    class engines,sandbox,repair support;
+    class artifacts,results outcome;

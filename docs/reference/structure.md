@@ -1,5 +1,13 @@
 # Repository Structure
 
+## Top-level ownership
+
+Start with [`ARCHITECTURE.md`](../../ARCHITECTURE.md) for the short map:
+`rust_tui/` owns terminal interaction, `agents/` owns model-driven work,
+`engines/` owns validation engines, and `routing/` is the stable integration
+front door. Supporting compatibility modules remain in their existing paths
+while callers migrate; this document records those detailed paths.
+
 > Tree audit: 2026-07-30. Generated caches, build output, local environments,
 > and run artifacts are intentionally omitted.
 
@@ -35,7 +43,7 @@ described where relevant but are intentionally not tracked.
 
 - `README.md` - Professional project overview, architecture, setup, and command surface.
 - `docs/reference/SPEC.md` - Rust TUI and engine-expansion specification plus current implementation status and rollout constraints.
-- `rust/Cargo.toml` - Pinned Rust TUI dependencies.
+- `rust_tui/Cargo.toml` - Pinned Rust TUI dependencies.
 - `Makefile` - Common setup, Rust/Textual TUI, test, ladder, model, history, review, Compute Shield, and smoke commands.
 - `config.yaml` - Declarative policy, retry, model, behavior, and routing settings.
 - `pyproject.toml` - Python package metadata and runtime dependencies.
@@ -130,16 +138,16 @@ instead of replacing it.
 - `harness_kernel/compute_shield.py` - Exact per-task and aggregate baseline-versus-shielded token accounting; evaluation evidence rather than a validation gate.
 - `harness_kernel/__init__.py` - Public harness-kernel exports; the name avoids collision with the Kernel browser SDK.
 
-## `rust/`
+## `rust_tui/`
 
-- `rust/Cargo.toml` - Pinned Rust application dependencies for Ratatui, Tokio, terminal image protocols, Mermaid SVG rendering, and rasterization.
-- `rust/src/main.rs` - Async terminal application, Python bridge lifecycle, pure application-state reducer, input/event/redraw selection loop, and review dashboard.
-- `rust/src/protocol.rs` - Serde command/event contract and resilient JSON-lines reader.
-- `rust/src/mermaid_view.rs` - In-process Mermaid SVG rendering, PNG rasterization, terminal protocol selection, and modal widget.
+- `rust_tui/Cargo.toml` - Pinned Rust application dependencies for Ratatui, Tokio, terminal image protocols, Mermaid SVG rendering, and rasterization.
+- `rust_tui/src/main.rs` - Async terminal application, Python bridge lifecycle, pure application-state reducer, input/event/redraw selection loop, and review dashboard.
+- `rust_tui/src/protocol.rs` - Serde command/event contract and resilient JSON-lines reader.
+- `rust_tui/src/mermaid_view.rs` - In-process Mermaid SVG rendering, PNG rasterization, terminal protocol selection, and modal widget.
 
-The Rust client is additive during rollout. Python remains the source of truth
-for engine logic and artifacts, and the Textual TUI remains available until
-terminal compatibility and feature parity are manually confirmed.
+The Rust client is the default terminal interface. Python remains the source of
+truth for engine logic and artifacts, and the Textual TUI remains available as
+the legacy artifact-review fallback while terminal compatibility work continues.
 
 ## Additional engine
 
@@ -238,11 +246,12 @@ Ground truth cases, behavior specs, library schemas, run logs, and code snippets
 
 Checked-in evaluation evidence and review material.
 
-- `docs/qwen-capability-results-2026-07-18.md` - Qwen coding-capability baseline, retry, and architect-escalation results.
-- `docs/gemma-deepseek-capability-results-2026-07-19.md` - Gemma worker and DeepSeek architect comparison results.
-- `docs/snake-pong-execution-report-2026-07-19.md` - Reproducible Snake/Pong commands, failures, fixes, artifact IDs, and post-fix runtime outcomes.
-- `docs/additional-harness-results-2026-07-24.md` - Raw-versus-harness, repeated paired-sample, structured-spec resume, Pong closure, and stateful-ladder architect-recovery results.
-- `docs/structured-spec-repo-map-results-2026-07-24.md` - Structured-spec Snake/Pong plan and full-run results plus repo-mapper context/Mermaid/JSON output metrics.
+- `docs/results/qwen-capability-results-2026-07-18.md` - Qwen coding-capability baseline, retry, and architect-escalation results.
+- `docs/results/gemma-deepseek-capability-results-2026-07-19.md` - Gemma worker and DeepSeek architect comparison results.
+- `docs/results/snake-pong-execution-report-2026-07-19.md` - Reproducible Snake/Pong commands, failures, fixes, artifact IDs, and post-fix runtime outcomes.
+- `docs/results/additional-harness-results-2026-07-24.md` - Raw-versus-harness, repeated paired-sample, structured-spec resume, Pong closure, and stateful-ladder architect-recovery results.
+- `docs/results/structured-spec-repo-map-results-2026-07-24.md` - Structured-spec Snake/Pong plan and full-run results plus repo-mapper context/Mermaid/JSON output metrics.
+- `docs/results/compute-shield-10-2026-08-04.md` - Frozen 1.5B Compute Shield comparison, including the measured regression.
 - `docs/open_source_readiness_audit.pdf` - Snapshot of the repository's open-source readiness review.
 
 ## `examples/`

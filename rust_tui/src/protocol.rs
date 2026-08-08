@@ -425,7 +425,7 @@ mod tests {
             },
             HarnessEvent::RepoMapFiles {
                 entries: vec![FileEntry {
-                    path: "rust/src/main.rs".into(),
+                    path: "rust_tui/src/main.rs".into(),
                     summary: "Rust TUI".into(),
                     symbols: vec!["main".into()],
                 }],
@@ -470,12 +470,12 @@ mod tests {
                 call_count: 1,
             },
             HarnessEvent::ToolDiff {
-                path: "rust/src/main.rs".into(),
-                diff: "--- a/rust/src/main.rs\n+++ b/rust/src/main.rs\n".into(),
+                path: "rust_tui/src/main.rs".into(),
+                diff: "--- a/rust_tui/src/main.rs\n+++ b/rust_tui/src/main.rs\n".into(),
                 replacements: 1,
             },
             HarnessEvent::ToolDiffResolved {
-                path: "rust/src/main.rs".into(),
+                path: "rust_tui/src/main.rs".into(),
                 applied: true,
                 message: "diff applied".into(),
             },

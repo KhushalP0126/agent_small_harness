@@ -4,7 +4,10 @@
 - [`conventions.md`](conventions.md) — stable model-facing coding rules.
 - [`design.md`](design.md) — architecture, safety, and validation constraints.
 - [`structure.md`](structure.md) — tracked repository map.
+- [`../results/`](../results/) — benchmark and experiment reports.
+- [`../../ARCHITECTURE.md`](../../ARCHITECTURE.md) — top-level code ownership map.
 
-Historical benchmark reports and experiment results remain directly under
-`docs/`. These reference documents are kept together so the repository root can
-stay focused on executable entrypoints and standard package metadata.
+Historical benchmark reports and experiment results live under
+[`docs/results/`](../results/). These reference documents are kept together so
+the repository root can stay focused on executable entrypoints and standard
+package metadata.

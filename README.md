@@ -1,7 +1,8 @@
 # Agent Small Harness
 
-> Documentation audit: 2026-07-30. Commands and component names below reflect
-> the current local tree. Dated files under `docs/` remain historical records.
+> Rust TUI is the default interface. Historical measurements live in
+> [`docs/results/`](docs/results/); the current code map is
+> [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
 Agent Small Harness is a Python-first research and engineering prototype for
 validated code generation. It studies how far small local coding models can go
@@ -14,6 +15,16 @@ The project is designed for two audiences:
   behavior validation, and escalation boundaries.
 - Jobs and portfolio review: demonstrating practical systems engineering around
   LLM code generation, not just prompt demos.
+
+## Quick Start
+
+```bash
+make setup
+make start REPO_ROOT=.
+```
+
+Use `make check` for deterministic Python and Rust validation. Model calls are
+always opt-in; the default local profile is `qwen2.5-coder:1.5b`.
 
 ## Core Idea
 
@@ -34,6 +45,9 @@ user task
 
 Every draft, including output from the architect model, must pass the same gates.
 No model output is trusted by default.
+
+For the maintained Mermaid source, see
+[`docs/architecture.mmd`](docs/architecture.mmd).
 
 ## Current Scope
 
@@ -60,7 +74,7 @@ definition of the product or controller behavior.
 | Bounded repair | Retry prompts preserve current failures and drafts under a prompt budget, detect stagnation/branch loops, and validate every worker or architect revision again. |
 | Structured-spec applications | Architect-ordered contract queues carry accepted field types and method arities forward, validate imports per contract, assemble one Python program, and run contract examples plus the headless smoke test outside the harness process with sanitized environments and disposable working directories. |
 | Review evidence | Optional run artifacts preserve prompts, attempts, diffs, findings, execution traces, validation results, token estimates, and timelines. |
-| Human review TUI | The existing Textual process remains the stable interface. A Rust `ratatui` client now provides a non-blocking JSONL subprocess bridge and an in-process Mermaid-to-terminal-image modal; it is an additive preview until parity is verified. |
+| Human review TUI | The Rust `ratatui` client is the default terminal interface. It uses a non-blocking JSONL bridge and in-process Mermaid/image rendering. The older Textual console remains an artifact-review fallback. |
 | C/C++ compilation gate | Registered C/C++ drafts run a strict, timeout-bounded compiler pass (`-Wall -Wextra -Werror -fsyntax-only`) before later validation. Optional tree-sitter engines add structural checks when installed. |
 | Algorithmic profiling | An opt-in behavioral profiler measures repeated callable variants, reports median/spread and optional hardware counters, and only identifies a faster ordering beyond a documented noise floor. |
 | Compute Shield metrics | A task-level evaluator reads recorded model-token telemetry from paired artifacts, preserves each comparison row, and reports the exact aggregate delta; it is evidence, not an acceptance gate. |
@@ -92,11 +106,11 @@ Compute Shield is likewise an evaluation metric rather than a gate.
 
 `GenerationController(profiling_runner=...)` is the opt-in integration seam.
 Results and failures are stored on every attempt, included in checkpoints and
-review artifacts, surfaced in the Textual console, and used by the existing
+review artifacts, surfaced in the Rust event stream, and used by the existing
 repair/manual-review decision path. With no runner, the attempt shape records
 profiling as disabled and behavior is unchanged.
 
-## Rust TUI preview
+## Rust TUI
 
 The Rust interface owns the terminal while Python continues to own the harness,
 models, engines, and artifacts. They communicate through newline-delimited JSON
@@ -107,9 +121,9 @@ make rust-tui REPO_ROOT=.
 make test-rust
 ```
 
-The Rust crate lives under `rust/`; its `mermaid_view` module contains the
+The Rust crate lives under `rust_tui/`; its `mermaid_view` module contains the
 in-process SVG-to-PNG pipeline and Kitty/iTerm2/quadrant-block terminal
-renderers. Run Cargo directly with `cargo --manifest-path rust/Cargo.toml`
+renderers. Run Cargo directly with `cargo --manifest-path rust_tui/Cargo.toml`
 when you need a Rust-specific command.
 
 The primary view is a high-contrast, Codex-inspired linear event stream: a
@@ -221,8 +235,9 @@ make compute-shield COMPUTE_SHIELD_ARGS="\
   --output artifacts/compute-shield.json"
 ```
 
-Rust is required for these two targets. The Textual `make tui` command remains
-supported during rollout.
+Rust is required for these two targets and is the default interactive path.
+`make tui` remains available only as the legacy Textual artifact-review
+fallback.
 
 ## Execution Flow
 
@@ -281,7 +296,7 @@ flowchart TD
 
     gates -->|yes| completed[completed]
     completed --> artifacts[Artifacts and historian]
-    artifacts --> textual[Textual human-review console<br/>launch, resume, inspect, compare]
+    artifacts --> textual[Legacy Textual artifact-review fallback<br/>launch, resume, inspect, compare]
     artifacts --> shield[Compute Shield<br/>paired token telemetry]
     bridge[Python JSONL bridge<br/>separate typed event pipe] --> rust[Rust review TUI<br/>logs, progress, Mermaid modal]
     artifacts --> rust
@@ -422,7 +437,7 @@ local inference reduces total tokens across every model.
 authorized local-model comparison and records Ollama's prompt/evaluation token
 counts. The 3B comparison was intentionally stopped before completion; no 3B
 result is used. The authorized 1.5B frozen Compute Shield result is published in
-`docs/compute-shield-10-2026-08-04.md`.
+`docs/results/compute-shield-10-2026-08-04.md`.
 
 #### First real DeepSeek run (2026-08-03)
 
@@ -604,7 +619,7 @@ Those outcomes are recorded in artifact metadata and the contract queue results.
 | `prompt/` | Initial, retry, architect, and contract-architect prompt builders |
 | `backends/` | Ollama worker and API architect clients |
 | `api/` | FastAPI boundary for synchronous runs, asynchronous jobs, status lookup, and health checks |
-| `TUI/` | Separate Textual review process, JSON/subprocess data source, live checkpoint screen, repo-map modal, attempt diffs, and history hints |
+| `TUI/` | Legacy Textual artifact-review fallback; retained while its shared Mermaid helper is extracted from the old interface |
 | `scripts/run_repo_map.py` | Repository-map CLI for compact context, JSON, Mermaid, and optional artifacts |
 | `scripts/run_compute_shield.py` | Aggregates matching baseline/shielded artifact telemetry without rerunning models |
 | `scripts/run_structured_spec.py` | Plan-only or full contract-queue generation, integration, validation, and smoke execution |
@@ -617,7 +632,10 @@ Those outcomes are recorded in artifact metadata and the contract queue results.
 | `docs/reference/structure.md` | File-by-file repository map |
 | `docs/reference/conventions.md` | Stable model-facing coding and harness rules |
 | `docs/reference/SPEC.md` | Rust TUI and engine-expansion specification |
-| `rust/` | Rust TUI crate and in-process Mermaid/image rendering |
+| `docs/results/` | Published benchmark, capability, and execution reports |
+| `setup/` | Fresh-checkout setup and local runtime guide |
+| `ARCHITECTURE.md` | Top-level ownership map and compatibility boundaries |
+| `rust_tui/` | Rust TUI crate and in-process Mermaid/image rendering |
 
 ## Setup
 
@@ -625,7 +643,7 @@ For a fresh local checkout, run the bootstrap target with Python 3.11+ and
 Cargo available:
 
 ```bash
-make bootstrap
+make setup
 ```
 
 It creates `.venv`, installs the base dependencies, creates `.env` from
@@ -647,9 +665,9 @@ make install-formal
 `.env.example` when it is missing. Use `make install` alone when you do not
 want to create an environment file yet.
 
-The Rust preview additionally requires a Rust toolchain with `cargo`. It is not
-required for the Python harness or Textual TUI. The crate is isolated under
-`rust/`, so the repository root remains Python-first:
+The Rust TUI additionally requires a Rust toolchain with `cargo`. It is not
+required for the Python harness or the legacy Textual fallback. The crate is isolated under
+`rust_tui/`, so the repository root remains Python-first:
 
 ```bash
 rustup toolchain install stable
@@ -708,13 +726,13 @@ Run the API:
 make api-dev
 ```
 
-Launch the human-review TUI:
+Launch the default terminal interface:
 
 ```bash
-make tui
+make rust-tui REPO_ROOT=.
 ```
 
-The TUI is deliberately outside the control loop. It launches the existing CLI
+The Rust TUI is deliberately outside the control loop. It launches the existing CLI
 scripts as subprocesses and reads their JSON checkpoints. `Q` quits, `R`
 resumes the selected run, `M` prepares the repository map, and `O` opens its
 loopback browser page. `D` shows
@@ -896,10 +914,10 @@ make approve-library LIB=clang.cindex
 - [x] Task-agnostic wildcard-import blocking with qualified-symbol repair
   guidance.
 - [x] Review-before-trust library discovery and registry approval workflow.
-- [x] Artifact-driven Textual review console with CLI launch/resume, live
-  attempt and contract-queue status, repo-map Mermaid text/SVG handoff,
-  unified attempt diffs, and advisory history search.
-- [x] Rust TUI preview with a Tokio three-source event loop, typed JSONL
+- [x] Artifact-driven Textual fallback with CLI launch/resume, live attempt
+  and contract-queue status, repo-map Mermaid text/SVG handoff, unified
+  attempt diffs, and advisory history search.
+- [x] Rust TUI default with a Tokio three-source event loop, typed JSONL
   subprocess protocol, responsive state reducer, and in-process Mermaid
   SVG-to-terminal-image modal.
 - [x] Strict C/C++ compilation gate plus opt-in algorithmic profiling and
@@ -924,11 +942,11 @@ make approve-library LIB=clang.cindex
 ### Remaining Work
 
 - [ ] Complete manual terminal compatibility passes for the directly emitted
-  Kitty and iTerm2 protocol paths before making the Rust TUI the default. The
+  Kitty and iTerm2 protocol paths. The Rust TUI is the default; the
   quadrant-block fallback has been smoke-tested in Apple Terminal.
 - [x] Run and publish the frozen 10-task Compute Shield experiment. The honest
   2026-08-04 1.5B result is documented in
-  `docs/compute-shield-10-2026-08-04.md`; it used more shielded tokens and had
+  `docs/results/compute-shield-10-2026-08-04.md`; it used more shielded tokens and had
   one shielded failure, so no token-saving claim is made.
 - [ ] Extend the mandatory container-only registered-tool policy with a
   host-enforced OS/filesystem allowlist before accepting adversarial code in a

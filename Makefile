@@ -1,4 +1,10 @@
-PYTHON ?= python3
+# Everyday commands are intentionally small. Run `make help` first.
+.DEFAULT_GOAL := help
+
+VENV_PYTHON := $(if $(wildcard .venv/bin/python),.venv/bin/python,python3)
+PYTHON ?= $(VENV_PYTHON)
+CARGO ?= cargo
+RUST_MANIFEST := rust_tui/Cargo.toml
 RUNS_PATH ?= data/runs.jsonl
 CONFIG_PATH ?= config.yaml
 ARTIFACT_ROOT ?= artifacts/runs
@@ -24,113 +30,38 @@ IMAGE ?= agent-small-harness:local
 ARTIFACT_ARGS = $(if $(filter 1 true yes,$(SAVE_ARTIFACTS)),--save-artifacts --artifact-root "$(ARTIFACT_ROOT)",)
 DOC_ARGS = --doc-agent "$(DOC_AGENT)" $(if $(DOC_MODEL),--doc-model "$(DOC_MODEL)",) $(if $(DOC_OUTPUT),--doc-output "$(DOC_OUTPUT)",)
 
-.PHONY: help bootstrap setup install install-formal install-kernel env-path init-env api-dev tui rust-tui tui_rust test-rust docker-build sandbox-run agent-benchmark test test-engine-expansion compute-shield test-claude-fixes test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-fixture resume-coding-capability test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-worker-limit-architect resume-worker-limit test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-python-ladder-stateful test-python-ladder-stateful-architect test-plan-mode-ladder test-raw-vs-harness test-raw-vs-harness-architect test-raw-vs-harness-repeated test-raw-vs-harness-ablation test-formal-experiment structured-spec structured-spec-plan resume-structured-spec repo-map review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library tool-agent ollama-smoke inference-smoke live-repair day1 clean-history
+.PHONY: help bootstrap setup install install-formal install-kernel env-path init-env api-dev tui rust-tui tui_rust start test-rust check docker-build sandbox-run agent-benchmark test test-engine-expansion compute-shield test-claude-fixes test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-fixture resume-coding-capability test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-worker-limit-architect resume-worker-limit test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-python-ladder-stateful test-python-ladder-stateful-architect test-plan-mode-ladder test-raw-vs-harness test-raw-vs-harness-architect test-raw-vs-harness-repeated test-raw-vs-harness-ablation test-formal-experiment structured-spec structured-spec-plan resume-structured-spec repo-map review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library tool-agent ollama-smoke inference-smoke live-repair day1 clean-history clean-cache
 
 help:
-	@printf "Agent Small Harness commands\n"
-	@printf "\nSetup:\n"
-	@printf "  make setup                           Install Python dependencies and create .env from .env.example\n"
-	@printf "  make bootstrap                      Create .venv, install deps, create .env, and build Rust\n"
-	@printf "  make install                         Install optional tree-sitter deps for C/C++ support\n"
-	@printf "  make install-formal                  Install optional Deal/CrossHair formal-verification deps\n"
-	@printf "  make install-kernel                  Install optional Kernel browser documentation deps\n"
-	@printf "  make env-path                        Print the local .env path and supported API key names\n"
-	@printf "  make init-env                        Create .env from .env.example if it does not already exist\n"
-	@printf "  make api-dev                         Run the synchronous FastAPI service locally\n"
-	@printf "  make tui                             Launch the artifact-driven human review TUI\n"
-	@printf "  make rust-tui                        Launch the Rust TUI and JSONL Python bridge\n"
-	@printf "  make tui_rust                        Alias for make rust-tui\n"
-	@printf "  make test-rust                       Run Rust protocol, state, and Mermaid tests\n"
-	@printf "  make docker-build                    Build the local API container image\n"
-	@printf "\nDeterministic validation, no model calls:\n"
-	@printf "  make test                            Run the full unit test suite\n"
-	@printf "  make test-claude-fixes               Run focused controller, historian, behavior, and telemetry tests\n"
-	@printf "  make test-behavior                   Run behavior validator tests\n"
-	@printf "  make test-engine-edge-cases          Run engine boundary and false-positive tests\n"
-	@printf "  make test-lint-engine                Run focused Pylint-engine tests\n"
-	@printf "  make test-treesitter                 Run optional C/C++ tree-sitter pipeline tests\n"
-	@printf "  make test-engine-expansion           Run compilation, profiling, shield, and bridge tests\n"
-	@printf "  make compute-shield COMPUTE_SHIELD_ARGS='--baseline-run task=path --shielded-run task=path' Compare paired artifact telemetry\n"
-	@printf "  make evaluate-engines                Score static engines against data/engine_cases.json\n"
-	@printf "  make repo-map                        Map a repo's functions/vars/loops/imports (context|json|mermaid)\n"
-	@printf "  make benchmark                       Run the Day 1 benchmark pipeline\n"
-	@printf "  make test-coding-capability-fixture  Verify coding-capability plumbing without Ollama\n"
-	@printf "\nLive model runs:\n"
-	@printf "  make inference-smoke                 Verify the configured Ollama model responds\n"
-	@printf "  make ollama-smoke                    Verify the Ollama-backed controller can be constructed\n"
-	@printf "  make live-repair                     Run Ollama repair loop on data/snippets/mixed_hard_case.py\n"
-	@printf "  make test-coding-capability          Run model codegen through engines and behavior gates\n"
-	@printf "  make test-coding-capability-architect Run model codegen with API architect escalation\n"
-	@printf "  make resume-coding-capability RESUME_RUN=<id> Resume an interrupted capability run\n"
-	@printf "  make test-raw-vs-harness             Compare raw one-shot generation with full harness validation\n"
-	@printf "  make test-raw-vs-harness-architect   Compare raw output with repair and architect recovery\n"
-	@printf "  make test-raw-vs-harness-repeated    Save and aggregate repeated paired recovery samples\n"
-	@printf "  make test-raw-vs-harness-ablation    Compare raw, one naive repair, and the full harness\n"
-	@printf "  make structured-spec SPEC_PATH=path   Run any external structured spec through Plan Mode, worker, architect, and gates\n"
-	@printf "  make structured-spec-plan SPEC_PATH=path Ask architect for queue plan, print JSON, then stop before worker generation\n"
-	@printf "  make resume-structured-spec SPEC_PATH=path RESUME_RUN=<id> Resume a contract queue checkpoint\n"
-	@printf "\nWorker ladders:\n"
-	@printf "  make test-worker-limit               Push MODEL through harder worker-limit tasks\n"
-	@printf "  make test-worker-limit-auto          Use config.yaml difficulty model routing\n"
-	@printf "  make test-worker-limit-decompose     Add skeleton decomposition prompts to worker-limit tasks\n"
-	@printf "  make test-worker-limit-architect     Use API architect escalation on worker-limit tasks\n"
-	@printf "  make resume-worker-limit RESUME_RUN=<id> Resume an interrupted worker-limit run\n"
-	@printf "  make test-python-ladder-parsing      Run parsing-focused Python ladder\n"
-	@printf "  make test-python-ladder-data         Run data-transform Python ladder\n"
-	@printf "  make test-python-ladder-algorithmic  Run algorithmic Python ladder\n"
-	@printf "  make test-python-ladder-stateful     Run stateful parser/event Python ladder\n"
-	@printf "  make test-python-ladder-stateful-architect Run stateful ladder with API architect escalation\n"
-	@printf "  make test-plan-mode-ladder           Test Plan Mode extraction on progressively harder prompts\n"
-	@printf "\nArtifacts, history, and review:\n"
-	@printf "  make review-run RUN=<id-or-path>     Render a human-review summary for an artifact run\n"
-	@printf "  make aggregate-history               Build routing stats from data/runs.jsonl\n"
-	@printf "  make clean-history                   Reset generated history entries\n"
-	@printf "\nLibrary registry:\n"
-	@printf "  make discover-library LIB=name       Ask DeepSeek for docs and write proposal plus Markdown guide\n"
-	@printf "  make discover-library LIB=name DOC_AGENT=qwen Ask local Qwen for documentation candidates\n"
-	@printf "  make discover-library LIB=name DOC_AGENT=kernel Verify documentation with a Kernel browser\n"
-	@printf "  make discover-library LIB=name DOC_AGENT=none Write proposal without model documentation search\n"
-	@printf "  make tool-agent TASK='inspect src' Run bounded read/execute/diff tools (no writes)\n"
-	@printf "  make sandbox-run SOURCE=file LANGUAGE=python Run source in Docker/Podman with no network\n"
-	@printf "  make agent-benchmark BASELINE_CMD='...' SHIELDED_CMD='...' Compare paired outcomes/tokens\n"
-	@printf "  make approve-library LIB=name        Merge approved proposal into library registry\n"
-	@printf "\nConvenience:\n"
-	@printf "  make test-adversarial                Run trap prompts through the PEV loop\n"
-	@printf "  make test-formal-experiment          Run optional CrossHair semantic-validation smoke experiment\n"
-	@printf "  make day1                            Run benchmark and tests\n"
-	@printf "\nCommon variables:\n"
-	@printf "  MODEL=qwen2.5-coder:1.5b               Local Ollama worker model; default is $(MODEL)\n"
-	@printf "  MAX_RETRIES=3                        Small-worker retry budget for ladder targets; default is $(MAX_RETRIES)\n"
-	@printf "  ARCHITECT_AFTER=1                    Escalate to architect after this many failed repairs; default is $(ARCHITECT_AFTER)\n"
-	@printf "  ARCHITECT_MAX_RETRIES=2              Total repair budget for architect targets; default is $(ARCHITECT_MAX_RETRIES)\n"
-	@printf "  SAVE_ARTIFACTS=1                     Save attempts, prompts, diffs, and validations; default is $(SAVE_ARTIFACTS)\n"
-	@printf "  ARTIFACT_ROOT=artifacts/runs         Artifact directory; default is $(ARTIFACT_ROOT)\n"
-	@printf "  RESUME_RUN=<artifact-run-id>         Run ID containing checkpoint.json\n"
-	@printf "  SPEC_PATH=path/to/spec.md            Structured-spec input path\n"
-	@printf "  REPO_ROOT=.                          Repo root for make repo-map; default is $(REPO_ROOT)\n"
-	@printf "  REPO_MAP_FORMAT=context|json|mermaid Output for make repo-map; default is $(REPO_MAP_FORMAT)\n"
-	@printf "  DOC_AGENT=deepseek|qwen|kernel|none  Backend for library documentation search; default is $(DOC_AGENT)\n"
-	@printf "  DOC_MODEL=name                       Optional doc-search model override\n"
-	@printf "  DOC_OUTPUT=path                      Markdown docs output path; default is data/library_proposals/<LIB>.docs.md for model search\n"
-	@printf "  TOOL_AGENT=qwen|deepseek             Backend for bounded repository tool calls; default is $(TOOL_AGENT)\n"
-	@printf "  SANDBOX_MODE=container|local         Generated-source execution mode; default is $(SANDBOX_MODE)\n"
-	@printf "  CONTAINER_RUNTIME=docker|podman      Hardened runtime; default is $(CONTAINER_RUNTIME)\n"
-	@printf "  IMAGE=agent-small-harness:local      Docker image tag for docker-build\n"
-	@printf "\nExamples:\n"
-	@printf "  make test-worker-limit MODEL=qwen2.5-coder:1.5b SAVE_ARTIFACTS=1\n"
-	@printf "  make test-worker-limit-auto SAVE_ARTIFACTS=1\n"
-	@printf "  make test-worker-limit-architect MODEL=qwen2.5-coder:1.5b SAVE_ARTIFACTS=1\n"
-	@printf "  make review-run RUN=worker_limit_6\n"
+	@printf "agent-coder_structure\n\n"
+	@printf "Start here:\n"
+	@printf "  make setup                       Create .venv, install dependencies, configure .env, build Rust\n"
+	@printf "  make start REPO_ROOT=.           Launch the default Rust terminal interface\n"
+	@printf "  make check                       Run Python and Rust tests (no model calls)\n"
+	@printf "\nDaily work:\n"
+	@printf "  make tool-agent TASK='inspect agents'    Run bounded repository tools\n"
+	@printf "  make structured-spec-plan SPEC_PATH=...  Create an architect plan only\n"
+	@printf "  make structured-spec SPEC_PATH=...       Run the approved structured-spec flow\n"
+	@printf "  make repo-map REPO_ROOT=.                Produce repository context\n"
+	@printf "  make review-run RUN=<id>                 Review a saved run\n"
+	@printf "\nValidation and maintenance:\n"
+	@printf "  make test                        Run the full Python test suite\n"
+	@printf "  make test-rust                   Run Rust protocol, UI-state, and renderer tests\n"
+	@printf "  make docker-build                Build the isolated execution image\n"
+	@printf "  make sandbox-run SOURCE=... LANGUAGE=python  Run source without network\n"
+	@printf "  make clean-cache                 Remove Python test caches (keeps artifacts and Rust build cache)\n"
+	@printf "\nModel runs are opt-in; default local model: $(MODEL)\n"
+	@printf "See setup/README.md, ARCHITECTURE.md, and docs/results/ for details.\n"
 
 bootstrap:
 	@test -d .venv || python3 -m venv .venv
 	.venv/bin/python -m pip install --upgrade pip
 	.venv/bin/python -m pip install -r requirements.txt
 	@test -f .env || cp .env.example .env
-	cargo build --release --manifest-path rust/Cargo.toml
-	@printf "\nSetup complete. Run: source .venv/bin/activate && make rust-tui REPO_ROOT=.\n"
+	$(CARGO) build --release --manifest-path $(RUST_MANIFEST)
+	@printf "\nSetup complete. Run: make start REPO_ROOT=.\n"
 
-setup: install init-env
+setup: bootstrap
 
 install:
 	$(PYTHON) -m pip install -r requirements.txt
@@ -159,12 +90,16 @@ tui:
 	$(PYTHON) -m TUI --artifact-root "$(ARTIFACT_ROOT)" --repo-root "$(REPO_ROOT)"
 
 rust-tui:
-	PYTHON="$(PYTHON)" cargo run --manifest-path rust/Cargo.toml -- "$(REPO_ROOT)"
+	PYTHON="$(PYTHON)" $(CARGO) run --manifest-path $(RUST_MANIFEST) -- "$(REPO_ROOT)"
 
 tui_rust: rust-tui
 
+start: rust-tui
+
 test-rust:
-	cargo test --manifest-path rust/Cargo.toml
+	$(CARGO) test --manifest-path $(RUST_MANIFEST)
+
+check: test test-rust
 
 docker-build:
 	docker build -t "$(IMAGE)" .
@@ -296,7 +231,7 @@ approve-library:
 	$(PYTHON) scripts/approve_library.py "$(LIB)"
 
 tool-agent:
-	@test -n "$(TASK)" || (echo "Set TASK, e.g. make tool-agent TASK='inspect rust/src/main.rs'" && exit 1)
+	@test -n "$(TASK)" || (echo "Set TASK, e.g. make tool-agent TASK='inspect rust_tui/src/main.rs'" && exit 1)
 	$(PYTHON) scripts/run_tool_agent.py "$(TASK)" --provider "$(TOOL_AGENT)" --repo-root "$(REPO_ROOT)"
 
 sandbox-run:
@@ -322,3 +257,8 @@ day1: benchmark test
 
 clean-history:
 	$(PYTHON) -c "import json, pathlib; p = pathlib.Path('history.json'); data = json.loads(p.read_text()); data['generations'] = []; p.write_text(json.dumps(data, indent=2) + '\n')"
+
+clean-cache:
+	@find . -type d -name '__pycache__' -prune -exec rm -rf {} +
+	@rm -rf .pytest_cache
+	@printf "Removed Python caches. Artifacts, .env, local history, and Rust build output were kept.\n"

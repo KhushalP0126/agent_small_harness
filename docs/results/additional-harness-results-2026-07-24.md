@@ -224,8 +224,8 @@ contract-bearing sample.
 
 | Screenshot item | Reason skipped |
 | --- | --- |
-| Parsing, data, algorithmic, and stateful ladders | Already run and documented in `docs/qwen-capability-results-2026-07-18.md` |
-| Snake structured-spec run | Already documented in `docs/structured-spec-repo-map-results-2026-07-24.md` |
+| Parsing, data, algorithmic, and stateful ladders | Already run and documented in `docs/results/qwen-capability-results-2026-07-18.md` |
+| Snake structured-spec run | Already documented in `docs/results/structured-spec-repo-map-results-2026-07-24.md` |
 | Repeating Pong three times | Would repeat the same command; excluded by the no-rerun instruction |
 | Full `make test` | The complete 310-test suite already passed before this pass |
 | `make test-adversarial` and `make test-engine-edge-cases` | Their tests were already included in the completed full suite |
