@@ -129,15 +129,15 @@ when you need a Rust-specific command.
 The primary view is a high-contrast, Codex-inspired linear event stream: a
 compact session line, `─` turn dividers, and `•`/`└` event trees. A persistent
 status strip above the bottom composer shows activity, repository directory,
-reported local context, the local `qwen2.5-coder:1.5b` model, and DeepSeek API
-availability. `ctx —` means no local generation has completed yet; after a
-generation it shows the backend-reported token total and remaining share of its
-configured context window. Press `c`, `p`,
+reported API context, the active DeepSeek model, and API availability. `ctx —`
+means no model generation has completed yet; after a generation it shows the
+backend-reported token total and remaining share of its configured context
+window. Press `c`, `p`,
 or `a` to focus the same composer; pressing `Enter` from chat opens it, and
 pressing `Enter` again sends. Its footer exposes keyboard-first `send`,
 `/tools`, and `/spec` actions. Every
-non-planning message goes through the local Qwen 1.5B assistant with bounded,
-read-only repository tools available when they help; ordinary conversation
+non-planning message goes through the DeepSeek tool agent with bounded, typed
+repository tools available when they help; ordinary conversation
 finishes directly without a tool call. New project ideas automatically open a typed 2–4 question
 clarification flow. Each question has numbered choices plus a mandatory `Other`
 option; `1`–`5` answers locally, while `Other` opens free-text input.
@@ -165,7 +165,8 @@ line-numbered validated-code view. That view supports vertical and horizontal
 arrow scrolling, `PageUp`/`PageDown`, and `v`/`Esc` to close; press `v` from the
 main view to reopen the latest validated source.
 
-The session line reports whether DeepSeek was configured from the environment
+The session line reports the active API model and API mode, plus whether
+DeepSeek was configured from the environment
 or repository `.env` without displaying the key. Explicit phrases such as
 `/remember keep responses concise`, `remember that ...`, or `I prefer ...`
 store a bounded preference in ignored `.tui_memory.json`. Those preferences are
@@ -178,11 +179,12 @@ the memory extractor.
 
 The session line shows the active directory and current status; the terminal no
 longer renders the diagram or file browser. Context is never inferred from the
-visible log: Ollama reports its prompt/evaluation token counts, while the
-architect API reports its response usage. The local and API records, plus the
-running API cost estimate when available, are persisted in the ignored
+visible log: the architect API reports its response usage. The running API cost
+estimate is persisted in the ignored
 `context.md` session journal.
-Planning questions only begin for an explicit software request: the message
+Planning questions only begin for an explicit planning request (`plan`,
+`design`, `architecture`, or `spec`), or when you use `/spec`. Ordinary or
+vague coding requests stay in the DeepSeek generation/tool loop.
 must include both planning/build intent and a coding target such as an app,
 script, API, CLI, game, repository, or feature. Non-coding requests stay in
 ordinary chat. Press `m` to build a map on loopback, then `o` to open its
@@ -364,12 +366,15 @@ The typed registry exposes seven repository-scoped tools:
 
 All filesystem requests pass through one resolved-root guard that rejects
 absolute, traversal, and symlink escapes. A bounded model→tool→result loop lets
-Qwen or DeepSeek inspect results and choose another tool without granting the
-model direct filesystem mutation.
+DeepSeek is the default interactive agent and chooses tools without receiving
+direct filesystem mutation. Qwen is reserved for narrow local chores: simple
+filesystem scaffolding and GitHub workflow requests, with a 30-second Ollama
+keep-alive to avoid unnecessary memory pressure. Repository maps use their
+existing direct command path and do not invoke either model.
 
 ```bash
 make tool-agent TASK="inspect the structured-spec integration failure"
-make tool-agent TASK="prepare a diff for README.md" TOOL_AGENT=deepseek
+make tool-agent TASK="prepare a diff for README.md"
 
 # Direct hardened execution smoke test
 make sandbox-run SOURCE=/tmp/candidate.py LANGUAGE=python
@@ -694,11 +699,16 @@ The checked-in defaults route every local worker profile and difficulty tier to
 Qwen 1.5B so the project remains usable on constrained laptops. Larger models
 are not required for the supported workflow.
 
-For architect escalation, create a local `.env` file:
+For interactive chat, planning, and code work, create a local `.env` file with
+a DeepSeek key. Qwen is used only for narrow filesystem scaffolding and GitHub
+workflow requests; local models also remain available for explicit benchmark
+commands.
 
 ```env
 DEEPSEEK_API_KEY=your_key_here
 ARCHITECT_MODEL=deepseek-v4-pro
+HARNESS_ARCHITECT_MODE=api
+OLLAMA_KEEP_ALIVE=30s
 ```
 
 `config.yaml` separates architect profiles:

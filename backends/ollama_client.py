@@ -27,9 +27,15 @@ class OllamaGenerationConfig:
 
 
 class OllamaClient:
-    def __init__(self, base_url: str = DEFAULT_OLLAMA_URL, timeout_seconds: int = 120) -> None:
+    def __init__(
+        self,
+        base_url: str = DEFAULT_OLLAMA_URL,
+        timeout_seconds: int = 120,
+        keep_alive: str | None = None,
+    ) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout_seconds = timeout_seconds
+        self.keep_alive = keep_alive
         self.last_usage: dict[str, int] = {}
 
     def generate(
@@ -52,6 +58,8 @@ class OllamaClient:
         }
         if system:
             payload["system"] = system
+        if self.keep_alive:
+            payload["keep_alive"] = self.keep_alive
         request = Request(
             f"{self.base_url}/api/generate",
             data=json.dumps(payload).encode("utf-8"),

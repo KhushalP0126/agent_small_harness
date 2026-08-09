@@ -70,9 +70,12 @@ REPAIR_PROFILE = ArchitectProfile(
     model=DEFAULT_ARCHITECT_MODEL,
     timeout_seconds=90,
     temperature=0.1,
-    max_tokens=4000,
-    thinking_type="disabled",
-    reasoning_effort="medium",
+    # This is also the interactive TUI profile. Keep enough headroom for
+    # deliberate coding and tool-use responses instead of silently using the
+    # lightweight contract-planning settings above.
+    max_tokens=8000,
+    thinking_type="enabled",
+    reasoning_effort="high",
 )
 
 

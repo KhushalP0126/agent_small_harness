@@ -53,9 +53,9 @@ execution:
       model: deepseek-v4-pro
       timeout_seconds: 90
       temperature: 0.1
-      max_tokens: 4000
-      thinking_type: disabled
-      reasoning_effort: medium
+      max_tokens: 8000
+      thinking_type: enabled
+      reasoning_effort: high
   routing:
     architect_after_repair_attempts: 1
     complexity_threshold: 0.7

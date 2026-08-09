@@ -22,6 +22,7 @@ pub enum HarnessCommand {
         answers: Vec<QuestionnaireAnswer>,
     },
     DraftSpec,
+    DraftResearch,
     ExecuteSpec {
         text: String,
     },
@@ -160,6 +161,8 @@ pub enum HarnessEvent {
         source: String,
         memory_path: String,
         preference_count: u32,
+        architect_mode: String,
+        local_model: String,
     },
     ContextUsage {
         backend: String,
@@ -192,6 +195,10 @@ pub enum HarnessEvent {
     },
     SpecDraft {
         text: String,
+    },
+    ResearchDraft {
+        text: String,
+        path: String,
     },
     MemoryUpdated {
         preference: String,
@@ -350,6 +357,8 @@ mod tests {
                 source: ".env:DEEPSEEK_API_KEY".into(),
                 memory_path: ".tui_memory.json".into(),
                 preference_count: 2,
+                architect_mode: "auto".into(),
+                local_model: "qwen2.5-coder:1.5b".into(),
             },
             HarnessEvent::ContextUsage {
                 backend: "local".into(),
@@ -393,6 +402,10 @@ mod tests {
             },
             HarnessEvent::SpecDraft {
                 text: "# Spec".into(),
+            },
+            HarnessEvent::ResearchDraft {
+                text: "# Research".into(),
+                path: "docs/research/example.md".into(),
             },
             HarnessEvent::MemoryUpdated {
                 preference: "keep responses concise".into(),
@@ -544,12 +557,13 @@ mod tests {
                 }],
             },
             HarnessCommand::DraftSpec,
+            HarnessCommand::DraftResearch,
             HarnessCommand::ExecuteSpec {
                 text: "# Parser spec".into(),
             },
             HarnessCommand::ToolTask {
                 text: "inspect the parser".into(),
-                provider: "qwen".into(),
+                provider: "deepseek".into(),
             },
             HarnessCommand::ApplyToolDiff { approved: true },
             HarnessCommand::ApproveAction { approved: false },

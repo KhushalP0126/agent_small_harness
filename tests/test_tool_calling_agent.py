@@ -3,7 +3,12 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from agents.tool_calling_agent import ToolCallingAgent, _bounded_transcript, _compact_tool_value
+from agents.tool_calling_agent import (
+    ToolCallingAgent,
+    _bounded_transcript,
+    _compact_tool_value,
+    _explicit_requested_path,
+)
 from harness_kernel.tool_handlers import build_default_tool_registry
 
 
@@ -129,6 +134,57 @@ class ToolCallingAgentTests(unittest.TestCase):
         self.assertFalse(run.exhausted)
         self.assertIn("diff is prepared", run.final_answer)
 
+    def test_new_file_proposal_stops_after_the_first_successful_diff(self) -> None:
+        response = json.dumps(
+            {
+                "action": "tool",
+                "tool": "create_file",
+                "arguments": {"root": ".", "path": "hello.py", "content": "print('hi')\n"},
+            }
+        )
+        with TemporaryDirectory() as tmpdir:
+            run = ToolCallingAgent(
+                lambda _prompt: response,
+                build_default_tool_registry(repository_root=Path(tmpdir)),
+            ).run("Create a file named hello.py")
+
+        self.assertFalse(run.exhausted)
+        self.assertEqual(len(run.calls), 1)
+        self.assertIn("reviewed diff", run.final_answer)
+
+    def test_explicit_file_path_rejects_a_different_mutation_target(self) -> None:
+        response = json.dumps(
+            {
+                "action": "tool",
+                "tool": "create_file",
+                "arguments": {"root": ".", "path": "exp/hello.py", "content": "print('hi')\n"},
+            }
+        )
+        with TemporaryDirectory() as tmpdir:
+            run = ToolCallingAgent(
+                lambda _prompt: response,
+                build_default_tool_registry(repository_root=Path(tmpdir)),
+                max_turns=1,
+            ).run("Create a file named hello.py")
+
+        self.assertEqual(run.calls[0].result["error_kind"], "unexpected_target_path")
+
+    def test_prompt_calls_out_an_explicit_requested_path(self) -> None:
+        prompts: list[str] = []
+        with TemporaryDirectory() as tmpdir:
+            ToolCallingAgent(
+                lambda prompt: (prompts.append(prompt), '{"action":"final","answer":"done"}')[1],
+                build_default_tool_registry(repository_root=Path(tmpdir)),
+            ).run("Create a file named hello.py")
+
+        self.assertIn("explicitly names 'hello.py'", prompts[0])
+
+    def test_explicit_file_path_ignores_trailing_sentence_punctuation(self) -> None:
+        self.assertEqual(
+            _explicit_requested_path("Create a file named counter_cli.py."),
+            "counter_cli.py",
+        )
+
     def test_model_can_search_read_and_finish_across_turns(self) -> None:
         responses = iter(
             [
@@ -203,8 +259,8 @@ class ToolCallingAgentTests(unittest.TestCase):
             unchanged = path.read_text(encoding="utf-8")
 
         self.assertEqual(unchanged, "def main():\n    return 1\n")
-        self.assertIn("+    return 2", prompts[-1])
-        self.assertIn("held for approval", prompts[-1])
+        self.assertEqual(len(prompts), 1)
+        self.assertIn("reviewed diff", run.final_answer)
         self.assertFalse(run.calls[0].result["value"]["applied"])
 
     def test_turn_limit_stops_nonterminating_tool_calls(self) -> None:

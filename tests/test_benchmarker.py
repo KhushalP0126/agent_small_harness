@@ -171,9 +171,9 @@ class BenchmarkerTests(unittest.TestCase):
         self.assertEqual(config.execution.architect.contract.thinking_type, "disabled")
         self.assertEqual(config.execution.architect.contract.reasoning_effort, "low")
         self.assertEqual(config.execution.architect.repair.model, "deepseek-v4-pro")
-        self.assertEqual(config.execution.architect.repair.max_tokens, 4000)
-        self.assertEqual(config.execution.architect.repair.thinking_type, "disabled")
-        self.assertEqual(config.execution.architect.repair.reasoning_effort, "medium")
+        self.assertEqual(config.execution.architect.repair.max_tokens, 8000)
+        self.assertEqual(config.execution.architect.repair.thinking_type, "enabled")
+        self.assertEqual(config.execution.architect.repair.reasoning_effort, "high")
         self.assertEqual(config.engines.policy.max_loop_depth, 2)
         self.assertEqual(config.engines.policy.max_cyclomatic_complexity, 7)
         self.assertFalse(config.engines.formal.crosshair_enabled)
@@ -1287,6 +1287,10 @@ def analyze(matrix):
             self.assertEqual(delays, [0.0])
             self.assertIsNotNone(client.last_usage)
             self.assertEqual(client.last_usage.total_tokens, 12)
+            payload = json.loads(urlopen_mock.call_args_list[-1].args[0].data.decode("utf-8"))
+            self.assertEqual(payload["max_tokens"], 8000)
+            self.assertEqual(payload["thinking"], {"type": "enabled"})
+            self.assertEqual(payload["reasoning_effort"], "high")
 
     def test_architect_client_does_not_retry_non_retryable_http_error(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

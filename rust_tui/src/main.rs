@@ -14,7 +14,7 @@ use crossterm::{
     cursor::Show,
     event::{
         DisableMouseCapture, EnableMouseCapture, Event as CtEvent, EventStream, KeyCode,
-        MouseEventKind,
+        KeyModifiers, MouseEventKind,
     },
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
@@ -44,6 +44,7 @@ enum AppMode {
     Questionnaire,
     DraftingSpec,
     SpecReview { spec_text: String },
+    ResearchReview { text: String, path: String },
     ActionApproval { request: String, reason: String },
     ToolDiffReview { path: String, diff: String },
     Executing,
@@ -66,6 +67,7 @@ impl AppMode {
             Self::Questionnaire => "questionnaire",
             Self::DraftingSpec => "drafting spec",
             Self::SpecReview { .. } => "spec review",
+            Self::ResearchReview { .. } => "research review",
             Self::ActionApproval { .. } => "approval required",
             Self::ToolDiffReview { .. } => "tool diff review",
             Self::Executing => "executing",
@@ -102,11 +104,14 @@ struct AppState {
     clarification_index: usize,
     clarification_answers: Vec<QuestionnaireAnswer>,
     questionnaire_other_active: bool,
+    inspector_scroll: usize,
     activity_tick: usize,
     deepseek_configured: bool,
     deepseek_source: String,
     memory_path: String,
     preference_count: u32,
+    architect_mode: String,
+    local_model: String,
     validated_source: Option<String>,
     validated_language: String,
     validated_artifact_path: String,
@@ -141,18 +146,23 @@ impl Default for AppState {
             history_selected: 0,
             history_detail: None,
             prompt: String::new(),
-            prompt_active: false,
+            // The composer is always focused: users can start typing as soon as
+            // the TUI opens, without first activating an input mode.
+            prompt_active: true,
             assistant_busy: false,
             numbered_options_available: false,
             clarification_questions: Vec::new(),
             clarification_index: 0,
             clarification_answers: Vec::new(),
             questionnaire_other_active: false,
+            inspector_scroll: 0,
             activity_tick: 0,
             deepseek_configured: false,
             deepseek_source: "checking".into(),
             memory_path: ".tui_memory.json".into(),
             preference_count: 0,
+            architect_mode: "auto".into(),
+            local_model: "qwen2.5-coder:1.5b".into(),
             validated_source: None,
             validated_language: String::new(),
             validated_artifact_path: String::new(),
@@ -175,16 +185,25 @@ impl AppState {
         ((u64::from(remaining) * 100) / u64::from(context.context_window)) as u8
     }
 
+    fn local_context_summary(&self) -> String {
+        let Some(context) = &self.local_context else {
+            return "ctx —".into();
+        };
+        format!(
+            "ctx {}% · {}/{}",
+            self.context_remaining_percent(),
+            context.total_tokens,
+            context.context_window
+        )
+    }
+
     fn persist_context(&self, repo_root: &std::path::Path) {
         let mut lines = vec![
             "# TUI Session Context".to_string(),
             "".to_string(),
             format!("Mode: {}", self.mode.label()),
             format!("Engine: {} · {}%", self.engine, self.pct),
-            format!(
-                "Local context: {}",
-                context_summary(self.local_context.as_ref())
-            ),
+            format!("Local context: {}", self.local_context_summary()),
             format!(
                 "API context: {}",
                 context_summary(self.api_context.as_ref())
@@ -235,11 +254,15 @@ impl AppState {
                 source,
                 memory_path,
                 preference_count,
+                architect_mode,
+                local_model,
             } => {
                 self.deepseek_configured = deepseek_configured;
                 self.deepseek_source = source;
                 self.memory_path = memory_path;
                 self.preference_count = preference_count;
+                self.architect_mode = architect_mode;
+                self.local_model = local_model;
             }
             HarnessEvent::ContextUsage {
                 backend,
@@ -288,6 +311,7 @@ impl AppState {
                     "[approval] {reason}\nrequest: {request}\ny continue to a reviewed proposal · n cancel"
                 ));
                 self.mode = AppMode::ActionApproval { request, reason };
+                self.prompt_active = false;
             }
             HarnessEvent::Questionnaire { questions } => {
                 if questions.is_empty() {
@@ -300,7 +324,9 @@ impl AppState {
                 self.clarification_answers.clear();
                 self.questionnaire_other_active = false;
                 self.numbered_options_available = false;
+                self.inspector_scroll = 0;
                 self.mode = AppMode::Questionnaire;
+                self.prompt_active = false;
                 self.logs.push(format!(
                     "[assistant] questionnaire ready · {} clarification question(s)",
                     self.clarification_questions.len()
@@ -319,8 +345,22 @@ impl AppState {
                 self.clarification_questions.clear();
                 self.clarification_answers.clear();
                 self.questionnaire_other_active = false;
+                self.inspector_scroll = 0;
+                self.prompt_active = false;
                 self.logs
                     .push("spec draft ready; review it and press y to execute or n to revise".into());
+            }
+            HarnessEvent::ResearchDraft { text, path } => {
+                self.assistant_busy = false;
+                self.engine = "idle".into();
+                self.inspector_scroll = 0;
+                self.prompt_active = false;
+                self.mode = AppMode::ResearchReview {
+                    text,
+                    path: path.clone(),
+                };
+                self.logs
+                    .push(format!("research saved to {path}; review it in the side panel"));
             }
             HarnessEvent::MemoryUpdated {
                 preference,
@@ -489,6 +529,7 @@ impl AppState {
                     "[diff] {path} · {replacements} reviewed change(s)\n{diff}\ny apply · n discard"
                 ));
                 self.mode = AppMode::ToolDiffReview { path, diff };
+                self.prompt_active = false;
             }
             HarnessEvent::ToolDiffResolved {
                 path,
@@ -500,6 +541,7 @@ impl AppState {
                     if applied { "applied" } else { "not applied" }
                 ));
                 self.mode = AppMode::Chat;
+                self.prompt_active = true;
             }
             HarnessEvent::CheckResult {
                 path,
@@ -544,12 +586,14 @@ impl AppState {
     }
 
     fn main_output_active(&self) -> bool {
-        !self.prompt_active
-            && !self.validated_source_visible
-            && !matches!(
-                self.mode,
-                AppMode::Questionnaire | AppMode::SpecReview { .. }
-            )
+        !self.validated_source_visible
+    }
+
+    fn side_inspector_active(&self) -> bool {
+        matches!(
+            self.mode,
+            AppMode::Questionnaire | AppMode::SpecReview { .. } | AppMode::ResearchReview { .. }
+        )
     }
 
     fn scroll_logs_up(&mut self, amount: usize) {
@@ -699,9 +743,23 @@ async fn main() -> Result<()> {
         .map(PathBuf::from)
         .unwrap_or(std::env::current_dir()?);
     let python = std::env::var("PYTHON").unwrap_or_else(|_| "python3".into());
+    let harness_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .context("resolve harness source directory")?
+        .to_path_buf();
+    // The bridge runs with the selected repository as its CWD. Keep this
+    // checkout on Python's module search path so `-m harness_kernel.tui_bridge`
+    // remains importable when inspecting an unrelated project.
+    let python_path = match std::env::var_os("PYTHONPATH") {
+        Some(existing) => std::env::join_paths([harness_root.as_os_str(), existing.as_os_str()])
+            .context("compose Python module search path")?,
+        None => harness_root.into_os_string(),
+    };
     let mut child = Command::new(python)
         .args(["-m", "harness_kernel.tui_bridge"])
         .current_dir(&repo_root)
+        .env("HARNESS_REPOSITORY_ROOT", &repo_root)
+        .env("PYTHONPATH", python_path)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit())
@@ -740,15 +798,17 @@ async fn run_loop(
     rx: &mut mpsc::UnboundedReceiver<HarnessEvent>,
     repo_root: &std::path::Path,
 ) -> Result<()> {
-    let mut state = AppState::default();
-    state.working_directory = std::fs::canonicalize(repo_root)
-        .unwrap_or_else(|_| repo_root.to_path_buf())
-        .display()
-        .to_string();
+    let mut state = AppState {
+        working_directory: std::fs::canonicalize(repo_root)
+            .unwrap_or_else(|_| repo_root.to_path_buf())
+            .display()
+            .to_string(),
+        ..AppState::default()
+    };
     state.persist_context(repo_root);
     let mut term_events = EventStream::new();
     let mut tick = tokio::time::interval(Duration::from_millis(33));
-    loop {
+    'event_loop: loop {
         tokio::select! {
             maybe_event = term_events.next().fuse() => {
                 if let Some(Ok(event)) = maybe_event {
@@ -759,6 +819,12 @@ async fn run_loop(
                             }
                             MouseEventKind::ScrollDown if state.validated_source_visible => {
                                 state.code_scroll_y = state.code_scroll_y.saturating_add(3);
+                            }
+                            MouseEventKind::ScrollUp if state.side_inspector_active() => {
+                                state.inspector_scroll = state.inspector_scroll.saturating_sub(3);
+                            }
+                            MouseEventKind::ScrollDown if state.side_inspector_active() => {
+                                state.inspector_scroll = state.inspector_scroll.saturating_add(3);
                             }
                             MouseEventKind::ScrollUp if state.main_output_active() => {
                                 state.scroll_logs_up(3);
@@ -775,8 +841,11 @@ async fn run_loop(
                     };
                     if state.prompt_active {
                         match key.code {
+                            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                                send_command(child_stdin, &HarnessCommand::Cancel).await?;
+                                break 'event_loop;
+                            }
                             KeyCode::Esc => {
-                                state.prompt_active = false;
                                 state.questionnaire_other_active = false;
                                 state.prompt.clear();
                             }
@@ -804,7 +873,7 @@ async fn run_loop(
                             {
                                 let text = std::mem::take(&mut state.prompt);
                                 send_prompt_command(child_stdin, &mut state, text, repo_root).await?;
-                                state.prompt_active = false;
+                                state.prompt_active = true;
                             }
                             KeyCode::Enter => {}
                             KeyCode::Char(digit @ '1'..='5')
@@ -847,6 +916,21 @@ async fn run_loop(
                         continue;
                     }
                     match key.code {
+                        KeyCode::Up if state.side_inspector_active() => {
+                            state.inspector_scroll = state.inspector_scroll.saturating_sub(1);
+                        }
+                        KeyCode::Down if state.side_inspector_active() => {
+                            state.inspector_scroll = state.inspector_scroll.saturating_add(1);
+                        }
+                        KeyCode::PageUp if state.side_inspector_active() => {
+                            state.inspector_scroll = state.inspector_scroll.saturating_sub(20);
+                        }
+                        KeyCode::PageDown if state.side_inspector_active() => {
+                            state.inspector_scroll = state.inspector_scroll.saturating_add(20);
+                        }
+                        KeyCode::Home if state.side_inspector_active() => {
+                            state.inspector_scroll = 0;
+                        }
                         KeyCode::Char(digit @ '1'..='5')
                             if state.mode == AppMode::Questionnaire =>
                         {
@@ -863,16 +947,13 @@ async fn run_loop(
                         }
                         KeyCode::Esc if state.mode == AppMode::Questionnaire => {
                             state.mode = AppMode::Chat;
+                            state.prompt_active = true;
                             state.clarification_questions.clear();
                             state.clarification_answers.clear();
                             state.logs.push(
                                 "questionnaire cancelled; continue refining the idea in chat"
                                     .into(),
                             );
-                        }
-                        KeyCode::Char('q') => {
-                            send_command(child_stdin, &HarnessCommand::Cancel).await?;
-                            break;
                         }
                         KeyCode::Char('y') if matches!(state.mode, AppMode::SpecReview { .. }) => {
                             let spec_text = match &state.mode {
@@ -903,6 +984,7 @@ async fn run_loop(
                             )
                             .await?;
                             state.mode = AppMode::Chat;
+                            state.prompt_active = true;
                             state.logs.push(
                                 "[work] permission granted; preparing the requested work".into(),
                             );
@@ -916,6 +998,7 @@ async fn run_loop(
                             )
                             .await?;
                             state.mode = AppMode::Chat;
+                            state.prompt_active = true;
                             state.logs.push("[approval] request cancelled before work started".into());
                         }
                         KeyCode::Char('y')
@@ -941,80 +1024,15 @@ async fn run_loop(
                             if matches!(state.mode, AppMode::SpecReview { .. }) =>
                         {
                             state.mode = AppMode::Chat;
+                            state.prompt_active = true;
                             state
                                 .logs
                                 .push("spec execution declined; return to chat to revise".into());
                         }
-                        KeyCode::Char('s')
-                            if state.mode == AppMode::Chat && !state.assistant_busy =>
-                        {
-                            send_command(child_stdin, &HarnessCommand::DraftSpec).await?;
-                            state.mode = AppMode::DraftingSpec;
-                        }
-                        KeyCode::Enter
-                            if state.mode == AppMode::Chat
-                                && !state.assistant_busy
-                                && !state.history_visible =>
-                        {
+                        KeyCode::Esc if matches!(state.mode, AppMode::ResearchReview { .. }) => {
+                            state.mode = AppMode::Chat;
                             state.prompt_active = true;
-                        }
-                        KeyCode::Char('r') if !state.running => {
-                            send_command(
-                                child_stdin,
-                                &HarnessCommand::Run {
-                                    entrypoint: "coding_capability".into(),
-                                    args: vec!["--save-artifacts".into()],
-                                },
-                            ).await?;
-                            state.running = true;
-                        }
-                        KeyCode::Char('c' | 'p')
-                            if state.mode == AppMode::Chat && !state.assistant_busy =>
-                        {
-                            state.prompt_active = true;
-                        }
-                        KeyCode::Char('a')
-                            if state.mode == AppMode::Chat && !state.assistant_busy =>
-                        {
-                            state.prompt.clear();
-                            state.prompt_active = true;
-                        }
-                        KeyCode::Char(digit @ '1'..='5')
-                            if state.select_numbered_option(digit) => {}
-                        KeyCode::Char('m') => {
-                            state.repo_mode = "diagram".into();
-                            send_command(
-                                child_stdin,
-                                &HarnessCommand::RepoMap {
-                                    root: repo_root.display().to_string(),
-                                    focus: String::new(),
-                                    mode: "diagram".into(),
-                                },
-                            ).await?;
-                            state.logs.push("building browser map…".into());
-                        }
-                        KeyCode::Char('o') => {
-                            if let Some(url) = state.repo_map_url.as_deref() {
-                                open_localhost(url);
-                            } else {
-                                state.logs.push("map is not ready yet; press m first".into());
-                            }
-                        }
-                        KeyCode::Char('d') => {
-                            if state.history_visible {
-                                state.history_visible = false;
-                                state.history_detail = None;
-                                state.logs.push("[history] closed".into());
-                            } else {
-                                send_command(
-                                    child_stdin,
-                                    &HarnessCommand::History {
-                                        run_id: None,
-                                        limit: None,
-                                    },
-                                ).await?;
-                                state.logs.push("loading run history…".into());
-                            }
+                            state.logs.push("research panel closed".into());
                         }
                         KeyCode::Up if state.history_visible => {
                             state.history_selected = state.history_selected.saturating_sub(1);
@@ -1025,11 +1043,6 @@ async fn run_loop(
                                 state.history_selected += 1;
                             }
                             state.history_detail = None;
-                        }
-                        KeyCode::Char('v') if state.validated_source.is_some() => {
-                            state.validated_source_visible = true;
-                            state.code_scroll_y = 0;
-                            state.code_scroll_x = 0;
                         }
                         KeyCode::Up if state.main_output_active() => {
                             state.scroll_logs_up(1);
@@ -1110,7 +1123,7 @@ async fn send_prompt_command(
         });
     match command {
         "/help" => state.logs.push(
-            "commands: /map /open /check <task> /history /spec /model /remember <note> /mention <path> /tools <task>"
+            "commands: /map /open /check <path> /history /research /spec /model /remember <note> /mention <path> /tools <task>"
                 .into(),
         ),
         "/map" => {
@@ -1144,11 +1157,17 @@ async fn send_prompt_command(
             .await?;
             state.logs.push("loading run history…".into());
         }
+        "/research" => {
+            send_command(stdin, &HarnessCommand::DraftResearch).await?;
+        }
         "/spec" => {
             send_command(stdin, &HarnessCommand::DraftSpec).await?;
             state.mode = AppMode::DraftingSpec;
         }
-        "/model" => state.logs.push("model: qwen2.5-coder:1.5b (local)".into()),
+        "/model" => state.logs.push(format!(
+            "default: DeepSeek API · local chores: {}",
+            state.local_model
+        )),
         "/check" if argument.is_empty() => {
             state.logs.push("usage: /check <repository-file>".into());
         }
@@ -1205,11 +1224,20 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState) {
         .constraints([
             Constraint::Min(0),
             Constraint::Length(1),
-            Constraint::Length(6),
+            Constraint::Length(3),
         ])
         .split(frame.area());
+    let content_constraints = if state.side_inspector_active() {
+        [Constraint::Percentage(64), Constraint::Percentage(36)]
+    } else {
+        [Constraint::Percentage(100), Constraint::Length(0)]
+    };
+    let content = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(content_constraints)
+        .split(rows[0]);
     let log_lines = stream_lines(state);
-    let viewport_height = usize::from(rows[0].height);
+    let viewport_height = usize::from(content[0].height);
     let max_log_offset = log_lines.len().saturating_sub(viewport_height);
     let from_bottom = state.log_scroll.min(max_log_offset);
     let log_offset = max_log_offset
@@ -1220,18 +1248,22 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState) {
             .style(Style::default().fg(theme_foreground()))
             .wrap(Wrap { trim: false })
             .scroll((log_offset, 0)),
-        rows[0],
+        content[0],
     );
 
     draw_status_row(frame, state, rows[1]);
     draw_composer(frame, state, rows[2]);
 
     if let AppMode::SpecReview { spec_text } = &state.mode {
-        draw_spec_review(frame, spec_text);
+        draw_spec_review(frame, state, spec_text, content[1]);
+    }
+
+    if let AppMode::ResearchReview { text, path } = &state.mode {
+        draw_research_review(frame, state, text, path, content[1]);
     }
 
     if state.mode == AppMode::Questionnaire {
-        draw_questionnaire(frame, state);
+        draw_questionnaire(frame, state, content[1]);
     }
 
     if state.validated_source_visible {
@@ -1267,17 +1299,20 @@ fn draw_status_row(frame: &mut ratatui::Frame, state: &AppState, area: Rect) {
         ),
         Span::styled("  ·  ", Style::default().fg(theme_muted())),
         Span::styled(
-            context_summary(state.local_context.as_ref()),
+            state.local_context_summary(),
             Style::default().fg(theme_cyan()),
         ),
         Span::styled("  ·  ", Style::default().fg(theme_muted())),
-        Span::styled("qwen2.5-coder:1.5b", Style::default().fg(theme_purple())),
+        Span::styled(
+            format!("local {}", state.local_model),
+            Style::default().fg(theme_purple()),
+        ),
         Span::styled("  ·  ", Style::default().fg(theme_muted())),
         Span::styled(
             if state.deepseek_configured {
-                "DeepSeek API"
+                "DeepSeek default".to_owned()
             } else {
-                "DeepSeek off"
+                "DeepSeek unavailable".to_owned()
             },
             Style::default().fg(if state.deepseek_configured {
                 Color::Green
@@ -1308,7 +1343,7 @@ fn draw_composer(frame: &mut ratatui::Frame, state: &AppState, area: Rect) {
         x: area.x.saturating_add(2),
         y: area.y.saturating_add(1),
         width: area.width.saturating_sub(4),
-        height: area.height.saturating_sub(3),
+        height: 1,
     };
     frame.render_widget(
         Paragraph::new(composer_text(state))
@@ -1316,95 +1351,23 @@ fn draw_composer(frame: &mut ratatui::Frame, state: &AppState, area: Rect) {
             .wrap(Wrap { trim: false }),
         input_area,
     );
-    let footer_area = Rect {
-        x: area.x.saturating_add(2),
-        y: area.y.saturating_add(area.height.saturating_sub(2)),
-        width: area.width.saturating_sub(4),
-        height: 1,
-    };
-    let footer = if matches!(state.mode, AppMode::ActionApproval { .. }) {
-        Line::from(vec![
-            Span::styled(
-                "y ",
-                Style::default()
-                    .fg(Color::Green)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled("continue", Style::default().fg(theme_foreground())),
-            Span::styled(
-                "   n/Esc ",
-                Style::default()
-                    .fg(Color::LightRed)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled("cancel", Style::default().fg(theme_foreground())),
-        ])
-    } else if matches!(state.mode, AppMode::ToolDiffReview { .. }) {
-        Line::from(vec![
-            Span::styled(
-                "y ",
-                Style::default()
-                    .fg(Color::Green)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                "apply reviewed change",
-                Style::default().fg(theme_foreground()),
-            ),
-            Span::styled(
-                "   n/Esc ",
-                Style::default()
-                    .fg(Color::LightRed)
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled("discard", Style::default().fg(theme_foreground())),
-        ])
-    } else {
-        Line::from(vec![
-            Span::styled(
-                "Enter ",
-                Style::default()
-                    .fg(theme_cyan())
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled("send", Style::default().fg(theme_foreground())),
-            Span::styled(
-                "   /tools ",
-                Style::default()
-                    .fg(theme_purple())
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled("inspect", Style::default().fg(theme_muted())),
-            Span::styled(
-                "   /spec ",
-                Style::default()
-                    .fg(theme_purple())
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled("plan", Style::default().fg(theme_muted())),
-            Span::styled("   Esc close", Style::default().fg(theme_muted())),
-        ])
-    };
-    frame.render_widget(Paragraph::new(footer), footer_area);
 }
 
-fn draw_questionnaire(frame: &mut ratatui::Frame, state: &AppState) {
-    let area = centered_rect(78, 72, frame.area());
-    frame.render_widget(Clear, area);
+fn draw_questionnaire(frame: &mut ratatui::Frame, state: &AppState, area: Rect) {
     let total = state.clarification_questions.len();
     let current = state.clarification_index.saturating_add(1).min(total);
     frame.render_widget(
         pane_block(
-            format!(" Clarify the project · question {current}/{total} · 1-5 choose · Esc cancel "),
+            format!(" Clarify · {current}/{total} "),
             true,
         ),
         area,
     );
     let inner = Rect {
-        x: area.x + 2,
-        y: area.y + 2,
-        width: area.width.saturating_sub(4),
-        height: area.height.saturating_sub(4),
+        x: area.x + 1,
+        y: area.y + 1,
+        width: area.width.saturating_sub(2),
+        height: area.height.saturating_sub(2),
     };
     let Some(question) = state.clarification_questions.get(state.clarification_index) else {
         frame.render_widget(
@@ -1453,24 +1416,38 @@ fn draw_questionnaire(frame: &mut ratatui::Frame, state: &AppState) {
 }
 
 fn composer_text(state: &AppState) -> Text<'static> {
+    if state.mode == AppMode::Questionnaire {
+        return Text::from(Line::styled(
+            "Select an answer from the clarification panel.",
+            Style::default().fg(theme_muted()),
+        ));
+    }
+    if matches!(state.mode, AppMode::SpecReview { .. }) {
+        return Text::from(Line::styled(
+            "Review required before execution.",
+            Style::default().fg(theme_muted()),
+        ));
+    }
+    if matches!(state.mode, AppMode::ResearchReview { .. }) {
+        return Text::from(Line::styled(
+            "Research is saved and open in the side panel.",
+            Style::default().fg(theme_muted()),
+        ));
+    }
     if matches!(state.mode, AppMode::ActionApproval { .. }) {
         return Text::from(Line::styled(
-            "Permission requested — choose y or n in the active stream.",
+            "Permission required before repository changes.",
             Style::default().fg(Color::Yellow),
         ));
     }
     if matches!(state.mode, AppMode::ToolDiffReview { .. }) {
         return Text::from(Line::styled(
-            "Reviewed change ready — choose y to apply or n to discard.",
+            "Reviewed change awaiting approval.",
             Style::default().fg(Color::LightCyan),
         ));
     }
     if state.prompt.is_empty() {
-        let placeholder = if state.prompt_active {
-            "Describe a task, inspect the repository, or type /help▍"
-        } else {
-            "Press Enter to compose a message"
-        };
+        let placeholder = "Ask anything…▍";
         return Text::from(Line::styled(
             placeholder,
             Style::default().fg(theme_muted()),
@@ -1619,10 +1596,7 @@ fn stream_history_lines(state: &AppState) -> Vec<Line<'static>> {
                 }),
             ),
             Span::styled(
-                format!(
-                    "{} · {} · {} · {} attempts",
-                    run.run_id, run.target, run.final_status, run.attempt_count
-                ),
+                history_run_summary(run),
                 Style::default()
                     .fg(if selected {
                         Color::LightCyan
@@ -1638,6 +1612,25 @@ fn stream_history_lines(state: &AppState) -> Vec<Line<'static>> {
         ])
     }));
     lines
+}
+
+fn history_run_summary(run: &RunSummary) -> String {
+    let target = if run.target.trim().is_empty() {
+        "legacy artifact"
+    } else {
+        run.target.as_str()
+    };
+    let status = if run.final_status.trim().is_empty() {
+        "status unavailable"
+    } else {
+        run.final_status.as_str()
+    };
+    let attempts = if run.target.trim().is_empty() && run.final_status.trim().is_empty() {
+        "attempts —".into()
+    } else {
+        format!("{} attempts", run.attempt_count)
+    };
+    format!("{} · {target} · {status} · {attempts}", run.run_id)
 }
 
 fn stream_divider() -> Line<'static> {
@@ -1870,12 +1863,10 @@ fn draw_validated_source(frame: &mut ratatui::Frame, state: &AppState) {
     );
 }
 
-fn draw_spec_review(frame: &mut ratatui::Frame, spec_text: &str) {
-    let area = centered_rect(90, 90, frame.area());
-    frame.render_widget(Clear, area);
+fn draw_spec_review(frame: &mut ratatui::Frame, state: &AppState, spec_text: &str, area: Rect) {
     frame.render_widget(
         pane_block(
-            " Spec draft ready · review carefully · y execute · n/Esc revise ",
+            " Spec draft · Up/Down scroll · y execute · n/Esc revise ",
             true,
         ),
         area,
@@ -1886,7 +1877,40 @@ fn draw_spec_review(frame: &mut ratatui::Frame, spec_text: &str) {
         width: area.width.saturating_sub(2),
         height: area.height.saturating_sub(2),
     };
-    frame.render_widget(Paragraph::new(spec_text).wrap(Wrap { trim: false }), inner);
+    frame.render_widget(
+        Paragraph::new(spec_text)
+            .wrap(Wrap { trim: false })
+            .scroll((state.inspector_scroll.min(u16::MAX as usize) as u16, 0)),
+        inner,
+    );
+}
+
+fn draw_research_review(
+    frame: &mut ratatui::Frame,
+    state: &AppState,
+    text: &str,
+    path: &str,
+    area: Rect,
+) {
+    frame.render_widget(
+        pane_block(
+            format!(" Research · {path} · Up/Down scroll · Esc close "),
+            true,
+        ),
+        area,
+    );
+    let inner = Rect {
+        x: area.x + 1,
+        y: area.y + 1,
+        width: area.width.saturating_sub(2),
+        height: area.height.saturating_sub(2),
+    };
+    frame.render_widget(
+        Paragraph::new(text)
+            .wrap(Wrap { trim: false })
+            .scroll((state.inspector_scroll.min(u16::MAX as usize) as u16, 0)),
+        inner,
+    );
 }
 
 fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
@@ -1944,6 +1968,8 @@ mod tests {
                 spec_text: "# Approved candidate".into()
             }
         );
+        assert!(state.side_inspector_active());
+        assert!(state.main_output_active());
         assert!(!state.running);
         state.mode = AppMode::Executing;
         state.running = true;
@@ -1952,6 +1978,23 @@ mod tests {
         });
         assert_eq!(state.mode, AppMode::Chat);
         assert!(!state.running);
+    }
+
+    #[test]
+    fn research_draft_opens_in_the_side_inspector() {
+        let mut state = AppState::default();
+        state.apply(HarnessEvent::ResearchDraft {
+            text: "# Research\n\n## Finding".into(),
+            path: "docs/research/example.md".into(),
+        });
+        assert!(state.side_inspector_active());
+        assert!(state.main_output_active());
+        assert!(matches!(state.mode, AppMode::ResearchReview { .. }));
+        assert!(state
+            .logs
+            .last()
+            .unwrap()
+            .contains("docs/research/example.md"));
     }
 
     #[test]
@@ -2062,6 +2105,8 @@ mod tests {
             source: ".env:DEEPSEEK_API_KEY".into(),
             memory_path: ".tui_memory.json".into(),
             preference_count: 3,
+            architect_mode: "auto".into(),
+            local_model: "qwen2.5-coder:1.5b".into(),
         });
         assert!(state.deepseek_configured);
         assert_eq!(state.preference_count, 3);
@@ -2101,14 +2146,16 @@ mod tests {
         });
         assert!(!state.numbered_options_available);
         assert!(!state.select_numbered_option('5'));
-        assert!(!state.prompt_active);
+        assert!(state.prompt_active);
     }
 
     #[test]
     fn composer_renders_a_single_line_prompt() {
-        let mut state = AppState::default();
-        state.prompt_active = true;
-        state.prompt = "inspect the repository".into();
+        let state = AppState {
+            prompt_active: true,
+            prompt: "inspect the repository".into(),
+            ..AppState::default()
+        };
         let text = composer_text(&state);
         assert_eq!(text.lines.len(), 1);
         assert!(text.lines[0]
@@ -2153,6 +2200,8 @@ mod tests {
         });
 
         assert_eq!(state.mode, AppMode::Questionnaire);
+        assert!(state.side_inspector_active());
+        assert!(state.main_output_active());
         assert_eq!(
             state.choose_questionnaire_option('1'),
             QuestionnaireAction::Advanced
@@ -2224,6 +2273,20 @@ mod tests {
             .as_deref()
             .unwrap()
             .contains("run run-b"));
+    }
+
+    #[test]
+    fn legacy_history_entries_have_readable_fallbacks() {
+        let summary = history_run_summary(&RunSummary {
+            run_id: "old-run".into(),
+            target: String::new(),
+            final_status: String::new(),
+            attempt_count: 0,
+        });
+        assert_eq!(
+            summary,
+            "old-run · legacy artifact · status unavailable · attempts —"
+        );
     }
 
     #[test]

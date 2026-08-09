@@ -29,6 +29,7 @@ TOOL_NAMES = (
     "move_file",
     "execute_script",
 )
+MUTATION_PROPOSAL_TOOLS = {"apply_search_replace", "create_file", "move_file"}
 JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)```", re.IGNORECASE | re.DOTALL)
 DEFAULT_TOOL_NUM_CTX = 8192
 DEFAULT_TRANSCRIPT_MAX_CHARS = DEFAULT_TOOL_NUM_CTX * 3
@@ -122,23 +123,45 @@ class ToolCallingAgent:
                 }
             else:
                 seen_calls.add(signature)
-                try:
-                    request = _request_from_arguments(tool, arguments)
-                except (TypeError, ValueError) as exc:
+                requested_path = _explicit_requested_path(task)
+                proposed_path = _proposal_path(tool, arguments)
+                if (
+                    requested_path is not None
+                    and tool in MUTATION_PROPOSAL_TOOLS
+                    and proposed_path != requested_path
+                ):
                     result_payload = {
                         "ok": False,
                         "tool": tool,
-                        "error_kind": "invalid_arguments",
-                        "error": f"{type(exc).__name__}: {exc}",
+                        "error_kind": "unexpected_target_path",
+                        "error": (
+                            f"The user explicitly requested {requested_path!r}; "
+                            f"propose that exact relative path, not {proposed_path!r}."
+                        ),
                     }
                 else:
-                    dispatched = self.registry.dispatch(tool, request)
-                    result_payload = _result_payload(dispatched)
-                    raw_value = dispatched.value if dispatched.ok else None
+                    try:
+                        request = _request_from_arguments(tool, arguments)
+                    except (TypeError, ValueError) as exc:
+                        result_payload = {
+                            "ok": False,
+                            "tool": tool,
+                            "error_kind": "invalid_arguments",
+                            "error": f"{type(exc).__name__}: {exc}",
+                        }
+                    else:
+                        dispatched = self.registry.dispatch(tool, request)
+                        result_payload = _result_payload(dispatched)
+                        raw_value = dispatched.value if dispatched.ok else None
             record = ToolCallRecord(turn, tool, arguments if isinstance(arguments, dict) else {}, result_payload)
             calls.append(record)
             if self.on_tool_result is not None:
                 self.on_tool_result(record, raw_value)
+            if result_payload.get("ok") and tool in MUTATION_PROPOSAL_TOOLS:
+                return ToolCallingRun(
+                    final_answer="A reviewed diff is prepared for approval.",
+                    calls=calls,
+                )
             transcript.append(
                 {
                     "assistant": action,
@@ -150,6 +173,27 @@ class ToolCallingAgent:
             calls=calls,
             exhausted=True,
         )
+
+
+def _explicit_requested_path(task: str) -> str | None:
+    """Return a directly named file path when the user supplied one."""
+
+    match = re.search(
+        r"\b(?:file|path)\s+(?:named|called)?\s*[`'\"]?"
+        r"([A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*)",
+        task,
+        flags=re.IGNORECASE,
+    )
+    if not match:
+        return None
+    # Sentence punctuation is not part of a path (for example, "counter.py.").
+    return match.group(1).rstrip(".,;:!?")
+
+
+def _proposal_path(tool: str, arguments: dict[str, Any]) -> str:
+    if tool == "move_file":
+        return str(arguments.get("destination") or "")
+    return str(arguments.get("path") or "")
 
 
 def _bounded_transcript(transcript: list[dict], max_chars: int) -> str:
@@ -209,6 +253,7 @@ def _tool_prompt(
     transcript_max_chars: int = DEFAULT_TRANSCRIPT_MAX_CHARS,
     allowed_tools: tuple[str, ...] = TOOL_NAMES,
 ) -> str:
+    requested_path = _explicit_requested_path(task)
     instructions = [
         "UNIFIED CLI ASSISTANT",
         "Answer ordinary conversation directly. Use the declared repository tools only when they add useful evidence or perform a requested reviewed change.",
@@ -231,11 +276,16 @@ def _tool_prompt(
         [
             "For a greeting, explanation, or other non-repository question, return action=final immediately without a tool call.",
             "If the latest tool result answers the task, return action=final immediately. Never repeat an identical tool call.",
+            "After any create_file, move_file, or apply_search_replace proposal succeeds, return action=final; do not inspect or propose another change.",
             "On the final allowed turn, return action=final now; do not call another tool.",
             "Return exactly one JSON object and no markdown.",
             "To call a tool:",
         ]
     )
+    if requested_path is not None:
+        instructions.append(
+            f"The task explicitly names {requested_path!r}. Any mutation proposal must use that exact relative path."
+        )
     if "search_directory" in allowed_tools:
         instructions.append(
             '{"action":"tool","tool":"search_directory","arguments":{"root":".","pattern":"*.py","max_results":50}}'
@@ -253,7 +303,7 @@ def _tool_prompt(
         )
     if "create_file" in allowed_tools:
         instructions.append(
-            '{"action":"tool","tool":"create_file","arguments":{"root":".","path":"exp/hello.txt","content":"hello world\\n"}}'
+            '{"action":"tool","tool":"create_file","arguments":{"root":".","path":"new_file.txt","content":"hello world\\n"}}'
         )
     if "move_file" in allowed_tools:
         instructions.append(

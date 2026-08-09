@@ -16,6 +16,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 import threading
 from dataclasses import dataclass
 from html import escape
@@ -63,8 +64,21 @@ MAX_CHAT_MESSAGES = 24
 MAX_PREFERENCES = 50
 MAX_QUESTIONS = 4
 MAX_OPTIONS_PER_QUESTION = 5
-LOCAL_CONTEXT_WINDOW = 8_192
 ARCHITECT_CONTEXT_WINDOW = 65_536
+LOCAL_CONTEXT_WINDOW = 8_192
+OLLAMA_KEEP_ALIVE = os.environ.get("OLLAMA_KEEP_ALIVE", "30s")
+COST_WARNING_THRESHOLD_USD = 1.00
+COMPACTION_TRIGGER_RATIO = 0.6
+RESEARCH_DIR = REPO_ROOT / "docs" / "research"
+RESEARCH_SYSTEM_PROMPT = """You are a codebase research analyst.
+Given tool-call findings gathered from the repository and the user's question, produce a compact research artifact. Do not propose a plan and do not write code.
+Return JSON only, with exactly this shape:
+{"question":"...","relevant_files":["path: reason"],"code_flow":["ordered step"],"hypothesis":"...","open_questions":["..."]}
+Ground every claim in the supplied findings; use empty lists or an empty string when inconclusive."""
+COMPACTION_SYSTEM_PROMPT = """You are compacting a coding-agent conversation before its context window fills.
+Return JSON only, with exactly this shape:
+{"goal":"...","approach":"...","done":["..."],"current_blocker":"...","key_facts":["..."]}
+Preserve concrete decisions, completed work, constraints, and file paths. Use empty lists or an empty string where needed."""
 QUESTIONNAIRE_SYSTEM_PROMPT = """You are an autonomous planning worker and software architect.
 The user has explicitly asked to plan, build, create, design, implement, or change software. Do not write code and do not claim to execute anything. Return JSON only in this shape:
 {"kind":"questionnaire","message":"short introduction","questions":[{"question_text":"...","options":["...","..."]}]}
@@ -99,7 +113,7 @@ class PendingActionApproval:
     text: str
     reason: str
     route: str
-    provider: str = "qwen"
+    provider: str = "deepseek"
 ALLOWED_FLAGS = {
     "--artifact-root",
     "--architect-after-repair-attempts",
@@ -144,23 +158,28 @@ class Bridge:
         tool_repository_root: Path | str | None = None,
     ) -> None:
         self.writer = writer or EventWriter()
+        self.tool_repository_root = Path(tool_repository_root or REPO_ROOT).resolve()
         self.artifact_root = (
             Path(artifact_root)
             if artifact_root is not None
-            else REPO_ROOT / "artifacts" / "runs"
+            else self.tool_repository_root / "artifacts" / "runs"
         )
-        self.env_file = Path(env_file) if env_file is not None else REPO_ROOT / ".env"
+        self.env_file = Path(env_file) if env_file is not None else self.tool_repository_root / ".env"
         self.memory_path = (
-            Path(memory_path) if memory_path is not None else DEFAULT_MEMORY_PATH
+            Path(memory_path)
+            if memory_path is not None
+            else self.tool_repository_root / ".tui_memory.json"
         )
         self._architect_client = architect_client
         self._tool_generate_text = tool_generate_text
-        self.tool_repository_root = Path(tool_repository_root or REPO_ROOT).resolve()
         self._pending_tool_diff: (
             ApplySearchReplaceResponse | CreateFileResponse | MoveFileResponse | None
         ) = None
         self._pending_action_approval: PendingActionApproval | None = None
         self._chat_history: list[dict[str, str]] = []
+        self._compaction_in_progress = False
+        self._session_cost_usd = 0.0
+        self._cost_warning_emitted = False
         self._assistant_busy = False
         self._process: subprocess.Popen[str] | None = None
         self._repo_map_server: ThreadingHTTPServer | None = None
@@ -179,6 +198,8 @@ class Bridge:
             source=source,
             memory_path=str(self.memory_path),
             preference_count=len(self._load_preferences()),
+            architect_mode=self._architect_mode(),
+            local_model=DEFAULT_OLLAMA_MODEL,
         )
         if not configured:
             self.writer.emit(
@@ -201,6 +222,8 @@ class Bridge:
             self.start_chat(str(command.get("text") or ""))
         elif kind == "draft_spec":
             self.start_spec_draft()
+        elif kind == "draft_research":
+            self.start_research()
         elif kind == "questionnaire_complete":
             self.complete_questionnaire(command.get("answers"))
         elif kind == "execute_spec":
@@ -208,7 +231,7 @@ class Bridge:
         elif kind == "tool_task":
             self.start_tool_task(
                 str(command.get("text") or ""),
-                str(command.get("provider") or "qwen"),
+                str(command.get("provider") or "deepseek"),
             )
         elif kind == "apply_tool_diff":
             self.resolve_tool_diff(bool(command.get("approved")))
@@ -284,6 +307,15 @@ class Bridge:
             return
         self._start_assistant_task("drafting_spec", self._run_spec_draft)
 
+    def start_research(self) -> None:
+        if self._assistant_busy:
+            self.writer.emit("log", level="warning", msg="an assistant task is already running")
+            return
+        if not any(message.get("role") == "user" for message in self._chat_history):
+            self.writer.emit("log", level="warning", msg="ask a question in chat before researching it")
+            return
+        self._start_assistant_task("research", self._run_research)
+
     def complete_questionnaire(self, answers: Any) -> None:
         if self._assistant_busy:
             self.writer.emit("log", level="warning", msg="DeepSeek is already responding")
@@ -336,7 +368,7 @@ class Bridge:
     def start_tool_task(
         self,
         text: str,
-        provider: str = "qwen",
+        provider: str = "deepseek",
         *,
         approved: bool = False,
         already_visible: bool = False,
@@ -405,16 +437,21 @@ class Bridge:
     ) -> None:
         proposals: list[ApplySearchReplaceResponse | CreateFileResponse | MoveFileResponse] = []
         if allowed_tools is None:
-            allowed_tools = (
-                "search_directory",
-                "read_file",
-                "apply_search_replace",
-                "create_file",
-                "move_file",
-            ) if _is_filesystem_mutation_request(task) else (
-                "search_directory",
-                "read_file",
-            )
+            if provider == "qwen":
+                allowed_tools = (
+                    ("search_directory", "read_file", "create_file", "move_file")
+                    if _is_filesystem_mutation_request(task)
+                    else ("search_directory", "read_file")
+                )
+            else:
+                allowed_tools = (
+                    "search_directory",
+                    "read_file",
+                    "apply_search_replace",
+                    "create_file",
+                    "move_file",
+                    "execute_script",
+                )
 
         def on_tool_result(record: ToolCallRecord, raw_value: Any) -> None:
             ok = bool(record.result.get("ok"))
@@ -449,6 +486,17 @@ class Bridge:
             allowed_tools=allowed_tools,
         ).run(task)
         answer = run.final_answer or "I could not produce a final answer."
+        failed_mutations = [
+            call
+            for call in run.calls
+            if call.tool in {"apply_search_replace", "create_file", "move_file"}
+            and not call.result.get("ok")
+        ]
+        if not proposals and failed_mutations:
+            answer = (
+                "No reviewed change was prepared. "
+                + str(failed_mutations[-1].result.get("error") or "The tool proposal failed.")
+            )
         self._chat_history.append({"role": "assistant", "content": answer})
         self._chat_history = self._chat_history[-MAX_CHAT_MESSAGES:]
         self.writer.emit(
@@ -488,7 +536,7 @@ class Bridge:
                     f"Host operating system: {_host_operating_system()}."
                 ),
             )
-        client = OllamaClient()
+        client = OllamaClient(keep_alive=self._ollama_keep_alive())
         return lambda prompt: self._generate_local(
             client,
             prompt,
@@ -547,16 +595,57 @@ class Bridge:
         context_window: int,
         estimated_cost_usd: float,
     ) -> None:
+        total_tokens = max(0, int(prompt_tokens)) + max(0, int(completion_tokens))
+        context_window = max(1, int(context_window))
         self.writer.emit(
             "context_usage",
             backend=backend,
             model=model,
             prompt_tokens=max(0, int(prompt_tokens)),
             completion_tokens=max(0, int(completion_tokens)),
-            total_tokens=max(0, int(prompt_tokens)) + max(0, int(completion_tokens)),
-            context_window=max(1, int(context_window)),
+            total_tokens=total_tokens,
+            context_window=context_window,
             estimated_cost_usd=max(0.0, float(estimated_cost_usd)),
         )
+        if backend == "api":
+            self._session_cost_usd += max(0.0, float(estimated_cost_usd))
+            if (
+                self._session_cost_usd >= COST_WARNING_THRESHOLD_USD
+                and not self._cost_warning_emitted
+            ):
+                self._cost_warning_emitted = True
+                self.writer.emit(
+                    "log",
+                    level="warning",
+                    msg=f"session cost has reached ${self._session_cost_usd:.2f}",
+                )
+        self._maybe_compact(backend, total_tokens / context_window)
+
+    def _maybe_compact(self, backend: str, utilization: float) -> None:
+        if utilization < COMPACTION_TRIGGER_RATIO:
+            return
+        if len(self._chat_history) < 4 or self._compaction_in_progress:
+            return
+        self._compaction_in_progress = True
+        try:
+            self._run_compaction()
+        finally:
+            self._compaction_in_progress = False
+
+    def _run_compaction(self) -> None:
+        response = self._generate_architect(
+            "CONVERSATION:\n" + _chat_transcript(self._chat_history),
+            system=COMPACTION_SYSTEM_PROMPT,
+        ).strip()
+        try:
+            summary = _render_compaction_summary(response)
+        except ValueError:
+            return
+        self._chat_history = [{
+            "role": "assistant",
+            "content": "[context compacted; full history summarized below]\n\n" + summary,
+        }]
+        self.writer.emit("log", level="info", msg="context compacted")
 
     def resolve_tool_diff(self, approved: bool) -> None:
         proposal = self._pending_tool_diff
@@ -677,12 +766,10 @@ class Bridge:
         latest = self._chat_history[-1]["content"] if self._chat_history else ""
         planning_requested = _should_start_planning(latest)
         if not planning_requested:
-            self._run_tool_task(latest, "qwen")
+            provider = "qwen" if _is_local_eligible_task(latest) else "deepseek"
+            self._run_tool_task(latest, provider)
             return
-        response = self._generate_architect(
-            self._chat_prompt(),
-            system=QUESTIONNAIRE_SYSTEM_PROMPT,
-        ).strip()
+        response = self._generate_planner(self._chat_prompt(), QUESTIONNAIRE_SYSTEM_PROMPT).strip()
         message, questions = _parse_questionnaire_response(response)
         if not planning_requested:
             questions = []
@@ -696,11 +783,59 @@ class Bridge:
             self.writer.emit("questionnaire", questions=questions)
 
     def _run_spec_draft(self) -> None:
-        response = self._generate_architect(
-            self._spec_prompt(),
-            system=SPEC_SHEET_SYSTEM_PROMPT,
-        ).strip()
+        response = self._generate_planner(self._spec_prompt(), SPEC_SHEET_SYSTEM_PROMPT).strip()
         self.writer.emit("spec_draft", text=_render_spec_sheet(response))
+
+    def _run_research(self) -> None:
+        question = next(
+            (
+                message["content"]
+                for message in reversed(self._chat_history)
+                if message.get("role") == "user"
+            ),
+            "",
+        )
+        findings: list[str] = []
+
+        def on_tool_result(record: ToolCallRecord, raw_value: Any) -> None:
+            ok = bool(record.result.get("ok"))
+            self.writer.emit(
+                "tool_call",
+                turn=record.turn,
+                tool=record.tool,
+                ok=ok,
+                summary="completed" if ok else str(record.result.get("error") or ""),
+            )
+            if isinstance(raw_value, ReadFileResponse):
+                excerpt, start_line, _truncated = _code_excerpt(raw_value.content)
+                findings.append(f"read {raw_value.path} (line {start_line}):\n{excerpt}")
+            elif ok:
+                findings.append(f"{record.tool}({record.arguments}) -> {record.result}")
+
+        ToolCallingAgent(
+            self._tool_generator("deepseek"),
+            build_default_tool_registry(repository_root=self.tool_repository_root),
+            max_turns=8,
+            on_tool_result=on_tool_result,
+            allowed_tools=("search_directory", "read_file"),
+        ).run(f"Research only; do not modify files: {question}")
+        response = self._generate_architect(
+            "\n\n".join(
+                [
+                    f"QUESTION:\n{question}",
+                    "FINDINGS:\n" + ("\n\n".join(findings) or "(none)"),
+                ]
+            ),
+            system=RESEARCH_SYSTEM_PROMPT,
+        ).strip()
+        document = _render_research_doc(question, response)
+        path = _save_research_doc(self.tool_repository_root / "docs" / "research", question, document)
+        relative_path = path.relative_to(self.tool_repository_root).as_posix()
+        self._chat_history.append(
+            {"role": "assistant", "content": f"Research saved to {relative_path}"}
+        )
+        self._chat_history = self._chat_history[-MAX_CHAT_MESSAGES:]
+        self.writer.emit("research_draft", text=document, path=relative_path)
 
     def _client(self) -> ArchitectApiClient:
         if self._architect_client is None:
@@ -708,6 +843,15 @@ class Bridge:
                 ArchitectConfig(env_file=str(self.env_file))
             )
         return self._architect_client
+
+    def _generate_planner(self, prompt: str, system: str) -> str:
+        """Use DeepSeek for every interactive plan and tool decision."""
+
+        return self._generate_architect(prompt, system=system)
+
+    @staticmethod
+    def _architect_mode() -> str:
+        return "api"
 
     def _chat_prompt(self) -> str:
         return "\n\n".join(
@@ -739,6 +883,11 @@ class Bridge:
             if values.get(key, "").strip():
                 return f".env:{key}"
         return "missing"
+
+    def _ollama_keep_alive(self) -> str:
+        """Read the selected repository's setting, without overriding shell config."""
+
+        return self._child_environment().get("OLLAMA_KEEP_ALIVE", OLLAMA_KEEP_ALIVE)
 
     def _load_preferences(self) -> list[str]:
         try:
@@ -1206,6 +1355,30 @@ def _is_filesystem_mutation_request(message: str) -> bool:
     return any(cue in lowered for cue in filesystem_cues)
 
 
+def _is_github_actions_request(message: str) -> bool:
+    """Recognize GitHub workflow work without conflating it with approval."""
+
+    lowered = message.casefold()
+    return bool(
+        re.search(
+            r"\b(?:push|publish|commit|merge|open|create)\b.{0,40}"
+            r"\b(?:github|pull request|pr|branch|workflow|action)\b",
+            lowered,
+        )
+        or re.search(
+            r"\b(?:github|pull request|pr|branch|workflow|action)\b.{0,40}"
+            r"\b(?:push|publish|commit|merge|open|create)\b",
+            lowered,
+        )
+    )
+
+
+def _is_local_eligible_task(message: str) -> bool:
+    """Keep Qwen on cheap, bounded repository chores; use DeepSeek otherwise."""
+
+    return _is_filesystem_mutation_request(message) or _is_github_actions_request(message)
+
+
 def _code_excerpt(content: str, max_lines: int = 32) -> tuple[str, int, bool]:
     """Return bounded source evidence suitable for a readable terminal stream."""
 
@@ -1231,10 +1404,7 @@ def _action_approval_reason(message: str) -> str | None:
     """Return a human-facing reason when a request can alter the repository."""
 
     lowered = message.casefold()
-    if re.search(
-        r"\b(?:push|publish|commit|merge|open|create)\b.{0,40}\b(?:github|pull request|pr|branch)\b",
-        lowered,
-    ) or re.search(r"\b(?:github|pull request|pr|branch)\b.{0,40}\b(?:push|publish|commit|merge|open|create)\b", lowered):
+    if _is_github_actions_request(message):
         return "GitHub actions can publish or change repository history."
     if re.search(
         r"\b(?:refactor|restructure|reorganize|reorganise|rename|move)\b.{0,48}\b(?:code|repo|repository|file|files|folder|directory|module)\b",
@@ -1260,16 +1430,22 @@ def _host_operating_system() -> str:
 def _should_start_planning(message: str) -> bool:
     """Require an explicit software-planning request before opening spec review."""
     lowered = message.casefold()
-    has_planning_intent = bool(
-        re.search(
-            r"\b(?:plan|planning|build|create|make|design|implement|develop|scaffold)\b",
-            lowered,
-        )
-    )
-    has_change_intent = any(
-        phrase in lowered for phrase in ("add a feature", "add feature", "change the ", "fix the ")
-    )
-    if not (has_planning_intent or has_change_intent):
+    # A direct repository operation is a tool task, not a request to design a
+    # project.  In particular, "create a file/function" must reach the local
+    # Qwen tool loop instead of unexpectedly opening the DeepSeek spec intake.
+    if re.search(
+        r"\b(?:create|add|remove|delete|rename|move|edit|update|write|change)\s+"
+        r"(?:a|an|the)?\s*(?:file|folder|directory|function|class|module)\b",
+        lowered,
+    ):
+        return False
+    # Planning is a deliberate mode. Vague requests such as "build a CLI" go
+    # to the local generation/tool loop; `/spec` or explicit planning language
+    # opts into the architect questionnaire and contract workflow.
+    if not re.search(
+        r"\b(?:plan|planning|spec(?:ification)?|architect(?:ure)?|design)\b",
+        lowered,
+    ):
         return False
     coding_targets = (
         "software",
@@ -1279,6 +1455,8 @@ def _should_start_planning(message: str) -> bool:
         "application",
         "api",
         "cli",
+        "command line",
+        "command-line",
         "tui",
         "website",
         "web app",
@@ -1297,6 +1475,9 @@ def _should_start_planning(message: str) -> bool:
         "automation",
         "terminal",
         "task manager",
+        "task tracker",
+        "tracker",
+        "multi-file",
         "dashboard",
         "service",
     )
@@ -1319,6 +1500,79 @@ def _preference_context(preferences: list[str]) -> str:
     return "USER PREFERENCES:\n" + "\n".join(
         f"- {preference}" for preference in preferences[-MAX_PREFERENCES:]
     )
+
+
+def _research_slug(question: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", question.strip().lower()).strip("-")
+    return (slug or "research")[:60]
+
+
+def _save_research_doc(directory: Path, question: str, document: str) -> Path:
+    directory.mkdir(parents=True, exist_ok=True)
+    stamp = time.strftime("%Y-%m-%d_%H-%M-%S")
+    path = directory / f"{stamp}_{_research_slug(question)}.md"
+    path.write_text(document, encoding="utf-8")
+    return path
+
+
+def _decode_json_object(response: str, label: str) -> dict[str, Any]:
+    raw = response.strip()
+    if raw.startswith("```") and raw.endswith("```"):
+        raw = "\n".join(raw.splitlines()[1:-1]).strip()
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"invalid {label} JSON") from exc
+    if not isinstance(payload, dict):
+        raise ValueError(f"{label} must be a JSON object")
+    return payload
+
+
+def _render_research_doc(question: str, response: str) -> str:
+    payload = _decode_json_object(response, "research artifact")
+    relevant_files = _sheet_list(payload.get("relevant_files"), "relevant_files", allow_empty=True)
+    code_flow = _sheet_list(payload.get("code_flow"), "code_flow", allow_empty=True)
+    open_questions = _sheet_list(payload.get("open_questions"), "open_questions", allow_empty=True)
+    hypothesis = " ".join(str(payload.get("hypothesis") or "").split()) or "(inconclusive)"
+    lines = [
+        "# Research",
+        "",
+        "## Question",
+        "",
+        _sheet_text(payload.get("question") or question, "question"),
+        "",
+        "## Relevant Files",
+        "",
+        *(f"- {item}" for item in relevant_files),
+        "",
+        "## Code Flow",
+        "",
+        *(f"{index}. {item}" for index, item in enumerate(code_flow, start=1)),
+        "",
+        "## Hypothesis",
+        "",
+        hypothesis,
+        "",
+        "## Open Questions",
+        "",
+        *(f"- {item}" for item in open_questions),
+    ]
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _render_compaction_summary(response: str) -> str:
+    payload = _decode_json_object(response, "compaction summary")
+    lines = [
+        f"Goal: {_sheet_text(payload.get('goal'), 'goal')}",
+        f"Approach: {_sheet_text(payload.get('approach'), 'approach')}",
+        "Done:",
+        *(f"  - {item}" for item in _sheet_list(payload.get("done"), "done", allow_empty=True)),
+        "Current blocker: "
+        + (" ".join(str(payload.get("current_blocker") or "").split()) or "(none)"),
+        "Key facts:",
+        *(f"  - {item}" for item in _sheet_list(payload.get("key_facts"), "key_facts", allow_empty=True)),
+    ]
+    return "\n".join(lines)
 
 
 def _render_spec_sheet(response: str) -> str:
@@ -1576,7 +1830,11 @@ def _contract_event_from_line(line: str) -> dict[str, Any] | None:
 
 
 def main() -> int:
-    bridge = Bridge()
+    # The Rust TUI passes its selected working directory explicitly.  Keeping
+    # this separate from this module's source root prevents tool calls from
+    # accidentally editing the harness when the user opens another project.
+    repository_root = os.environ.get("HARNESS_REPOSITORY_ROOT")
+    bridge = Bridge(tool_repository_root=repository_root)
     bridge.writer.emit("ready", protocol_version=PROTOCOL_VERSION)
     bridge.emit_startup_status()
     for raw_line in sys.stdin:

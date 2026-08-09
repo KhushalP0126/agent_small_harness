@@ -9,16 +9,22 @@ from unittest.mock import MagicMock, patch
 
 from agents.artifact_manager import ArtifactManager
 from agents.plan_mode import PlanModeAgent
+from backends.architect_client import ArchitectUsage
 from harness_kernel.event_stream import EVENT_FD_ENV, event_sink_from_env
 from harness_kernel.tui_bridge import (
     Bridge,
     EventWriter,
+    REPO_ROOT,
     _architect_error_event,
     _action_approval_reason,
     _code_excerpt,
     _contract_event_from_line,
     _dotenv_values,
+    _is_github_actions_request,
+    _is_local_eligible_task,
     _parse_questionnaire_response,
+    _render_compaction_summary,
+    _render_research_doc,
     _render_spec_sheet,
     _should_start_planning,
     _validated_args,
@@ -95,7 +101,7 @@ class TuiBridgeTests(unittest.TestCase):
                 tool_generate_text=lambda _prompt: next(responses),
                 tool_repository_root=root,
             )
-            bridge.handle({"cmd": "tool_task", "text": "inspect", "provider": "qwen"})
+            bridge.handle({"cmd": "tool_task", "text": "inspect", "provider": "deepseek"})
             answer = self.wait_for_event("tool_answer")
 
         events = self.events()
@@ -124,41 +130,199 @@ class TuiBridgeTests(unittest.TestCase):
             context_window=8192,
             estimated_cost_usd=0.0,
         )
-        self.assertEqual(
-            self.events(),
-            [
+
+    def test_compaction_replaces_history_only_after_a_valid_summary(self) -> None:
+        client = MagicMock()
+        client.generate.return_value = json.dumps(
+            {
+                "goal": "Keep the terminal agent responsive.",
+                "approach": "Inspect files before proposing reviewed edits.",
+                "done": ["Added read-only repository tools."],
+                "current_blocker": "None.",
+                "key_facts": ["Use Qwen locally for tool calls."],
+            }
+        )
+        bridge = Bridge(EventWriter(self.output), architect_client=client)
+        bridge._chat_history = [
+            {"role": "user", "content": "Inspect main.py"},
+            {"role": "assistant", "content": "I found the entrypoint."},
+            {"role": "user", "content": "Explain the event loop"},
+            {"role": "assistant", "content": "It reads bridge events."},
+        ]
+
+        bridge._emit_context_usage(
+            backend="local",
+            model="qwen2.5-coder:1.5b",
+            prompt_tokens=5000,
+            completion_tokens=0,
+            context_window=8192,
+            estimated_cost_usd=0.0,
+        )
+
+        self.assertEqual(len(bridge._chat_history), 1)
+        self.assertIn("context compacted", bridge._chat_history[0]["content"])
+        self.assertTrue(any(event.get("msg") == "context compacted" for event in self.events()))
+
+    def test_research_and_compaction_renderers_require_structured_json(self) -> None:
+        research = _render_research_doc(
+            "Where does the bridge start?",
+            json.dumps(
                 {
-                    "type": "context_usage",
-                    "backend": "local",
-                    "model": "qwen2.5-coder:1.5b",
-                    "prompt_tokens": 3200,
-                    "completion_tokens": 896,
-                    "total_tokens": 4096,
-                    "context_window": 8192,
-                    "estimated_cost_usd": 0.0,
+                    "question": "Where does the bridge start?",
+                    "relevant_files": ["harness_kernel/tui_bridge.py: owns commands"],
+                    "code_flow": ["Bridge.handle dispatches a typed command."],
+                    "hypothesis": "The bridge is the protocol boundary.",
+                    "open_questions": [],
                 }
-            ],
+            ),
         )
-
-    def test_local_generation_emits_ollama_usage(self) -> None:
-        class OllamaStub:
-            last_usage = {"prompt_tokens": 321, "completion_tokens": 89}
-
-            def generate(self, *_args, **_kwargs) -> str:
-                return '{"action":"final","answer":"done"}'
-
-        response = self.bridge._generate_local(
-            OllamaStub(),
-            "inspect this file",
-            system="tool JSON only",
+        self.assertIn("## Relevant Files", research)
+        self.assertIn("Bridge.handle", research)
+        summary = _render_compaction_summary(
+            json.dumps(
+                {
+                    "goal": "Keep context bounded.",
+                    "approach": "Summarize completed work.",
+                    "done": [],
+                    "current_blocker": "",
+                    "key_facts": ["The bridge owns history."],
+                }
+            )
         )
+        self.assertIn("Goal: Keep context bounded.", summary)
+        with self.assertRaises(ValueError):
+            _render_research_doc("question", "not JSON")
+
+    def test_research_command_emits_a_saved_typed_artifact_without_writes_to_code(self) -> None:
+        tool_responses = iter(
+            [
+                json.dumps(
+                    {
+                        "action": "tool",
+                        "tool": "search_directory",
+                        "arguments": {"root": ".", "pattern": "*.py"},
+                    }
+                ),
+                json.dumps({"action": "final", "answer": "research complete"}),
+            ]
+        )
+        client = MagicMock()
+        client.generate.return_value = json.dumps(
+            {
+                "question": "Where is the entrypoint?",
+                "relevant_files": ["main.py: sample entrypoint"],
+                "code_flow": ["main.py starts the application."],
+                "hypothesis": "The entrypoint is main.py.",
+                "open_questions": [],
+            }
+        )
+        with tempfile.TemporaryDirectory(dir=REPO_ROOT) as tmpdir:
+            root = Path(tmpdir)
+            (root / "main.py").write_text("print('ok')\n", encoding="utf-8")
+            bridge = Bridge(
+                EventWriter(self.output),
+                architect_client=client,
+                tool_generate_text=lambda _prompt: next(tool_responses),
+                tool_repository_root=root,
+            )
+            bridge._chat_history = [
+                {"role": "user", "content": "Where is the entrypoint?"}
+            ]
+            bridge._run_research()
+            event = next(item for item in self.events() if item["type"] == "research_draft")
+            saved = root / event["path"]
+            self.assertTrue(saved.exists())
+            self.assertIn("# Research", saved.read_text(encoding="utf-8"))
+            self.assertEqual((root / "main.py").read_text(encoding="utf-8"), "print('ok')\n")
+        self.assertTrue(any(item["type"] == "tool_call" for item in self.events()))
+        self.assertTrue(any(item["type"] == "research_draft" for item in self.events()))
+
+    def test_api_generation_emits_reported_usage(self) -> None:
+        client = MagicMock()
+        client.generate.return_value = '{"action":"final","answer":"done"}'
+        client.last_usage = ArchitectUsage(
+            model="deepseek-v4-pro",
+            prompt_tokens=321,
+            completion_tokens=89,
+            total_tokens=410,
+        )
+        bridge = Bridge(EventWriter(self.output), architect_client=client)
+        response = bridge._generate_architect("inspect this file", system="tool JSON only")
 
         self.assertIn('"action":"final"', response)
         event = self.events()[-1]
         self.assertEqual(event["type"], "context_usage")
         self.assertEqual(event["prompt_tokens"], 321)
         self.assertEqual(event["completion_tokens"], 89)
-        self.assertEqual(event["context_window"], 8192)
+        self.assertEqual(event["backend"], "api")
+        self.assertEqual(event["context_window"], 65536)
+
+    def test_deepseek_planning_handles_ping_pong_snake_and_chess_without_writing(self) -> None:
+        tasks = {
+            "Ping Pong": "Plan a small Python terminal Ping Pong game with unit tests.",
+            "Snake": "Plan a small Python terminal Snake game with unit tests.",
+            "Chess": "Plan a small Python terminal Chess game with unit tests.",
+        }
+
+        for game, prompt in tasks.items():
+            with self.subTest(game=game), tempfile.TemporaryDirectory() as tmpdir:
+                stream = io.StringIO()
+                client = MagicMock()
+                client.generate.return_value = json.dumps(
+                    {
+                        "kind": "questionnaire",
+                        "message": f"Let's scope {game}.",
+                        "questions": [
+                            {
+                                "question_text": "Which interface should it use?",
+                                "options": ["Terminal", "Web browser", "Other"],
+                            },
+                            {
+                                "question_text": "What test coverage is required?",
+                                "options": ["Core rules", "Full game flow", "Other"],
+                            },
+                        ],
+                    }
+                )
+                client.last_usage = ArchitectUsage(
+                    model="deepseek-v4-pro",
+                    prompt_tokens=240,
+                    completion_tokens=180,
+                    total_tokens=420,
+                )
+                root = Path(tmpdir)
+                bridge = Bridge(
+                    EventWriter(stream),
+                    architect_client=client,
+                    tool_repository_root=root,
+                    memory_path=root / ".memory.json",
+                )
+                bridge.start_chat(prompt)
+                deadline = time.monotonic() + 2
+                while bridge._assistant_busy and time.monotonic() < deadline:
+                    time.sleep(0.01)
+
+                self.assertFalse(bridge._assistant_busy)
+                events = [json.loads(line) for line in stream.getvalue().splitlines()]
+                questionnaire = next(event for event in events if event["type"] == "questionnaire")
+                usage = next(event for event in events if event["type"] == "context_usage")
+                self.assertEqual(len(questionnaire["questions"]), 2)
+                self.assertEqual(usage["backend"], "api")
+                self.assertEqual(usage["model"], "deepseek-v4-pro")
+                self.assertFalse(any(event["type"] == "chat_error" for event in events))
+                self.assertEqual(list(root.iterdir()), [])
+                self.assertEqual(client.generate.call_count, 1)
+
+    def test_qwen_is_available_for_a_narrow_scaffolding_task(self) -> None:
+        bridge = Bridge(
+            EventWriter(self.output),
+            tool_generate_text=lambda _prompt: json.dumps(
+                {"action": "final", "answer": "scaffold checked"}
+            ),
+        )
+        bridge.handle({"cmd": "tool_task", "text": "Create a directory named demo", "provider": "qwen"})
+        answer = self.wait_for_event("tool_answer")
+        self.assertEqual(answer["answer"], "scaffold checked")
 
     def test_tool_diff_requires_explicit_approval(self) -> None:
         responses = iter(
@@ -187,7 +351,7 @@ class TuiBridgeTests(unittest.TestCase):
                 tool_generate_text=lambda _prompt: next(responses),
                 tool_repository_root=root,
             )
-            bridge.handle({"cmd": "tool_task", "text": "change return", "provider": "qwen"})
+            bridge.handle({"cmd": "tool_task", "text": "change return", "provider": "deepseek"})
             diff = self.wait_for_event("tool_diff")
             self.assertEqual(path.read_text(encoding="utf-8"), "def main():\n    return 1\n")
             bridge.handle({"cmd": "apply_tool_diff", "approved": True})
@@ -203,20 +367,11 @@ class TuiBridgeTests(unittest.TestCase):
                 json.dumps(
                     {
                         "action": "tool",
-                        "tool": "execute_script",
-                        "arguments": {"root": ".", "source": "print('wrong tool')"},
-                    }
-                ),
-                json.dumps(
-                    {
-                        "action": "tool",
-                        "tool": "apply_search_replace",
+                        "tool": "create_file",
                         "arguments": {
                             "root": ".",
                             "path": "exp/hello.txt",
-                            "operation": "create",
-                            "search": "",
-                            "replace": "hello world\n",
+                            "content": "hello world\n",
                         },
                     }
                 ),
@@ -240,9 +395,9 @@ class TuiBridgeTests(unittest.TestCase):
             self.assertEqual(path.read_text(encoding="utf-8"), "hello world\n")
         self.assertEqual(diff["path"], "exp/hello.txt")
         self.assertTrue(resolved["applied"])
-        rejected = next(event for event in self.events() if event["type"] == "tool_call")
-        self.assertFalse(rejected["ok"])
-        self.assertIn("declared tool", rejected["summary"])
+        created = next(event for event in self.events() if event["type"] == "tool_call")
+        self.assertTrue(created["ok"])
+        self.assertEqual(created["tool"], "create_file")
 
     def test_action_approval_identifies_sensitive_repository_requests(self) -> None:
         self.assertIn(
@@ -258,6 +413,49 @@ class TuiBridgeTests(unittest.TestCase):
             _action_approval_reason("Remove the file obsolete.py") or "",
         )
         self.assertIsNone(_action_approval_reason("Explain the repository layout"))
+
+    def test_local_eligibility_is_limited_to_scaffolding_and_github_work(self) -> None:
+        self.assertTrue(_is_local_eligible_task("Create a directory named demo"))
+        self.assertTrue(_is_local_eligible_task("Push this branch to GitHub"))
+        self.assertFalse(_is_local_eligible_task("Fix the parser implementation"))
+        self.assertTrue(_is_github_actions_request("Open a pull request on GitHub"))
+        self.assertFalse(_is_github_actions_request("Explain the GitHub Actions file"))
+
+    def test_chat_routes_only_narrow_chores_to_qwen(self) -> None:
+        bridge = Bridge(EventWriter(self.output))
+        bridge._chat_history = [{"role": "user", "content": "Create a directory named demo"}]
+        with patch.object(bridge, "_run_tool_task") as run_tool_task:
+            bridge._run_chat()
+        run_tool_task.assert_called_once_with("Create a directory named demo", "qwen")
+
+        bridge._chat_history = [{"role": "user", "content": "Fix the parser implementation"}]
+        with patch.object(bridge, "_run_tool_task") as run_tool_task:
+            bridge._run_chat()
+        run_tool_task.assert_called_once_with("Fix the parser implementation", "deepseek")
+
+    def test_api_cost_warning_emits_once(self) -> None:
+        for _ in range(2):
+            self.bridge._emit_context_usage(
+                backend="api",
+                model="deepseek-v4-pro",
+                prompt_tokens=100,
+                completion_tokens=50,
+                context_window=65_536,
+                estimated_cost_usd=0.60,
+            )
+        warnings = [
+            event for event in self.events()
+            if event["type"] == "log" and event["level"] == "warning"
+        ]
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("$1.20", warnings[0]["msg"])
+
+    def test_local_keep_alive_reads_the_selected_repository_env_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / ".env").write_text("OLLAMA_KEEP_ALIVE=45s\n", encoding="utf-8")
+            bridge = Bridge(EventWriter(self.output), tool_repository_root=root)
+            self.assertEqual(bridge._ollama_keep_alive(), "45s")
 
     def test_rejected_action_approval_does_not_start_tools(self) -> None:
         self.bridge.start_chat("Delete the file obsolete.py")
@@ -400,6 +598,16 @@ class TuiBridgeTests(unittest.TestCase):
         self.assertEqual(events[1]["level"], "warning")
         self.assertIn("DEEPSEEK_API_KEY", events[1]["msg"])
 
+    def test_selected_repository_owns_bridge_runtime_state(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir).resolve()
+            bridge = Bridge(EventWriter(self.output), tool_repository_root=root)
+
+            self.assertEqual(bridge.tool_repository_root, root.resolve())
+            self.assertEqual(bridge.env_file, root / ".env")
+            self.assertEqual(bridge.memory_path, root / ".tui_memory.json")
+            self.assertEqual(bridge.artifact_root, root / "artifacts" / "runs")
+
     def test_startup_status_reports_dotenv_source_without_secret(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             env_file = Path(tmpdir) / ".env"
@@ -511,10 +719,14 @@ class TuiBridgeTests(unittest.TestCase):
 
     def test_planning_intent_is_explicit(self) -> None:
         self.assertTrue(_should_start_planning("Help me plan a terminal app"))
-        self.assertTrue(_should_start_planning("I want to build a task manager"))
+        self.assertTrue(_should_start_planning("Design a task manager architecture"))
         self.assertTrue(_should_start_planning("We are planning a CLI tool"))
+        self.assertTrue(_should_start_planning("Plan a multi-file command-line task tracker"))
+        self.assertFalse(_should_start_planning("I want to build a task manager"))
         self.assertFalse(_should_start_planning("hello"))
         self.assertFalse(_should_start_planning("what does this repository do?"))
+        self.assertFalse(_should_start_planning("Create a file named hello.py"))
+        self.assertFalse(_should_start_planning("Write a function that adds two numbers"))
         self.assertFalse(_should_start_planning("Plan a vacation to Japan"))
         self.assertFalse(_should_start_planning("Make a presentation for Friday"))
 
@@ -564,7 +776,7 @@ class TuiBridgeTests(unittest.TestCase):
                 memory_path=Path(tmpdir) / "memory.json",
                 architect_client=client,
             )
-            bridge.start_chat("Build a task manager")
+            bridge.start_chat("Plan a task manager")
             event = self.wait_for_event("questionnaire")
 
         self.assertEqual(len(event["questions"]), 2)
@@ -584,7 +796,7 @@ class TuiBridgeTests(unittest.TestCase):
             }
         )
         bridge = Bridge(EventWriter(self.output), architect_client=client)
-        bridge.start_tool_task("Build a task manager")
+        bridge.start_tool_task("Plan a task manager")
         event = self.wait_for_event("questionnaire")
 
         self.assertEqual(len(event["questions"]), 2)

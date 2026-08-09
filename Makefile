@@ -23,7 +23,6 @@ RAW_VS_HARNESS_SAMPLES ?= 5
 DOC_AGENT ?= deepseek
 DOC_MODEL ?=
 DOC_OUTPUT ?= $(if $(filter none,$(DOC_AGENT)),,data/library_proposals/$(LIB).docs.md)
-TOOL_AGENT ?= qwen
 SANDBOX_MODE ?= container
 CONTAINER_RUNTIME ?= docker
 IMAGE ?= agent-small-harness:local
@@ -50,7 +49,7 @@ help:
 	@printf "  make docker-build                Build the isolated execution image\n"
 	@printf "  make sandbox-run SOURCE=... LANGUAGE=python  Run source without network\n"
 	@printf "  make clean-cache                 Remove Python test caches (keeps artifacts and Rust build cache)\n"
-	@printf "\nModel runs are opt-in; default local model: $(MODEL)\n"
+	@printf "\nInteractive chat and tools use DeepSeek; local models remain benchmark-only.\n"
 	@printf "See setup/README.md, ARCHITECTURE.md, and docs/results/ for details.\n"
 
 bootstrap:
@@ -232,7 +231,7 @@ approve-library:
 
 tool-agent:
 	@test -n "$(TASK)" || (echo "Set TASK, e.g. make tool-agent TASK='inspect rust_tui/src/main.rs'" && exit 1)
-	$(PYTHON) scripts/run_tool_agent.py "$(TASK)" --provider "$(TOOL_AGENT)" --repo-root "$(REPO_ROOT)"
+	$(PYTHON) scripts/run_tool_agent.py "$(TASK)" --repo-root "$(REPO_ROOT)"
 
 sandbox-run:
 	@test -n "$(SOURCE)" || (echo "Set SOURCE to a source file" && exit 1)

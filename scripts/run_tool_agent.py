@@ -13,33 +13,10 @@ if str(ROOT) not in sys.path:
 from agents.config_loader import DEFAULT_CONFIG_PATH, load_config
 from agents.tool_calling_agent import ToolCallingAgent
 from backends.architect_client import ArchitectApiClient, ArchitectConfig
-from backends.ollama_client import (
-    DEFAULT_OLLAMA_MODEL,
-    OllamaClient,
-    OllamaGenerationConfig,
-)
 from harness_kernel.tool_handlers import build_default_tool_registry
 
 
-def _generator(provider: str, model: str, config_path: Path):
-    if provider == "qwen":
-        client = OllamaClient()
-        selected_model = model or DEFAULT_OLLAMA_MODEL
-
-        def generate(prompt: str) -> str:
-            return client.generate(
-                prompt,
-                model=selected_model,
-                config=OllamaGenerationConfig(
-                    temperature=0.0,
-                    num_predict=1200,
-                    num_ctx=8192,
-                ),
-                system="Return one repository tool-call JSON object only.",
-            )
-
-        return generate
-
+def _generator(model: str, config_path: Path):
     harness_config = load_config(config_path)
     architect_config = ArchitectConfig(
         repair_profile=harness_config.execution.architect.repair
@@ -71,7 +48,6 @@ def main() -> int:
         description="Run a bounded repository tool-calling agent without applying diffs."
     )
     parser.add_argument("task", help="Repository inspection or diff-preparation task")
-    parser.add_argument("--provider", choices=("qwen", "deepseek"), default="qwen")
     parser.add_argument("--model", default="")
     parser.add_argument("--max-turns", type=int, default=8)
     parser.add_argument("--repo-root", type=Path, default=ROOT)
@@ -80,7 +56,7 @@ def main() -> int:
 
     repository_root = args.repo_root.resolve()
     run = ToolCallingAgent(
-        _generator(args.provider, args.model, args.config),
+        _generator(args.model, args.config),
         build_default_tool_registry(repository_root=repository_root),
         max_turns=args.max_turns,
     ).run(args.task)
