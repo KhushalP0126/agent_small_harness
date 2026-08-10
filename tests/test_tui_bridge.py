@@ -368,12 +368,16 @@ class TuiBridgeTests(unittest.TestCase):
             bridge = Bridge(EventWriter(self.output), env_file=env_file, tool_repository_root=root)
             bridge.emit_startup_status()
 
-        deadline = time.monotonic() + 2
-        while time.monotonic() < deadline:
-            statuses = [event for event in self.events() if event["type"] == "config_status"]
-            if len(statuses) == 2:
-                break
-            time.sleep(0.01)
+            # The reachability check runs on a background thread, so keep the
+            # mock active until that check has completed.
+            deadline = time.monotonic() + 2
+            statuses = []
+            while time.monotonic() < deadline:
+                statuses = [event for event in self.events() if event["type"] == "config_status"]
+                if len(statuses) == 2:
+                    break
+                time.sleep(0.01)
+        self.assertEqual(len(statuses), 2, "expected initial and reachability status events")
         status = statuses[-1]
         self.assertEqual(status["type"], "config_status")
         self.assertTrue(status["deepseek_configured"])

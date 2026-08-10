@@ -1289,7 +1289,7 @@ fn draw_status_row(frame: &mut ratatui::Frame, state: &AppState, area: Rect) {
     let line = Line::from(vec![
         Span::styled(
             " ● ",
-            Style::default().fg(if busy { theme_cyan() } else { Color::Green }),
+            Style::default().fg(if busy { theme_cyan() } else { theme_ready() }),
         ),
         Span::styled(
             status.to_owned(),
@@ -1320,11 +1320,13 @@ fn draw_status_row(frame: &mut ratatui::Frame, state: &AppState, area: Rect) {
                 (true, None) => "DeepSeek configured".to_owned(),
                 (false, _) => "DeepSeek unavailable".to_owned(),
             },
-            Style::default().fg(match (state.deepseek_configured, state.deepseek_reachable) {
-                (true, Some(true)) => Color::Green,
-                (true, Some(false)) => Color::Yellow,
-                (true, None) | (false, _) => theme_muted(),
-            }),
+            Style::default().fg(
+                match (state.deepseek_configured, state.deepseek_reachable) {
+                    (true, Some(true)) => theme_ready(),
+                    (true, Some(false)) => Color::Yellow,
+                    (true, None) | (false, _) => theme_muted(),
+                },
+            ),
         ),
     ]);
     frame.render_widget(
@@ -1363,10 +1365,7 @@ fn draw_questionnaire(frame: &mut ratatui::Frame, state: &AppState, area: Rect) 
     let total = state.clarification_questions.len();
     let current = state.clarification_index.saturating_add(1).min(total);
     frame.render_widget(
-        pane_block(
-            format!(" Clarify · {current}/{total} "),
-            true,
-        ),
+        pane_block(format!(" Clarify · {current}/{total} "), true),
         area,
     );
     let inner = Rect {
@@ -1403,9 +1402,9 @@ fn draw_questionnaire(frame: &mut ratatui::Frame, state: &AppState, area: Rect) 
             Span::styled(
                 format!("  {}", option.text),
                 Style::default().fg(if option.text.eq_ignore_ascii_case("other") {
-                    Color::Magenta
+                    theme_you()
                 } else {
-                    Color::White
+                    theme_foreground()
                 }),
             ),
         ]));
@@ -1550,11 +1549,11 @@ fn stream_lines(state: &AppState) -> Vec<Line<'static>> {
 fn stream_history_lines(state: &AppState) -> Vec<Line<'static>> {
     if let Some(detail) = &state.history_detail {
         let mut lines = vec![Line::from(vec![
-            Span::styled("• ", Style::default().fg(Color::Magenta)),
+            Span::styled("• ", Style::default().fg(theme_system())),
             Span::styled(
                 "history  ",
                 Style::default()
-                    .fg(Color::Magenta)
+                    .fg(theme_system())
                     .add_modifier(Modifier::BOLD),
             ),
             Span::styled(
@@ -1571,11 +1570,11 @@ fn stream_history_lines(state: &AppState) -> Vec<Line<'static>> {
         return lines;
     }
     let mut lines = vec![Line::from(vec![
-        Span::styled("• ", Style::default().fg(Color::Magenta)),
+        Span::styled("• ", Style::default().fg(theme_system())),
         Span::styled(
             "history  ",
             Style::default()
-                .fg(Color::Magenta)
+                .fg(theme_system())
                 .add_modifier(Modifier::BOLD),
         ),
         Span::styled(
@@ -1652,15 +1651,20 @@ fn stream_log_lines(line: &str) -> Vec<Line<'static>> {
         ])];
     }
     let role = [
-        ("[you] ", "you", Color::Green, Color::White),
-        ("[assistant] ", "assistant", Color::Cyan, Color::LightCyan),
-        ("[code] ", "code", Color::LightBlue, Color::LightBlue),
-        ("[diff] ", "diff", Color::LightCyan, Color::LightCyan),
-        ("[history] ", "history", Color::Magenta, Color::LightMagenta),
-        ("[tool] ", "tool", Color::Blue, Color::LightBlue),
-        ("[work] ", "working", Color::Magenta, Color::LightMagenta),
+        ("[you] ", "you", theme_you(), theme_foreground()),
+        (
+            "[assistant] ",
+            "assistant",
+            theme_assistant(),
+            theme_foreground(),
+        ),
+        ("[code] ", "code", theme_working(), theme_working()),
+        ("[diff] ", "diff", theme_cyan(), theme_cyan()),
+        ("[history] ", "history", theme_system(), theme_system()),
+        ("[tool] ", "tool", theme_system(), theme_working()),
+        ("[work] ", "working", theme_working(), theme_working()),
         ("[approval] ", "permission", Color::Yellow, Color::Yellow),
-        ("[memory] ", "memory", Color::Magenta, Color::White),
+        ("[memory] ", "memory", theme_system(), theme_foreground()),
         ("[error] ", "error", Color::LightRed, Color::LightRed),
         ("[warning] ", "warning", Color::Yellow, Color::Yellow),
         (
@@ -1774,35 +1778,55 @@ fn context_summary(context: Option<&BackendContext>) -> String {
 }
 
 fn theme_background() -> Color {
-    Color::Rgb(3, 7, 18)
+    Color::Rgb(4, 7, 13)
 }
 
 fn theme_panel() -> Color {
-    Color::Rgb(8, 15, 29)
+    Color::Rgb(10, 18, 32)
 }
 
 fn theme_status() -> Color {
-    Color::Rgb(10, 20, 38)
+    Color::Rgb(15, 24, 42)
 }
 
 fn theme_foreground() -> Color {
-    Color::Rgb(229, 237, 248)
+    Color::Rgb(231, 240, 252)
 }
 
 fn theme_muted() -> Color {
-    Color::Rgb(126, 145, 169)
+    Color::Rgb(74, 100, 133)
 }
 
 fn theme_border() -> Color {
-    Color::Rgb(43, 67, 96)
+    Color::Rgb(27, 42, 66)
 }
 
 fn theme_cyan() -> Color {
-    Color::Rgb(0, 210, 255)
+    Color::Rgb(56, 189, 248)
 }
 
 fn theme_purple() -> Color {
-    Color::Rgb(182, 128, 255)
+    Color::Rgb(147, 197, 253)
+}
+
+fn theme_you() -> Color {
+    Color::Rgb(125, 211, 252)
+}
+
+fn theme_assistant() -> Color {
+    Color::Rgb(96, 165, 250)
+}
+
+fn theme_working() -> Color {
+    Color::Rgb(147, 197, 253)
+}
+
+fn theme_system() -> Color {
+    Color::Rgb(59, 130, 246)
+}
+
+fn theme_ready() -> Color {
+    Color::Rgb(96, 165, 250)
 }
 
 fn pane_block<'a>(title: impl Into<Line<'a>>, active: bool) -> Block<'a> {
@@ -2366,7 +2390,13 @@ mod tests {
         }
 
         assert_eq!(state.logs.len(), MAX_LOG_ENTRIES);
-        assert_eq!(state.logs.first().map(String::as_str), Some("[info] entry 1"));
-        assert_eq!(state.logs.last().map(String::as_str), Some("[info] entry 750"));
+        assert_eq!(
+            state.logs.first().map(String::as_str),
+            Some("[info] entry 1")
+        );
+        assert_eq!(
+            state.logs.last().map(String::as_str),
+            Some("[info] entry 750")
+        );
     }
 }
