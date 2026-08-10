@@ -3,6 +3,7 @@ import json
 import os
 import tempfile
 import time
+import threading
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -367,12 +368,40 @@ class TuiBridgeTests(unittest.TestCase):
             bridge = Bridge(EventWriter(self.output), env_file=env_file, tool_repository_root=root)
             bridge.emit_startup_status()
 
-        status = self.events()[0]
+        deadline = time.monotonic() + 2
+        while time.monotonic() < deadline:
+            statuses = [event for event in self.events() if event["type"] == "config_status"]
+            if len(statuses) == 2:
+                break
+            time.sleep(0.01)
+        status = statuses[-1]
         self.assertEqual(status["type"], "config_status")
         self.assertTrue(status["deepseek_configured"])
         self.assertFalse(status["deepseek_reachable"])
         self.assertNotIn("secret-value", self.output.getvalue())
-        self.assertIn("cannot be resolved", self.events()[1]["msg"])
+        self.assertTrue(any("cannot be resolved" in event.get("msg", "") for event in self.events()))
+
+    def test_startup_does_not_wait_for_a_slow_reachability_check(self) -> None:
+        release_check = threading.Event()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env_file = Path(tmpdir) / ".env"
+            env_file.write_text("DEEPSEEK_API_KEY=secret-value\n", encoding="utf-8")
+            bridge = Bridge(EventWriter(self.output), env_file=env_file)
+            with patch.object(bridge, "_deepseek_reachable", side_effect=lambda: release_check.wait(2)):
+                started = time.monotonic()
+                bridge.emit_startup_status()
+                elapsed = time.monotonic() - started
+                initial = self.events()[0]
+                self.assertLess(elapsed, 0.1)
+                self.assertIsNone(initial["deepseek_reachable"])
+                release_check.set()
+                deadline = time.monotonic() + 2
+                while time.monotonic() < deadline:
+                    statuses = [event for event in self.events() if event["type"] == "config_status"]
+                    if len(statuses) == 2:
+                        break
+                    time.sleep(0.01)
+        self.assertTrue(statuses[-1]["deepseek_reachable"])
 
     def test_coding_request_prepares_a_deepseek_draft_without_writing(self) -> None:
         client = MagicMock()

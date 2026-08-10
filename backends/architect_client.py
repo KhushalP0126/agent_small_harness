@@ -2,13 +2,11 @@ from __future__ import annotations
 
 import json
 import os
-import socket
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
+import httpx
 
 from backends.ollama_client import FENCED_CODE_RE, LANGUAGE_TAG_LINE_RE
 from harness_kernel.function_contracts import ContractQueue, ContractQueuePlan, parse_contract_queue_json, parse_contract_queue_plan_json
@@ -247,10 +245,19 @@ class ArchitectApiClient:
         self,
         config: ArchitectConfig | None = None,
         sleep: Callable[[float], None] | None = None,
+        http_client: httpx.Client | None = None,
     ) -> None:
         self.config = config or ArchitectConfig()
         self.last_usage: ArchitectUsage | None = None
         self._sleep = sleep or time.sleep
+        # Keep one connection pool per architect client so interactive DeepSeek
+        # turns can reuse TCP/TLS connections instead of handshaking per call.
+        self._http_client = http_client or httpx.Client()
+        self._owns_http_client = http_client is None
+
+    def close(self) -> None:
+        if self._owns_http_client:
+            self._http_client.close()
 
     def generate(self, prompt: str, system: str, profile: ArchitectProfile | None = None) -> str:
         if not self.config.api_key_configured:
@@ -287,36 +294,35 @@ class ArchitectApiClient:
         attempts = self.config.retry_attempts
         last_error: BaseException | None = None
         for attempt in range(1, attempts + 1):
-            request = Request(
-                self.config.base_url,
-                data=json.dumps(payload).encode("utf-8"),
-                headers={
-                    "Authorization": f"Bearer {self.config.api_key}",
-                    "Content-Type": "application/json",
-                },
-                method="POST",
-            )
             try:
-                with urlopen(request, timeout=profile.timeout_seconds) as response:
-                    return json.loads(response.read().decode("utf-8"))
-            except socket.timeout as exc:
+                response = self._http_client.post(
+                    self.config.base_url,
+                    json=payload,
+                    headers={"Authorization": f"Bearer {self.config.api_key}"},
+                    timeout=profile.timeout_seconds,
+                )
+                response.raise_for_status()
+                return response.json()
+            except httpx.TimeoutException as exc:
                 last_error = exc
                 if attempt >= attempts:
                     raise TimeoutError(
                         f"Architect API timed out after {profile.timeout_seconds}s "
                         f"({attempts} attempt{'s' if attempts != 1 else ''})"
                     ) from exc
-            except HTTPError as exc:
-                detail = exc.read().decode("utf-8", errors="replace")
-                if not _is_retryable_http_status(exc.code) or attempt >= attempts:
-                    raise RuntimeError(f"Architect API failed with HTTP {exc.code}: {detail}") from exc
-                last_error = RuntimeError(f"HTTP {exc.code}: {detail}")
-            except URLError as exc:
+            except httpx.HTTPStatusError as exc:
+                detail = exc.response.text
+                if not _is_retryable_http_status(exc.response.status_code) or attempt >= attempts:
+                    raise RuntimeError(
+                        f"Architect API failed with HTTP {exc.response.status_code}: {detail}"
+                    ) from exc
+                last_error = RuntimeError(f"HTTP {exc.response.status_code}: {detail}")
+            except httpx.RequestError as exc:
                 last_error = exc
                 if attempt >= attempts:
                     raise RuntimeError(
                         f"Architect API is not reachable at {self.config.base_url} "
-                        f"after {attempts} attempt{'s' if attempts != 1 else ''}: {exc.reason}"
+                        f"after {attempts} attempt{'s' if attempts != 1 else ''}: {exc}"
                     ) from exc
 
             self._sleep(_retry_delay(self.config.retry_backoff_seconds, attempt))

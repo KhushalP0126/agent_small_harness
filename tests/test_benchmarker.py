@@ -4,10 +4,11 @@ import stat
 import tempfile
 import unittest
 from contextlib import redirect_stdout
-from io import BytesIO, StringIO
+from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
-from urllib.error import HTTPError, URLError
+
+import httpx
 
 from agents.config_loader import ConfigError, load_config
 from agents.artifact_manager import ArtifactManager
@@ -1244,20 +1245,18 @@ def analyze(matrix):
             self.assertEqual(config.retry_backoff_seconds, 0.25)
 
     def test_architect_client_retries_transient_network_failure(self) -> None:
-        class StubResponse:
-            def __enter__(self) -> "StubResponse":
-                return self
+        class StubHttpClient:
+            def __init__(self, responses: list[object]) -> None:
+                self.responses = iter(responses)
+                self.calls: list[dict[str, object]] = []
 
-            def __exit__(self, *_args: object) -> None:
-                return None
-
-            def read(self) -> bytes:
-                return json.dumps(
-                    {
-                        "choices": [{"message": {"content": "def ok():\n    return 1\n"}}],
-                        "usage": {"prompt_tokens": 5, "completion_tokens": 7, "total_tokens": 12},
-                    }
-                ).encode("utf-8")
+            def post(self, url: str, **kwargs: object) -> httpx.Response:
+                self.calls.append({"url": url, **kwargs})
+                response = next(self.responses)
+                if isinstance(response, BaseException):
+                    raise response
+                assert isinstance(response, httpx.Response)
+                return response
 
         with tempfile.TemporaryDirectory() as tmpdir:
             env_file = Path(tmpdir) / ".env"
@@ -1275,19 +1274,32 @@ def analyze(matrix):
                 env_file=str(env_file),
             )
             delays: list[float] = []
-            client = ArchitectApiClient(config=config, sleep=delays.append)
-            with patch(
-                "backends.architect_client.urlopen",
-                side_effect=[URLError("temporary dns failure"), StubResponse()],
-            ) as urlopen_mock:
-                content = client.generate(prompt="write code", system="return code")
+            http_client = StubHttpClient(
+                [
+                    httpx.ConnectError("temporary dns failure"),
+                    httpx.Response(
+                        200,
+                        request=httpx.Request("POST", "https://api.deepseek.com/chat/completions"),
+                        json={
+                            "choices": [{"message": {"content": "def ok():\n    return 1\n"}}],
+                            "usage": {"prompt_tokens": 5, "completion_tokens": 7, "total_tokens": 12},
+                        },
+                    ),
+                ]
+            )
+            client = ArchitectApiClient(
+                config=config,
+                sleep=delays.append,
+                http_client=http_client,  # type: ignore[arg-type]
+            )
+            content = client.generate(prompt="write code", system="return code")
 
             self.assertEqual(content, "def ok():\n    return 1\n")
-            self.assertEqual(urlopen_mock.call_count, 2)
+            self.assertEqual(len(http_client.calls), 2)
             self.assertEqual(delays, [0.0])
             self.assertIsNotNone(client.last_usage)
             self.assertEqual(client.last_usage.total_tokens, 12)
-            payload = json.loads(urlopen_mock.call_args_list[-1].args[0].data.decode("utf-8"))
+            payload = http_client.calls[-1]["json"]
             self.assertEqual(payload["max_tokens"], 8000)
             self.assertEqual(payload["thinking"], {"type": "enabled"})
             self.assertEqual(payload["reasoning_effort"], "high")
@@ -1306,19 +1318,20 @@ def analyze(matrix):
                 retry_attempts_env="ARCHITECT_TEST_RETRY_ATTEMPTS",
                 env_file=str(env_file),
             )
-            client = ArchitectApiClient(config=config, sleep=lambda _delay: None)
-            error = HTTPError(
-                url="https://api.deepseek.com/chat/completions",
-                code=401,
-                msg="Unauthorized",
-                hdrs={},
-                fp=BytesIO(b"bad key"),
+            http_client = httpx.Client(
+                transport=httpx.MockTransport(
+                    lambda request: httpx.Response(401, content=b"bad key", request=request)
+                )
             )
-            with patch("backends.architect_client.urlopen", side_effect=error) as urlopen_mock:
-                with self.assertRaisesRegex(RuntimeError, "HTTP 401"):
-                    client.generate(prompt="write code", system="return code")
+            client = ArchitectApiClient(
+                config=config,
+                sleep=lambda _delay: None,
+                http_client=http_client,
+            )
+            with self.assertRaisesRegex(RuntimeError, "HTTP 401"):
+                client.generate(prompt="write code", system="return code")
 
-            self.assertEqual(urlopen_mock.call_count, 1)
+            http_client.close()
 
     def test_architect_supplier_extracts_code_from_api_response(self) -> None:
         class StubArchitectClient:

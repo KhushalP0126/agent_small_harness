@@ -205,7 +205,32 @@ class Bridge:
             or child_env.get("DEEPSEEK_API_KEY", "").strip()
         )
         source = self._architect_key_source()
-        reachable = self._deepseek_reachable() if configured else None
+        self._emit_config_status(configured=configured, source=source, reachable=None)
+        if not configured:
+            self.writer.emit(
+                "log",
+                level="warning",
+                msg=(
+                    "DeepSeek is not configured. Set DEEPSEEK_API_KEY in the "
+                    "repository .env file or export it before sending a prompt."
+                ),
+            )
+            return
+        # DNS resolution can block unpredictably on an offline network.  The
+        # bridge must start reading commands before that check completes.
+        threading.Thread(
+            target=self._emit_deepseek_reachability,
+            args=(source,),
+            daemon=True,
+        ).start()
+
+    def _emit_config_status(
+        self,
+        *,
+        configured: bool,
+        source: str,
+        reachable: bool | None,
+    ) -> None:
         self.writer.emit(
             "config_status",
             deepseek_configured=configured,
@@ -216,16 +241,11 @@ class Bridge:
             architect_mode=self._architect_mode(),
             local_model=DEFAULT_OLLAMA_MODEL,
         )
-        if not configured:
-            self.writer.emit(
-                "log",
-                level="warning",
-                msg=(
-                    "DeepSeek is not configured. Set DEEPSEEK_API_KEY in the "
-                    "repository .env file or export it before sending a prompt."
-                ),
-            )
-        elif reachable is False:
+
+    def _emit_deepseek_reachability(self, source: str) -> None:
+        reachable = self._deepseek_reachable()
+        self._emit_config_status(configured=True, source=source, reachable=reachable)
+        if not reachable:
             self.writer.emit(
                 "log",
                 level="warning",
@@ -953,7 +973,7 @@ class Bridge:
         return None
 
     def _deepseek_reachable(self) -> bool:
-        host = urlparse(self._client().config.base_url).hostname
+        host = urlparse(ArchitectConfig(env_file=str(self.env_file)).base_url).hostname
         if not host:
             return False
         try:

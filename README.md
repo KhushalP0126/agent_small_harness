@@ -113,12 +113,20 @@ profiling as disabled and behavior is unchanged.
 ## Rust TUI
 
 Planning opens only for an explicit software-planning request and only when a
-DeepSeek key is configured. At startup the TUI checks whether the configured
-DeepSeek host resolves, without sending the key. If the API becomes unavailable,
+DeepSeek key is configured. At startup the TUI begins a background check of
+whether the configured DeepSeek host resolves, without sending the key, so the
+input loop is never delayed by DNS. If the API becomes unavailable,
 the TUI keeps the conversation open and reports a concise retry message instead
 of a raw bridge error. Engine commands (`/check`, compile, profiling, and
 Compute Shield) are disabled by default for the interactive TUI; set
 `HARNESS_ENGINES_ENABLED=1` in `.env` to re-enable them.
+
+The event stream retains the most recent 750 entries, keeping long sessions
+responsive while preserving enough history for review and scrolling.
+
+The DeepSeek client keeps a per-session HTTP connection pool, so consecutive
+interactive requests can reuse a connection rather than performing a fresh
+TCP/TLS handshake each time.
 
 The Rust interface owns the terminal while Python continues to own the harness,
 models, engines, and artifacts. They communicate through newline-delimited JSON

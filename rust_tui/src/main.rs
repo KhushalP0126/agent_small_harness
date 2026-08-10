@@ -38,6 +38,8 @@ use tokio::{
     sync::mpsc,
 };
 
+const MAX_LOG_ENTRIES: usize = 750;
+
 #[derive(Debug, Clone, PartialEq)]
 enum AppMode {
     Chat,
@@ -583,9 +585,8 @@ impl AppState {
                 .log_scroll
                 .saturating_add(self.logs.len().saturating_sub(previous_log_count));
         }
-        const MAX_LOGS: usize = 2_000;
-        if self.logs.len() > MAX_LOGS {
-            self.logs.drain(..self.logs.len() - MAX_LOGS);
+        if self.logs.len() > MAX_LOG_ENTRIES {
+            self.logs.drain(..self.logs.len() - MAX_LOG_ENTRIES);
         }
     }
 
@@ -2238,7 +2239,7 @@ mod tests {
                 msg: format!("event-{index}"),
             });
         }
-        assert_eq!(state.logs.len(), 2_000);
+        assert_eq!(state.logs.len(), MAX_LOG_ENTRIES);
         assert_eq!(state.logs.last().unwrap(), "[info] event-2499");
     }
 
@@ -2352,5 +2353,20 @@ mod tests {
             state.repo_variables[state.repo_selected].variables,
             ["DATA"]
         );
+    }
+
+    #[test]
+    fn event_stream_keeps_a_bounded_recent_log_window() {
+        let mut state = AppState::default();
+        for index in 0..=MAX_LOG_ENTRIES {
+            state.apply(HarnessEvent::Log {
+                level: "info".into(),
+                msg: format!("entry {index}"),
+            });
+        }
+
+        assert_eq!(state.logs.len(), MAX_LOG_ENTRIES);
+        assert_eq!(state.logs.first().map(String::as_str), Some("[info] entry 1"));
+        assert_eq!(state.logs.last().map(String::as_str), Some("[info] entry 750"));
     }
 }
