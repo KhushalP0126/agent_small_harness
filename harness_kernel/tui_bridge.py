@@ -13,6 +13,7 @@ import json
 import os
 import platform
 import re
+import socket
 import subprocess
 import sys
 import tempfile
@@ -23,6 +24,7 @@ from html import escape
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, TextIO
+from urllib.parse import urlparse
 
 from agents.artifact_manager import ArtifactManager
 from agents.repo_map_agent import RepoMapAgent
@@ -84,6 +86,14 @@ The user has explicitly asked to plan, build, create, design, implement, or chan
 {"kind":"questionnaire","message":"short introduction","questions":[{"question_text":"...","options":["...","..."]}]}
 Ask 2 to 4 high-impact clarification questions. Give each question 2 to 4 concise, mutually distinct choices. Do not include Other; the application adds it. Focus on behavior, scope, constraints, data, interfaces, and acceptance criteria.
 Never return markdown fences around the JSON. The application creates a formal spec only after the questionnaire is completed or the user explicitly requests a draft."""
+CHAT_SYSTEM_PROMPT = """You are a concise, helpful coding assistant.
+Answer the user's latest message directly. Do not emit tool-call JSON, do not claim to have changed files, and do not open a planning questionnaire unless the user explicitly asked to plan software."""
+CODE_DRAFT_SYSTEM_PROMPT = """You are a coding assistant preparing one safe, reviewable repository change.
+Return exactly one repository tool-call JSON object. It must propose one of these tools only:
+- create_file: {"action":"tool","tool":"create_file","arguments":{"path":"relative/path","content":"full source"}}
+- apply_search_replace: {"action":"tool","tool":"apply_search_replace","arguments":{"path":"relative/path","search":"exact existing text","replace":"replacement text"}}
+
+Generate real, complete code for the user's request. Never execute tools, never write files, never use markdown fences, and never return more than one change. If a precise single-file change is impossible, return {"action":"final","answer":"<one concise clarification question>"}."""
 SPEC_SHEET_SYSTEM_PROMPT = """You are a software specification architect.
 Fill out the supplied execution spec sheet from the conversation and questionnaire answers.
 Return JSON only, with no markdown fence and no commentary, using exactly this shape:
@@ -180,6 +190,9 @@ class Bridge:
         self._compaction_in_progress = False
         self._session_cost_usd = 0.0
         self._cost_warning_emitted = False
+        # A failed architect connection should not repeatedly open planning
+        # mode and make the user wait through the same retry budget.
+        self._architect_unavailable_reason: str | None = None
         self._assistant_busy = False
         self._process: subprocess.Popen[str] | None = None
         self._repo_map_server: ThreadingHTTPServer | None = None
@@ -192,9 +205,11 @@ class Bridge:
             or child_env.get("DEEPSEEK_API_KEY", "").strip()
         )
         source = self._architect_key_source()
+        reachable = self._deepseek_reachable() if configured else None
         self.writer.emit(
             "config_status",
             deepseek_configured=configured,
+            deepseek_reachable=reachable,
             source=source,
             memory_path=str(self.memory_path),
             preference_count=len(self._load_preferences()),
@@ -209,6 +224,12 @@ class Bridge:
                     "DeepSeek is not configured. Set DEEPSEEK_API_KEY in the "
                     "repository .env file or export it before sending a prompt."
                 ),
+            )
+        elif reachable is False:
+            self.writer.emit(
+                "log",
+                level="warning",
+                msg="DeepSeek host cannot be resolved. Check your internet or DNS before sending a prompt.",
             )
 
     def handle(self, command: dict[str, Any]) -> None:
@@ -273,6 +294,7 @@ class Bridge:
         if self._assistant_busy:
             self.writer.emit("log", level="warning", msg="DeepSeek is already responding")
             return
+        planning_requested = _should_start_planning(text)
         reason = _action_approval_reason(text)
         if reason and not approved:
             self._pending_action_approval = PendingActionApproval(text, reason, "chat")
@@ -283,6 +305,11 @@ class Bridge:
         self._chat_history = self._chat_history[-MAX_CHAT_MESSAGES:]
         if not already_visible:
             self.writer.emit("chat_message", role="user", content=text)
+        if planning_requested:
+            unavailable = self._planning_unavailable_reason()
+            if unavailable:
+                self._emit_planning_unavailable(unavailable)
+                return
         remembered = self._preference_from_message(text)
         if remembered:
             added = self._remember_preference(remembered)
@@ -478,13 +505,19 @@ class Bridge:
             ):
                 proposals.append(raw_value)
 
-        run = ToolCallingAgent(
-            self._tool_generator(provider),
-            build_default_tool_registry(repository_root=self.tool_repository_root),
-            max_turns=8,
-            on_tool_result=on_tool_result,
-            allowed_tools=allowed_tools,
-        ).run(task)
+        try:
+            run = ToolCallingAgent(
+                self._tool_generator(provider),
+                build_default_tool_registry(repository_root=self.tool_repository_root),
+                max_turns=8,
+                on_tool_result=on_tool_result,
+                allowed_tools=allowed_tools,
+            ).run(task)
+        except RuntimeError as exc:
+            if provider == "deepseek":
+                self._report_deepseek_unavailable(exc)
+                return
+            raise
         answer = run.final_answer or "I could not produce a final answer."
         failed_mutations = [
             call
@@ -716,6 +749,8 @@ class Bridge:
             self.start_chat(pending.text, approved=True, already_visible=True)
 
     def check_code(self, path: str) -> None:
+        if self._engines_disabled("/check"):
+            return
         requested = path.strip()
         if not requested:
             self.writer.emit("log", level="warning", msg="/check requires a repository file path")
@@ -765,22 +800,84 @@ class Bridge:
     def _run_chat(self) -> None:
         latest = self._chat_history[-1]["content"] if self._chat_history else ""
         planning_requested = _should_start_planning(latest)
-        if not planning_requested:
-            provider = "qwen" if _is_local_eligible_task(latest) else "deepseek"
-            self._run_tool_task(latest, provider)
+        if planning_requested:
+            try:
+                response = self._generate_planner(self._chat_prompt(), QUESTIONNAIRE_SYSTEM_PROMPT).strip()
+            except RuntimeError as exc:
+                self._report_deepseek_unavailable(exc, label="Planning")
+                return
+            message, questions = _parse_questionnaire_response(response)
+            history_content = (
+                _questionnaire_transcript(message, questions) if questions else message
+            )
+            self._chat_history.append({"role": "assistant", "content": history_content})
+            self._chat_history = self._chat_history[-MAX_CHAT_MESSAGES:]
+            self.writer.emit("chat_message", role="assistant", content=message)
+            if questions:
+                self.writer.emit("questionnaire", questions=questions)
             return
-        response = self._generate_planner(self._chat_prompt(), QUESTIONNAIRE_SYSTEM_PROMPT).strip()
-        message, questions = _parse_questionnaire_response(response)
-        if not planning_requested:
-            questions = []
-        history_content = (
-            _questionnaire_transcript(message, questions) if questions else message
-        )
-        self._chat_history.append({"role": "assistant", "content": history_content})
+
+        if _is_local_eligible_task(latest):
+            self._run_tool_task(latest, "qwen")
+            return
+        if _is_repository_maintenance_request(latest):
+            self._run_tool_task(latest, "deepseek")
+            return
+        if _is_code_generation_request(latest):
+            self._run_code_draft(latest)
+            return
+        self._run_plain_chat()
+
+    def _run_plain_chat(self) -> None:
+        try:
+            message = self._generate_architect(self._chat_prompt(), system=CHAT_SYSTEM_PROMPT).strip()
+        except RuntimeError as exc:
+            self._report_deepseek_unavailable(exc)
+            return
+        self._chat_history.append({"role": "assistant", "content": message})
         self._chat_history = self._chat_history[-MAX_CHAT_MESSAGES:]
         self.writer.emit("chat_message", role="assistant", content=message)
-        if questions:
-            self.writer.emit("questionnaire", questions=questions)
+
+    def _run_code_draft(self, task: str) -> None:
+        proposals: list[ApplySearchReplaceResponse | CreateFileResponse] = []
+
+        def on_tool_result(record: ToolCallRecord, raw_value: Any) -> None:
+            ok = bool(record.result.get("ok"))
+            self.writer.emit(
+                "tool_call",
+                turn=record.turn,
+                tool=record.tool,
+                ok=ok,
+                summary="draft prepared" if ok else str(record.result.get("error") or ""),
+            )
+            if isinstance(raw_value, (ApplySearchReplaceResponse, CreateFileResponse)):
+                proposals.append(raw_value)
+
+        try:
+            run = ToolCallingAgent(
+                lambda prompt: self._generate_architect(prompt, system=CODE_DRAFT_SYSTEM_PROMPT),
+                build_default_tool_registry(repository_root=self.tool_repository_root),
+                max_turns=1,
+                on_tool_result=on_tool_result,
+                allowed_tools=("apply_search_replace", "create_file"),
+            ).run(task)
+        except RuntimeError as exc:
+            self._report_deepseek_unavailable(exc)
+            return
+
+        answer = run.final_answer or "I could not prepare a code draft."
+        self._chat_history.append({"role": "assistant", "content": answer})
+        self._chat_history = self._chat_history[-MAX_CHAT_MESSAGES:]
+        self.writer.emit("tool_answer", answer=answer, exhausted=run.exhausted, call_count=len(run.calls))
+        if proposals:
+            self._pending_tool_diff = proposals[-1]
+            proposal = self._pending_tool_diff
+            self.writer.emit(
+                "tool_diff",
+                path=proposal.path,
+                diff=proposal.diff,
+                replacements=getattr(proposal, "replacements", 1),
+            )
 
     def _run_spec_draft(self) -> None:
         response = self._generate_planner(self._spec_prompt(), SPEC_SHEET_SYSTEM_PROMPT).strip()
@@ -843,6 +940,59 @@ class Bridge:
                 ArchitectConfig(env_file=str(self.env_file))
             )
         return self._architect_client
+
+    def _planning_unavailable_reason(self) -> str | None:
+        if self._architect_unavailable_reason:
+            return self._architect_unavailable_reason
+        # Dependency-injected clients are used by callers that already own the
+        # architect connection (and by the offline TUI protocol tests).
+        if self._architect_client is not None:
+            return None
+        if self._architect_key_source() == "missing":
+            return "Planning needs a DeepSeek API key in .env before it can start."
+        return None
+
+    def _deepseek_reachable(self) -> bool:
+        host = urlparse(self._client().config.base_url).hostname
+        if not host:
+            return False
+        try:
+            socket.getaddrinfo(host, 443, type=socket.SOCK_STREAM)
+        except OSError:
+            return False
+        return True
+
+    def _report_deepseek_unavailable(self, error: RuntimeError, *, label: str = "DeepSeek") -> None:
+        detail = str(error)
+        if "not reachable" in detail or "timed out" in detail:
+            self._architect_unavailable_reason = (
+                "DeepSeek could not be reached. Check your internet or DNS, then retry."
+            )
+        else:
+            self._architect_unavailable_reason = "DeepSeek could not complete this request. Check its API configuration, then retry."
+        message = f"{label} is unavailable: {self._architect_unavailable_reason}"
+        self._chat_history.append({"role": "assistant", "content": message})
+        self._chat_history = self._chat_history[-MAX_CHAT_MESSAGES:]
+        self.writer.emit("chat_message", role="assistant", content=message)
+        self.writer.emit("log", level="warning", msg=self._architect_unavailable_reason)
+
+    def _emit_planning_unavailable(self, reason: str) -> None:
+        message = f"Planning is unavailable: {reason}"
+        self._chat_history.append({"role": "assistant", "content": message})
+        self._chat_history = self._chat_history[-MAX_CHAT_MESSAGES:]
+        self.writer.emit("chat_message", role="assistant", content=message)
+        self.writer.emit("log", level="warning", msg=reason)
+
+    def _engines_disabled(self, action: str) -> bool:
+        enabled = self._child_environment().get("HARNESS_ENGINES_ENABLED", "0")
+        if enabled.strip().casefold() in {"1", "true", "yes", "on"}:
+            return False
+        self.writer.emit(
+            "log",
+            level="info",
+            msg=f"{action} is disabled while HARNESS_ENGINES_ENABLED=0",
+        )
+        return True
 
     def _generate_planner(self, prompt: str, system: str) -> str:
         """Use DeepSeek for every interactive plan and tool decision."""
@@ -1103,6 +1253,8 @@ class Bridge:
         self.writer.emit("repo_map_url", url=f"http://127.0.0.1:{server.server_port}/")
 
     def compile_source(self, language: str, source: str) -> None:
+        if self._engines_disabled("compile"):
+            return
         try:
             findings = CompilationEngine(language).scan(source)
         except ValueError as exc:
@@ -1130,6 +1282,8 @@ class Bridge:
         raw_samples: Any,
         cache_misses: Any,
     ) -> None:
+        if self._engines_disabled("profiling"):
+            return
         try:
             samples = tuple(int(sample) for sample in raw_samples)
             if len(samples) < 3 or any(sample < 0 for sample in samples):
@@ -1166,6 +1320,8 @@ class Bridge:
         )
 
     def compute_shield(self, raw_phase: Any, raw_tasks: Any) -> None:
+        if self._engines_disabled("compute shield"):
+            return
         try:
             tasks = [
                 ShieldTaskTokens(
@@ -1377,6 +1533,34 @@ def _is_local_eligible_task(message: str) -> bool:
     """Keep Qwen on cheap, bounded repository chores; use DeepSeek otherwise."""
 
     return _is_filesystem_mutation_request(message) or _is_github_actions_request(message)
+
+
+def _is_repository_maintenance_request(message: str) -> bool:
+    """Route existing-code maintenance through inspect-then-propose tools."""
+
+    lowered = message.casefold()
+    return bool(
+        re.search(
+            r"\b(?:fix|debug|refactor|restructure|reorganize|reorganise|review|inspect|explain)\b"
+            r".{0,56}\b(?:code|file|files|module|package|repository|repo|function|class|parser)\b",
+            lowered,
+        )
+    )
+
+
+def _is_code_generation_request(message: str) -> bool:
+    """Recognize a request for a new code draft rather than a tool operation."""
+
+    if _is_local_eligible_task(message) or _is_repository_maintenance_request(message):
+        return False
+    lowered = message.casefold()
+    return bool(
+        re.search(
+            r"\b(?:create|build|make|write|implement|generate)\b.{0,80}"
+            r"\b(?:code|function|class|app|application|api|cli|script|program|game|website|web\s+app|feature|module|package|library|bot)\b",
+            lowered,
+        )
+    )
 
 
 def _code_excerpt(content: str, max_lines: int = 32) -> tuple[str, int, bool]:

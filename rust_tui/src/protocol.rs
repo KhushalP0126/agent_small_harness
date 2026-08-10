@@ -158,6 +158,8 @@ pub enum HarnessEvent {
     },
     ConfigStatus {
         deepseek_configured: bool,
+        #[serde(default)]
+        deepseek_reachable: Option<bool>,
         source: String,
         memory_path: String,
         preference_count: u32,
@@ -354,6 +356,7 @@ mod tests {
             },
             HarnessEvent::ConfigStatus {
                 deepseek_configured: true,
+                deepseek_reachable: Some(true),
                 source: ".env:DEEPSEEK_API_KEY".into(),
                 memory_path: ".tui_memory.json".into(),
                 preference_count: 2,

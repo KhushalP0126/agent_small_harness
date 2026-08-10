@@ -112,6 +112,14 @@ profiling as disabled and behavior is unchanged.
 
 ## Rust TUI
 
+Planning opens only for an explicit software-planning request and only when a
+DeepSeek key is configured. At startup the TUI checks whether the configured
+DeepSeek host resolves, without sending the key. If the API becomes unavailable,
+the TUI keeps the conversation open and reports a concise retry message instead
+of a raw bridge error. Engine commands (`/check`, compile, profiling, and
+Compute Shield) are disabled by default for the interactive TUI; set
+`HARNESS_ENGINES_ENABLED=1` in `.env` to re-enable them.
+
 The Rust interface owns the terminal while Python continues to own the harness,
 models, engines, and artifacts. They communicate through newline-delimited JSON
 over a local subprocess—no server or port is introduced.
@@ -135,10 +143,10 @@ backend-reported token total and remaining share of its configured context
 window. Press `c`, `p`,
 or `a` to focus the same composer; pressing `Enter` from chat opens it, and
 pressing `Enter` again sends. Its footer exposes keyboard-first `send`,
-`/tools`, and `/spec` actions. Every
-non-planning message goes through the DeepSeek tool agent with bounded, typed
-repository tools available when they help; ordinary conversation
-finishes directly without a tool call. New project ideas automatically open a typed 2–4 question
+`/tools`, and `/spec` actions. Explicit planning requests open the typed
+questionnaire; ordinary coding requests ask DeepSeek for one reviewable code
+draft, repository maintenance uses the bounded tool loop, and casual chat
+receives a direct response without tool JSON. New project ideas automatically open a typed 2–4 question
 clarification flow. Each question has numbered choices plus a mandatory `Other`
 option; `1`–`5` answers locally, while `Other` opens free-text input.
 Completing the final question asks DeepSeek to fill a strict JSON execution

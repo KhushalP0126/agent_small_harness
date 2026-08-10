@@ -107,6 +107,7 @@ struct AppState {
     inspector_scroll: usize,
     activity_tick: usize,
     deepseek_configured: bool,
+    deepseek_reachable: Option<bool>,
     deepseek_source: String,
     memory_path: String,
     preference_count: u32,
@@ -158,6 +159,7 @@ impl Default for AppState {
             inspector_scroll: 0,
             activity_tick: 0,
             deepseek_configured: false,
+            deepseek_reachable: None,
             deepseek_source: "checking".into(),
             memory_path: ".tui_memory.json".into(),
             preference_count: 0,
@@ -251,6 +253,7 @@ impl AppState {
             }
             HarnessEvent::ConfigStatus {
                 deepseek_configured,
+                deepseek_reachable,
                 source,
                 memory_path,
                 preference_count,
@@ -258,6 +261,7 @@ impl AppState {
                 local_model,
             } => {
                 self.deepseek_configured = deepseek_configured;
+                self.deepseek_reachable = deepseek_reachable;
                 self.deepseek_source = source;
                 self.memory_path = memory_path;
                 self.preference_count = preference_count;
@@ -1309,15 +1313,16 @@ fn draw_status_row(frame: &mut ratatui::Frame, state: &AppState, area: Rect) {
         ),
         Span::styled("  ·  ", Style::default().fg(theme_muted())),
         Span::styled(
-            if state.deepseek_configured {
-                "DeepSeek default".to_owned()
-            } else {
-                "DeepSeek unavailable".to_owned()
+            match (state.deepseek_configured, state.deepseek_reachable) {
+                (true, Some(true)) => "DeepSeek ready".to_owned(),
+                (true, Some(false)) => "DeepSeek offline".to_owned(),
+                (true, None) => "DeepSeek configured".to_owned(),
+                (false, _) => "DeepSeek unavailable".to_owned(),
             },
-            Style::default().fg(if state.deepseek_configured {
-                Color::Green
-            } else {
-                theme_muted()
+            Style::default().fg(match (state.deepseek_configured, state.deepseek_reachable) {
+                (true, Some(true)) => Color::Green,
+                (true, Some(false)) => Color::Yellow,
+                (true, None) | (false, _) => theme_muted(),
             }),
         ),
     ]);
@@ -2102,6 +2107,7 @@ mod tests {
         assert!((state.session_cost_usd - 0.0091).abs() < f64::EPSILON);
         state.apply(HarnessEvent::ConfigStatus {
             deepseek_configured: true,
+            deepseek_reachable: Some(true),
             source: ".env:DEEPSEEK_API_KEY".into(),
             memory_path: ".tui_memory.json".into(),
             preference_count: 3,

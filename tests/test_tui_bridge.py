@@ -21,7 +21,9 @@ from harness_kernel.tui_bridge import (
     _contract_event_from_line,
     _dotenv_values,
     _is_github_actions_request,
+    _is_code_generation_request,
     _is_local_eligible_task,
+    _is_repository_maintenance_request,
     _parse_questionnaire_response,
     _render_compaction_summary,
     _render_research_doc,
@@ -111,7 +113,9 @@ class TuiBridgeTests(unittest.TestCase):
         self.assertEqual(answer["answer"], "inspection complete")
 
     def test_check_command_streams_real_structural_result(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
+        with tempfile.TemporaryDirectory() as tmpdir, patch.dict(
+            os.environ, {"HARNESS_ENGINES_ENABLED": "1"}
+        ):
             root = Path(tmpdir)
             (root / "broken.py").write_text("def broken(:\n", encoding="utf-8")
             bridge = Bridge(EventWriter(self.output), tool_repository_root=root)
@@ -313,6 +317,118 @@ class TuiBridgeTests(unittest.TestCase):
                 self.assertEqual(list(root.iterdir()), [])
                 self.assertEqual(client.generate.call_count, 1)
 
+    def test_planning_does_not_start_without_an_architect_key(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir, patch.dict(
+            os.environ,
+            {"ARCHITECT_API_KEY": "", "DEEPSEEK_API_KEY": ""},
+            clear=False,
+        ):
+            stream = io.StringIO()
+            bridge = Bridge(
+                EventWriter(stream),
+                env_file=Path(tmpdir) / ".env",
+            )
+            bridge.start_chat("Plan a small Python game")
+
+        events = [json.loads(line) for line in stream.getvalue().splitlines()]
+        assistant = next(event for event in events if event["role"] == "assistant")
+        self.assertIn("API key", assistant["content"])
+        self.assertFalse(any(event["type"] == "assistant_status" for event in events))
+
+    def test_unreachable_architect_keeps_planning_closed_after_the_first_failure(self) -> None:
+        client = MagicMock()
+        client.generate.side_effect = RuntimeError("network unavailable")
+        bridge = Bridge(EventWriter(self.output), architect_client=client)
+        bridge.start_chat("Plan a Python terminal game")
+        self.wait_for_event("chat_message")
+        deadline = time.monotonic() + 2
+        while bridge._assistant_busy and time.monotonic() < deadline:
+            time.sleep(0.01)
+        bridge.start_chat("Plan another Python terminal game")
+
+        assistant_messages = [
+            event["content"]
+            for event in self.events()
+            if event["type"] == "chat_message" and event["role"] == "assistant"
+        ]
+        self.assertEqual(client.generate.call_count, 1)
+        self.assertEqual(len(assistant_messages), 2)
+        self.assertTrue(all("Planning is unavailable" in message for message in assistant_messages))
+        self.assertFalse(any(event["type"] == "chat_error" for event in self.events()))
+
+    def test_startup_reports_unreachable_deepseek_host_without_leaking_the_key(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir, patch(
+            "harness_kernel.tui_bridge.socket.getaddrinfo",
+            side_effect=OSError("DNS unavailable"),
+        ):
+            root = Path(tmpdir)
+            env_file = root / ".env"
+            env_file.write_text("DEEPSEEK_API_KEY=secret-value\n", encoding="utf-8")
+            bridge = Bridge(EventWriter(self.output), env_file=env_file, tool_repository_root=root)
+            bridge.emit_startup_status()
+
+        status = self.events()[0]
+        self.assertEqual(status["type"], "config_status")
+        self.assertTrue(status["deepseek_configured"])
+        self.assertFalse(status["deepseek_reachable"])
+        self.assertNotIn("secret-value", self.output.getvalue())
+        self.assertIn("cannot be resolved", self.events()[1]["msg"])
+
+    def test_coding_request_prepares_a_deepseek_draft_without_writing(self) -> None:
+        client = MagicMock()
+        client.generate.return_value = json.dumps(
+            {
+                "action": "tool",
+                "tool": "create_file",
+                "arguments": {
+                    "path": "snake.py",
+                    "content": "def main():\n    print('snake')\n",
+                },
+            }
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            bridge = Bridge(
+                EventWriter(self.output),
+                architect_client=client,
+                tool_repository_root=root,
+            )
+            bridge.start_chat("Create a Python Snake game")
+            draft = self.wait_for_event("tool_diff")
+
+            self.assertEqual(draft["path"], "snake.py")
+            self.assertIn("def main", draft["diff"])
+            self.assertFalse((root / "snake.py").exists())
+            self.assertEqual(client.generate.call_count, 1)
+            self.assertIn("reviewable repository change", client.generate.call_args.kwargs["system"])
+
+    def test_casual_chat_uses_plain_deepseek_response_not_the_tool_loop(self) -> None:
+        client = MagicMock()
+        client.generate.return_value = "Hello. What would you like to build?"
+        bridge = Bridge(EventWriter(self.output), architect_client=client)
+        bridge.start_chat("hello")
+        deadline = time.monotonic() + 2
+        while bridge._assistant_busy and time.monotonic() < deadline:
+            time.sleep(0.01)
+
+        assistant_messages = [
+            item for item in self.events() if item["type"] == "chat_message" and item["role"] == "assistant"
+        ]
+        self.assertEqual(assistant_messages[-1]["content"], "Hello. What would you like to build?")
+        self.assertFalse(any(item["type"] == "tool_answer" for item in self.events()))
+        self.assertIn("Answer the user's latest message directly", client.generate.call_args.kwargs["system"])
+
+    def test_engine_commands_are_disabled_by_default(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env_file = Path(tmpdir) / ".env"
+            env_file.write_text("HARNESS_ENGINES_ENABLED=0\n", encoding="utf-8")
+            bridge = Bridge(EventWriter(self.output), env_file=env_file)
+            bridge.handle({"cmd": "check", "path": "main.py"})
+
+        event = self.events()[-1]
+        self.assertEqual(event["type"], "log")
+        self.assertIn("HARNESS_ENGINES_ENABLED=0", event["msg"])
+
     def test_qwen_is_available_for_a_narrow_scaffolding_task(self) -> None:
         bridge = Bridge(
             EventWriter(self.output),
@@ -482,14 +598,15 @@ class TuiBridgeTests(unittest.TestCase):
         self.assertIn("  40 │ line_39", excerpt)
 
     def test_profile_samples_emits_typed_result(self) -> None:
-        self.bridge.handle(
-            {
-                "cmd": "profile_samples",
-                "loop_order": "MKN",
-                "samples_ns": [12, 10, 11],
-                "cache_misses": 4,
-            }
-        )
+        with patch.dict(os.environ, {"HARNESS_ENGINES_ENABLED": "1"}):
+            self.bridge.handle(
+                {
+                    "cmd": "profile_samples",
+                    "loop_order": "MKN",
+                    "samples_ns": [12, 10, 11],
+                    "cache_misses": 4,
+                }
+            )
         self.assertEqual(
             self.events(),
             [
@@ -504,19 +621,20 @@ class TuiBridgeTests(unittest.TestCase):
         )
 
     def test_compute_shield_emits_aggregate_event(self) -> None:
-        self.bridge.handle(
-            {
-                "cmd": "compute_shield",
-                "phase": 3,
-                "tasks": [
-                    {
-                        "task": "matrix",
-                        "baseline_tokens": 100,
-                        "shielded_tokens": 30,
-                    }
-                ],
-            }
-        )
+        with patch.dict(os.environ, {"HARNESS_ENGINES_ENABLED": "1"}):
+            self.bridge.handle(
+                {
+                    "cmd": "compute_shield",
+                    "phase": 3,
+                    "tasks": [
+                        {
+                            "task": "matrix",
+                            "baseline_tokens": 100,
+                            "shielded_tokens": 30,
+                        }
+                    ],
+                }
+            )
         event = self.events()[0]
         self.assertEqual(event["type"], "compute_shield_metrics")
         self.assertEqual(event["delta"], 70)
@@ -678,13 +796,13 @@ class TuiBridgeTests(unittest.TestCase):
         self.assertEqual(self.events()[-1], {"type": "done", "status": "failed"})
 
     def test_chat_is_non_mutating_and_emits_assistant_reply(self) -> None:
+        client = MagicMock()
+        client.generate.return_value = "Hello. How can I help?"
         with tempfile.TemporaryDirectory() as tmpdir:
             bridge = Bridge(
                 EventWriter(self.output),
                 memory_path=Path(tmpdir) / "memory.json",
-                tool_generate_text=lambda _prompt: json.dumps(
-                    {"action": "final", "answer": "Hello. How can I help?"}
-                ),
+                architect_client=client,
             )
             bridge.handle({"cmd": "chat", "text": "hello"})
             reply = self.wait_for_event("chat_message")
@@ -694,24 +812,24 @@ class TuiBridgeTests(unittest.TestCase):
             ) < 2:
                 time.sleep(0.01)
         messages = [event for event in self.events() if event["type"] == "chat_message"]
-        answer = self.wait_for_event("tool_answer")
         self.assertEqual(reply["role"], "user")
-        self.assertEqual(len(messages), 1)
-        self.assertEqual(answer["answer"], "Hello. How can I help?")
+        self.assertEqual(len(messages), 2)
+        self.assertEqual(messages[-1]["content"], "Hello. How can I help?")
+        self.assertFalse(any(event["type"] == "tool_answer" for event in self.events()))
         self.assertIsNone(bridge._process)
 
-    def test_plain_chat_uses_the_same_read_only_tool_loop(self) -> None:
+    def test_plain_chat_uses_a_direct_assistant_response(self) -> None:
+        client = MagicMock()
+        client.generate.return_value = "This must stay chat."
         bridge = Bridge(
             EventWriter(self.output),
-            tool_generate_text=lambda _prompt: json.dumps(
-                {"action": "final", "answer": "This must stay chat."}
-            ),
+            architect_client=client,
         )
         bridge._chat_history.append({"role": "user", "content": "hello"})
         bridge._run_chat()
 
         self.assertFalse(any(event["type"] == "questionnaire" for event in self.events()))
-        self.assertEqual(self.events()[-1]["answer"], "This must stay chat.")
+        self.assertEqual(self.events()[-1]["content"], "This must stay chat.")
         self.assertEqual(
             bridge._chat_history[-1],
             {"role": "assistant", "content": "This must stay chat."},
@@ -729,6 +847,10 @@ class TuiBridgeTests(unittest.TestCase):
         self.assertFalse(_should_start_planning("Write a function that adds two numbers"))
         self.assertFalse(_should_start_planning("Plan a vacation to Japan"))
         self.assertFalse(_should_start_planning("Make a presentation for Friday"))
+        self.assertTrue(_is_code_generation_request("Create a Python Snake game"))
+        self.assertTrue(_is_code_generation_request("Write a function that adds two numbers"))
+        self.assertTrue(_is_repository_maintenance_request("Fix the parser in main.py"))
+        self.assertFalse(_is_code_generation_request("Create a file named hello.py"))
 
     def test_questionnaire_response_is_normalized_with_other_fallback(self) -> None:
         message, questions = _parse_questionnaire_response(
