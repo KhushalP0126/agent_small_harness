@@ -444,16 +444,19 @@ class TuiBridgeTests(unittest.TestCase):
 
     def test_coding_request_prepares_a_deepseek_draft_without_writing(self) -> None:
         client = MagicMock()
-        client.generate.return_value = json.dumps(
-            {
-                "action": "tool",
-                "tool": "create_file",
-                "arguments": {
-                    "path": "snake.py",
-                    "content": "def main():\n    print('snake')\n",
-                },
-            }
-        )
+        client.generate.side_effect = [
+            json.dumps(
+                {
+                    "action": "tool",
+                    "tool": "create_file",
+                    "arguments": {
+                        "path": "snake.py",
+                        "content": "def main():\n    print('snake')\n",
+                    },
+                }
+            ),
+            json.dumps({"action": "final", "answer": "snake draft ready"}),
+        ]
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
             bridge = Bridge(
@@ -467,8 +470,54 @@ class TuiBridgeTests(unittest.TestCase):
             self.assertEqual(draft["path"], "snake.py")
             self.assertIn("def main", draft["diff"])
             self.assertFalse((root / "snake.py").exists())
-            self.assertEqual(client.generate.call_count, 1)
+            # A reviewed mutation is followed by the model's explicit final
+            # answer. This keeps the loop open for a bounded multi-file draft
+            # rather than assuming the first proposed file is the whole task.
+            self.assertEqual(client.generate.call_count, 2)
             self.assertIn("reviewable repository change", client.generate.call_args.kwargs["system"])
+
+    def test_coding_request_queues_multiple_files_for_individual_review(self) -> None:
+        client = MagicMock()
+        client.generate.side_effect = [
+            json.dumps(
+                {
+                    "action": "tool",
+                    "tool": "create_file",
+                    "arguments": {"path": "game.py", "content": "def run():\n    return 'pong'\n"},
+                }
+            ),
+            json.dumps(
+                {
+                    "action": "tool",
+                    "tool": "create_file",
+                    "arguments": {"path": "test_game.py", "content": "from game import run\n"},
+                }
+            ),
+            json.dumps({"action": "final", "answer": "two files are ready for review"}),
+        ]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            bridge = Bridge(
+                EventWriter(self.output),
+                architect_client=client,
+                tool_repository_root=root,
+            )
+            bridge._run_code_draft("Create a small Pong module and its test")
+
+            first = next(event for event in self.events() if event["type"] == "tool_diff")
+            self.assertEqual(first["path"], "game.py")
+            self.assertEqual(first["pending_count"], 2)
+            self.assertFalse((root / "game.py").exists())
+            self.assertFalse((root / "test_game.py").exists())
+
+            bridge.resolve_tool_diff(True)
+            second = [event for event in self.events() if event["type"] == "tool_diff"][-1]
+            self.assertEqual(second["path"], "test_game.py")
+            self.assertTrue((root / "game.py").exists())
+
+            bridge.resolve_tool_diff(False)
+            self.assertFalse((root / "test_game.py").exists())
+            self.assertIsNone(bridge._pending_tool_diff)
 
     def test_casual_chat_uses_plain_deepseek_response_not_the_tool_loop(self) -> None:
         client = MagicMock()
