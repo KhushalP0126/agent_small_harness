@@ -19,6 +19,8 @@ SPEC_PATH ?=
 REPO_ROOT ?= .
 REPO_MAP_FORMAT ?= context
 COMPUTE_SHIELD_ARGS ?=
+RESEARCH_RUNS ?= 3
+RESEARCH_OUTPUT ?= artifacts/research/agent-benchmark-repeated.json
 RAW_VS_HARNESS_SAMPLES ?= 5
 DOC_AGENT ?= deepseek
 DOC_MODEL ?=
@@ -29,7 +31,7 @@ IMAGE ?= agent-small-harness:local
 ARTIFACT_ARGS = $(if $(filter 1 true yes,$(SAVE_ARTIFACTS)),--save-artifacts --artifact-root "$(ARTIFACT_ROOT)",)
 DOC_ARGS = --doc-agent "$(DOC_AGENT)" $(if $(DOC_MODEL),--doc-model "$(DOC_MODEL)",) $(if $(DOC_OUTPUT),--doc-output "$(DOC_OUTPUT)",)
 
-.PHONY: help bootstrap setup install install-formal install-kernel env-path init-env api-dev tui rust-tui tui_rust start test-rust check docker-build sandbox-run agent-benchmark test test-engine-expansion compute-shield test-claude-fixes test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-fixture resume-coding-capability test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-worker-limit-architect resume-worker-limit test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-python-ladder-stateful test-python-ladder-stateful-architect test-plan-mode-ladder test-raw-vs-harness test-raw-vs-harness-architect test-raw-vs-harness-repeated test-raw-vs-harness-ablation test-formal-experiment structured-spec structured-spec-plan resume-structured-spec repo-map review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library tool-agent ollama-smoke inference-smoke live-repair day1 clean-history clean-cache
+.PHONY: help bootstrap setup install install-formal install-kernel env-path init-env api-dev tui rust-tui tui_rust start test-rust check research-check research-agent-benchmark research-compute-shield docker-build sandbox-run agent-benchmark test test-engine-expansion compute-shield test-claude-fixes test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-fixture resume-coding-capability test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-worker-limit-architect resume-worker-limit test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-python-ladder-stateful test-python-ladder-stateful-architect test-plan-mode-ladder test-raw-vs-harness test-raw-vs-harness-architect test-raw-vs-harness-repeated test-raw-vs-harness-ablation test-formal-experiment structured-spec structured-spec-plan resume-structured-spec repo-map review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library tool-agent ollama-smoke inference-smoke live-repair day1 clean-history clean-cache
 
 help:
 	@printf "agent-coder_structure\n\n"
@@ -37,6 +39,7 @@ help:
 	@printf "  make setup                       Create .venv, install dependencies, configure .env, build Rust\n"
 	@printf "  make start REPO_ROOT=.           Launch the default Rust terminal interface\n"
 	@printf "  make check                       Run Python and Rust tests (no model calls)\n"
+	@printf "  make research-check              Verify the reproducible research surface (no model calls)\n"
 	@printf "\nDaily work:\n"
 	@printf "  make tool-agent TASK='inspect agents'    Run bounded repository tools\n"
 	@printf "  make structured-spec-plan SPEC_PATH=...  Create an architect plan only\n"
@@ -99,6 +102,16 @@ test-rust:
 	$(CARGO) test --manifest-path $(RUST_MANIFEST)
 
 check: test test-rust
+
+research-check: check
+
+research-agent-benchmark:
+	@test -n "$(BASELINE_CMD)" || (echo "Set BASELINE_CMD to a JSON runner command" && exit 1)
+	@test -n "$(SHIELDED_CMD)" || (echo "Set SHIELDED_CMD to a JSON runner command" && exit 1)
+	$(PYTHON) scripts/run_repeated_agent_benchmark.py --baseline-command "$(BASELINE_CMD)" --shielded-command "$(SHIELDED_CMD)" --runs "$(RESEARCH_RUNS)" --output "$(RESEARCH_OUTPUT)"
+
+research-compute-shield:
+	$(PYTHON) scripts/run_compute_shield_experiment.py $(COMPUTE_SHIELD_ARGS)
 
 docker-build:
 	docker build -t "$(IMAGE)" .

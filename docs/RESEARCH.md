@@ -1,0 +1,108 @@
+# Research protocol
+
+Agent Small Harness is an evaluation prototype for approval-gated code
+generation. Its research question is deliberately narrower than “can an agent
+write code?”:
+
+> Do bounded repository tools and deterministic validation improve task
+> completion enough to justify their token, latency, and operational cost?
+
+The answer must be supported by recorded runs. A passing unit test shows the
+mechanism works; it is not a model-quality claim.
+
+## Claims and non-claims
+
+The repository can currently support these claims:
+
+- It has a typed, approval-gated coding loop with deterministic validation and
+  a reproducible fixed-task benchmark runner.
+- The final 20-task DeepSeek loop-hardening run recorded 19/20 shielded task
+  completions against 20/20 for the comparable baseline.
+- The frozen 10-task Qwen 1.5B Compute Shield run recorded 9/10 shielded task
+  completions against 10/10 direct completions.
+
+It does **not** support these claims yet:
+
+- that the tool loop reduces model-token use overall;
+- that results generalize across models, repositories, or developers;
+- that the system is secure for hostile multi-user or hosted workloads.
+
+Published evidence belongs in [`results/`](results/). The two observed runs
+above were more expensive than their direct baselines, so this project reports
+them as diagnostic evidence rather than a token-saving result.
+
+## Reproduce a deterministic checkout
+
+```bash
+make setup
+make research-check
+```
+
+`make research-check` runs Python and Rust tests without calling a model. It
+verifies the protocol, approval workflow, tool handling, result accounting,
+and TUI state transitions.
+
+## Pre-registered repeated benchmark
+
+Use the same task corpus, commands, and output location for every repetition.
+Do not discard failed tasks or rerun only favorable cases.
+
+```bash
+make research-agent-benchmark \
+  RESEARCH_RUNS=3 \
+  BASELINE_CMD="python3 scripts/run_deepseek_benchmark_agent.py --mode baseline" \
+  SHIELDED_CMD="python3 scripts/run_deepseek_benchmark_agent.py --mode shielded" \
+  RESEARCH_OUTPUT=artifacts/research/deepseek-repeated.json
+```
+
+The report preserves every task-level run and adds descriptive mean, standard
+deviation, range, and a normal-approximation interval. The interval is a
+variance summary, not a statistical-significance claim. Publish the raw JSON
+artifact alongside a dated Markdown result report.
+
+For the frozen local-model experiment, run the existing fixed corpus rather
+than substituting a larger model:
+
+```bash
+make research-compute-shield \
+  COMPUTE_SHIELD_ARGS="--output artifacts/research/compute-shield-10-rerun.json"
+```
+
+Run local-model experiments only on hardware that can sustain
+`qwen2.5-coder:1.5b`; the repository makes no 3B result claim.
+
+## Live end-to-end evaluation
+
+Before demoing a new release, record one real session for each task shape:
+
+1. A plain question: no plan, no file mutation.
+2. A small coding request: one proposed diff, explicit approval, validation.
+3. A multi-file coding request: each diff appears sequentially; accept one and
+   reject one to prove review is real.
+4. A planning request: questionnaire, spec review, explicit execution approval.
+5. An unavailable-API case: a visible error with no accidental fallback write.
+
+Record the prompt, model/provider, exact commit, artifact path, tool calls,
+validation result, latency, and whether a human approved a change. Do not turn
+an anecdotal successful session into a benchmark result.
+
+## Publication checklist
+
+- Commit hash, operating system, Python/Rust versions, model identifier, and
+  relevant context/thinking configuration are recorded.
+- Baseline and shielded runners use the same tasks and repository index.
+- Raw JSON is retained, including failures, token accounting, retries, and
+  wall-clock durations.
+- A result report states both the improvement and the cost; negative results
+  remain published.
+- Any new model is reported as a separate row rather than replacing earlier
+  measurements.
+
+## Remaining research work
+
+1. Run at least three repeated 20-task comparisons on the current revision.
+2. Add one additional model only after the repeated 1.5B/DeepSeek evidence is
+   published; do not use an unmeasured model as a marketing claim.
+3. Add a small second repository/task corpus and publish the result separately.
+4. Accumulate real, approval-reviewed sessions to find failure modes the fixed
+   corpus does not capture.

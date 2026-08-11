@@ -4,6 +4,9 @@ This directory holds published, reproducible experiment reports. They are
 evidence, not product claims: each report records its model, task corpus,
 commands, dates, and failures.
 
+The full protocol, repeat-run command, and publication checklist are in
+[`../RESEARCH.md`](../RESEARCH.md).
+
 - `compute-shield-10-2026-08-04.md` — frozen 1.5B Compute Shield comparison.
 - `qwen-capability-results-2026-07-18.md` — local Qwen capability runs.
 - `gemma-deepseek-capability-results-2026-07-19.md` — Gemma and DeepSeek runs.

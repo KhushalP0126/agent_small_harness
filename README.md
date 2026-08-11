@@ -2,7 +2,8 @@
 
 > Rust TUI is the default interface. Historical measurements live in
 > [`docs/results/`](docs/results/); the current code map is
-> [`ARCHITECTURE.md`](ARCHITECTURE.md).
+> [`ARCHITECTURE.md`](ARCHITECTURE.md); the reproducible research protocol is
+> [`docs/RESEARCH.md`](docs/RESEARCH.md).
 
 Agent Small Harness is a Python-first research and engineering prototype for
 validated code generation. It studies how far small local coding models can go
@@ -524,8 +525,10 @@ final-turn guidance, compact replay of large file/diff/output values, and
 deterministic container-backed checks for the objective safety tasks. The
 benchmark baseline also receives the same bounded repository file index before
 answering, so its comparison is less asymmetric than the original one-shot
-prompt. A new benchmark run is required before claiming these changes improve
-the 11/20 shielded success rate.
+prompt. The final run below measures that hardening once; repeated current-
+revision runs are still required before making a robustness or token-efficiency
+claim. The repeat-run procedure and the required raw artifact fields are fixed
+in [`docs/RESEARCH.md`](docs/RESEARCH.md).
 
 #### Final loop-hardening benchmark (2026-08-03)
 
