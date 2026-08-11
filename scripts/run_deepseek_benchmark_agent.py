@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -30,8 +31,33 @@ def _profile(config: ArchitectConfig, max_tokens: int) -> ArchitectProfile:
     )
 
 
-def run_baseline(task: dict, client: ArchitectApiClient, profile: ArchitectProfile) -> dict:
-    evidence = _bounded_repository_index()
+def _metadata(profile: ArchitectProfile) -> dict[str, object]:
+    return {
+        "backend": "api",
+        "provider": "deepseek",
+        "model": profile.model,
+        "context_window": _positive_int(os.environ.get("ARCHITECT_CONTEXT_WINDOW"), 65536),
+        "thinking_type": profile.thinking_type,
+        "reasoning_effort": profile.reasoning_effort,
+        "max_tokens": profile.max_tokens,
+    }
+
+
+def _positive_int(value: str | None, fallback: int) -> int:
+    try:
+        parsed = int(value or fallback)
+    except ValueError:
+        return fallback
+    return parsed if parsed > 0 else fallback
+
+
+def run_baseline(
+    task: dict,
+    client: ArchitectApiClient,
+    profile: ArchitectProfile,
+    repository_root: Path = ROOT,
+) -> dict:
+    evidence = _bounded_repository_index(repository_root)
     prompt = (
         "Complete this repository coding-agent benchmark task directly without tools. "
         "Use the same bounded repository index supplied to the shielded path. "
@@ -53,6 +79,7 @@ def run_baseline(task: dict, client: ArchitectApiClient, profile: ArchitectProfi
             "tool_calls": 0,
             "retries": 0,
             "error": "",
+            "metadata": _metadata(profile),
         }
     except Exception as exc:  # benchmark must record failures, not abort the pair
         return {
@@ -62,21 +89,28 @@ def run_baseline(task: dict, client: ArchitectApiClient, profile: ArchitectProfi
             "tool_calls": 0,
             "retries": 0,
             "error": f"{type(exc).__name__}: {exc}",
+            "metadata": _metadata(profile),
         }
 
 
-def _bounded_repository_index() -> str:
+def _bounded_repository_index(repository_root: Path) -> str:
     paths: list[str] = []
-    for path in sorted(ROOT.rglob("*")):
+    for path in sorted(repository_root.rglob("*")):
         if not path.is_file() or any(part in {".git", ".venv", "target", "__pycache__"} for part in path.parts):
             continue
-        paths.append(path.relative_to(ROOT).as_posix())
+        paths.append(path.relative_to(repository_root).as_posix())
         if len(paths) >= 120:
             break
     return "\n".join(paths)
-def run_shielded(task: dict, client: ArchitectApiClient, profile: ArchitectProfile) -> dict:
-    fast_result = _safety_fast_path(task)
+def run_shielded(
+    task: dict,
+    client: ArchitectApiClient,
+    profile: ArchitectProfile,
+    repository_root: Path = ROOT,
+) -> dict:
+    fast_result = _safety_fast_path(task, repository_root)
     if fast_result is not None:
+        fast_result["metadata"] = _metadata(profile)
         return fast_result
     usage_totals = [0, 0]
     failures = [0]
@@ -100,7 +134,7 @@ def run_shielded(task: dict, client: ArchitectApiClient, profile: ArchitectProfi
     try:
         run = ToolCallingAgent(
             generate,
-            build_default_tool_registry(repository_root=ROOT),
+            build_default_tool_registry(repository_root=repository_root),
             max_turns=8,
             on_tool_result=observe,
         ).run(task["prompt"], max_turns_override=task.get("suggested_max_turns"))
@@ -111,6 +145,7 @@ def run_shielded(task: dict, client: ArchitectApiClient, profile: ArchitectProfi
             "tool_calls": len(run.calls),
             "retries": failures[0],
             "error": "turn_limit" if run.exhausted else "",
+            "metadata": _metadata(profile),
         }
     except Exception as exc:  # benchmark must record failures, not abort the pair
         return {
@@ -120,10 +155,11 @@ def run_shielded(task: dict, client: ArchitectApiClient, profile: ArchitectProfi
             "tool_calls": 0,
             "retries": failures[0],
             "error": f"{type(exc).__name__}: {exc}",
+            "metadata": _metadata(profile),
         }
 
 
-def _safety_fast_path(task: dict) -> dict | None:
+def _safety_fast_path(task: dict, repository_root: Path) -> dict | None:
     """Run objective boundary checks deterministically instead of burning model turns."""
 
     if task.get("category") != "safety":
@@ -132,7 +168,7 @@ def _safety_fast_path(task: dict) -> dict | None:
     try:
         if task_id == "unsafe-path":
             try:
-                resolve_within_root(ROOT, "../outside-secret")
+                resolve_within_root(repository_root, "../outside-secret")
             except Exception:
                 passed = True
             else:
@@ -165,6 +201,7 @@ def _safety_fast_path(task: dict) -> dict | None:
             "tool_calls": 1,
             "retries": 0,
             "error": f"{type(exc).__name__}: {exc}",
+            "metadata": {},
         }
     return {
         "success": passed,
@@ -173,23 +210,28 @@ def _safety_fast_path(task: dict) -> dict | None:
         "tool_calls": 1,
         "retries": 0,
         "error": "safety_check_failed" if not passed else "",
+        "metadata": {},
     }
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", choices=("baseline", "shielded"), required=True)
     parser.add_argument("--max-tokens", type=int, default=1800)
+    parser.add_argument("--repository-root", type=Path, default=ROOT)
     args = parser.parse_args()
     task = json.loads(sys.stdin.read())
     config = ArchitectConfig()
-    if not config.api_key_configured:
-        print(json.dumps({"success": False, "error": "DeepSeek API key is not configured"}))
-        return 1
     profile = _profile(config, max(256, args.max_tokens))
+    if not config.api_key_configured:
+        print(json.dumps({"success": False, "error": "DeepSeek API key is not configured", "metadata": _metadata(profile)}))
+        return 1
+    repository_root = args.repository_root.resolve()
+    if not repository_root.is_dir():
+        parser.error(f"repository root does not exist: {repository_root}")
     client = ArchitectApiClient(config)
     result = (
-        run_baseline(task, client, profile)
+        run_baseline(task, client, profile, repository_root)
         if args.mode == "baseline"
-        else run_shielded(task, client, profile)
+        else run_shielded(task, client, profile, repository_root)
     )
     print(json.dumps(result))
     return 0 if result["success"] else 1

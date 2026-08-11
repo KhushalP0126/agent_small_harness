@@ -6,7 +6,7 @@ import json
 import statistics
 import subprocess
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
@@ -28,6 +28,7 @@ class AgentRunMetrics:
     retries: int
     duration_seconds: float
     error: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     @property
     def total_tokens(self) -> int:
@@ -94,6 +95,11 @@ def command_runner(command: list[str]) -> AgentRunner:
                 retries=max(0, int(payload.get("retries", 0))),
                 duration_seconds=time.monotonic() - started,
                 error=str(payload.get("error") or ""),
+                metadata=(
+                    dict(payload["metadata"])
+                    if isinstance(payload.get("metadata"), dict)
+                    else {}
+                ),
             )
         except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError, ValueError) as exc:
             return AgentRunMetrics(
@@ -124,6 +130,7 @@ def run_paired_benchmark(
     shielded_successes = sum(row.shielded.success for row in results)
     deltas = [row.token_delta for row in results]
     return {
+        "schema_version": 2,
         "task_count": len(results),
         "baseline_successes": baseline_successes,
         "shielded_successes": shielded_successes,

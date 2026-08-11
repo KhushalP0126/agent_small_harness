@@ -25,7 +25,25 @@ def _usage(client: OllamaClient) -> dict[str, int]:
     }
 
 
-def _run(task: dict, mode: str, model: str, base_url: str, max_turns: int) -> dict:
+def _metadata(model: str, context_window: int) -> dict[str, object]:
+    return {
+        "backend": "local",
+        "provider": "ollama",
+        "model": model,
+        "context_window": context_window,
+        "thinking_type": "not_supported",
+        "reasoning_effort": "not_supported",
+    }
+
+
+def _run(
+    task: dict,
+    mode: str,
+    model: str,
+    base_url: str,
+    max_turns: int,
+    repository_root: Path = ROOT,
+) -> dict:
     client = OllamaClient(base_url=base_url, timeout_seconds=180)
     if mode == "baseline":
         prompt = (
@@ -41,9 +59,25 @@ def _run(task: dict, mode: str, model: str, base_url: str, max_turns: int) -> di
                 system="You are the baseline coding agent. Do not call tools.",
             )
             usage = _usage(client)
-            return {"success": bool(answer.strip()), **usage, "tool_calls": 0, "retries": 0, "error": ""}
+            return {
+                "success": bool(answer.strip()),
+                **usage,
+                "tool_calls": 0,
+                "retries": 0,
+                "error": "",
+                "metadata": _metadata(model, 8192),
+            }
         except Exception as exc:  # benchmark records failures per task
-            return {"success": False, "prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0, "tool_calls": 0, "retries": 0, "error": f"{type(exc).__name__}: {exc}"}
+            return {
+                "success": False,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+                "tool_calls": 0,
+                "retries": 0,
+                "error": f"{type(exc).__name__}: {exc}",
+                "metadata": _metadata(model, 8192),
+            }
 
     usage_totals = {"prompt_tokens": 0, "completion_tokens": 0}
 
@@ -62,7 +96,7 @@ def _run(task: dict, mode: str, model: str, base_url: str, max_turns: int) -> di
     try:
         run = ToolCallingAgent(
             generate,
-            build_default_tool_registry(repository_root=ROOT),
+            build_default_tool_registry(repository_root=repository_root),
             max_turns=max_turns,
         ).run(task["prompt"], max_turns_override=task.get("suggested_max_turns"))
         total = usage_totals["prompt_tokens"] + usage_totals["completion_tokens"]
@@ -73,9 +107,19 @@ def _run(task: dict, mode: str, model: str, base_url: str, max_turns: int) -> di
             "tool_calls": len(run.calls),
             "retries": sum(1 for call in run.calls if not call.result.get("ok", True)),
             "error": "turn_limit" if run.exhausted else "",
+            "metadata": _metadata(model, 16384),
         }
     except Exception as exc:
-        return {"success": False, "prompt_tokens": usage_totals["prompt_tokens"], "completion_tokens": usage_totals["completion_tokens"], "total_tokens": sum(usage_totals.values()), "tool_calls": 0, "retries": 0, "error": f"{type(exc).__name__}: {exc}"}
+        return {
+            "success": False,
+            "prompt_tokens": usage_totals["prompt_tokens"],
+            "completion_tokens": usage_totals["completion_tokens"],
+            "total_tokens": sum(usage_totals.values()),
+            "tool_calls": 0,
+            "retries": 0,
+            "error": f"{type(exc).__name__}: {exc}",
+            "metadata": _metadata(model, 16384),
+        }
 
 
 def main() -> int:
@@ -84,9 +128,13 @@ def main() -> int:
     parser.add_argument("--model", default="qwen2.5-coder:1.5b")
     parser.add_argument("--ollama-url", default="http://127.0.0.1:11434")
     parser.add_argument("--max-turns", type=int, default=8)
+    parser.add_argument("--repository-root", type=Path, default=ROOT)
     args = parser.parse_args()
     task = json.loads(sys.stdin.read())
-    result = _run(task, args.mode, args.model, args.ollama_url, args.max_turns)
+    repository_root = args.repository_root.resolve()
+    if not repository_root.is_dir():
+        parser.error(f"repository root does not exist: {repository_root}")
+    result = _run(task, args.mode, args.model, args.ollama_url, args.max_turns, repository_root)
     print(json.dumps(result))
     return 0 if result["success"] else 1
 

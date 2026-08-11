@@ -40,7 +40,7 @@ def run_repeated_paired_benchmark(
         for _ in range(runs)
     ]
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "task_count": len(tasks),
         "run_count": runs,
         "runs": reports,

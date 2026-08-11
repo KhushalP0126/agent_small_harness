@@ -60,6 +60,17 @@ deviation, range, and a normal-approximation interval. The interval is a
 variance summary, not a statistical-significance claim. Publish the raw JSON
 artifact alongside a dated Markdown result report.
 
+Every repeated report records a secret-free provenance manifest: UTC timestamp,
+commit and dirty state, OS, Python version, task-corpus SHA-256, configured
+model/provider, context window, thinking settings, token counts, latency,
+retries, and tool calls. Render a report from committed raw JSON with:
+
+```bash
+make research-report \
+  REPORT_INPUT=docs/results/raw/deepseek-repeated.json \
+  REPORT_OUTPUT=docs/results/deepseek-repeated-YYYY-MM-DD.md
+```
+
 For the frozen local-model experiment, run the existing fixed corpus rather
 than substituting a larger model:
 
@@ -70,6 +81,21 @@ make research-compute-shield \
 
 Run local-model experiments only on hardware that can sustain
 `qwen2.5-coder:1.5b`; the repository makes no 3B result claim.
+
+## Independent fixture corpus
+
+The second corpus is a compact, versioned repository under
+`tests/fixtures/research_target_repo/`, with fixed tasks in
+`data/research_fixture_tasks.json`. Run the same protocol independently for
+the API and local model:
+
+```bash
+make research-fixture-deepseek
+make research-fixture-qwen
+```
+
+These commands write raw JSON under `docs/results/raw/`. Render and commit a
+dated Markdown report for each run; retain every failure and raw task record.
 
 ## Live end-to-end evaluation
 
@@ -86,9 +112,15 @@ Record the prompt, model/provider, exact commit, artifact path, tool calls,
 validation result, latency, and whether a human approved a change. Do not turn
 an anecdotal successful session into a benchmark result.
 
+Use `make record-live-session SESSION_ARGS='...'` to write secret-free,
+machine-readable receipts. The five receipts are: `plain_question`,
+`small_edit`, `multi_file_edit` (one approved and one rejected proposal),
+`planning_review`, and `unavailable_api`. Store only prompt summaries and diff
+hashes—not keys, raw private prompts, or absolute local paths.
+
 ## Publication checklist
 
-- Commit hash, operating system, Python/Rust versions, model identifier, and
+- Commit hash, operating system, Python version, model identifier, and
   relevant context/thinking configuration are recorded.
 - Baseline and shielded runners use the same tasks and repository index.
 - Raw JSON is retained, including failures, token accounting, retries, and
@@ -100,9 +132,10 @@ an anecdotal successful session into a benchmark result.
 
 ## Remaining research work
 
-1. Run at least three repeated 20-task comparisons on the current revision.
-2. Add one additional model only after the repeated 1.5B/DeepSeek evidence is
-   published; do not use an unmeasured model as a marketing claim.
-3. Add a small second repository/task corpus and publish the result separately.
-4. Accumulate real, approval-reviewed sessions to find failure modes the fixed
-   corpus does not capture.
+1. Run at least three repeated 20-task DeepSeek comparisons on the current
+   revision and render the committed raw JSON.
+2. Rerun the frozen Qwen 1.5B corpus, then run both Qwen 1.5B and DeepSeek on
+   the independent fixture corpus.
+3. Record the five controlled approval-reviewed session receipts.
+4. Accumulate further real sessions only after the controlled receipt set is
+   complete; do not elevate anecdotal success into a benchmark claim.

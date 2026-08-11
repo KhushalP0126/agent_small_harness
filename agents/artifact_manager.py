@@ -7,10 +7,12 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from harness_kernel.provenance import collect_provenance, configured_model_settings
 from prompt.budget import estimate_tokens
 
 
-ARTIFACT_SCHEMA_VERSION = 2
+# Version 3 adds the secret-free provenance manifest to every persisted run.
+ARTIFACT_SCHEMA_VERSION = 3
 
 
 @dataclass(frozen=True)
@@ -42,7 +44,14 @@ class ArtifactManager:
         paths: ArtifactPaths,
         metadata: dict[str, Any] | None = None,
     ) -> None:
-        metadata = metadata or {}
+        metadata = dict(metadata or {})
+        metadata.setdefault(
+            "provenance",
+            collect_provenance(
+                repository_root=Path.cwd(),
+                settings=configured_model_settings(),
+            ),
+        )
         self._write_json(
             paths.run_dir / "metadata.json",
             {"schema_version": ARTIFACT_SCHEMA_VERSION, "run_id": paths.run_id, **metadata, "telemetry": self._telemetry(session, metadata)},
