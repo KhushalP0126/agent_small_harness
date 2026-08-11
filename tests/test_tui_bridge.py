@@ -155,18 +155,53 @@ class TuiBridgeTests(unittest.TestCase):
             {"role": "assistant", "content": "It reads bridge events."},
         ]
 
-        bridge._emit_context_usage(
-            backend="local",
-            model="qwen2.5-coder:1.5b",
-            prompt_tokens=5000,
-            completion_tokens=0,
-            context_window=8192,
-            estimated_cost_usd=0.0,
-        )
+        with patch.object(bridge, "_generate_local", return_value=client.generate.return_value) as generate:
+            bridge._emit_context_usage(
+                backend="api",
+                model="deepseek-v4-pro",
+                prompt_tokens=50_000,
+                completion_tokens=0,
+                context_window=65_536,
+                estimated_cost_usd=0.0,
+                history_carrying=True,
+            )
+
+        generate.assert_called_once()
 
         self.assertEqual(len(bridge._chat_history), 1)
         self.assertIn("context compacted", bridge._chat_history[0]["content"])
         self.assertTrue(any(event.get("msg") == "context compacted" for event in self.events()))
+
+    def test_non_conversation_usage_never_compacts_history(self) -> None:
+        self.bridge._chat_history = [
+            {"role": "user", "content": "Keep this conversation."},
+            {"role": "assistant", "content": "It must remain intact."},
+            {"role": "user", "content": "Read a large file."},
+            {"role": "assistant", "content": "Tool result received."},
+        ]
+
+        self.bridge._emit_context_usage(
+            backend="api",
+            model="deepseek-v4-pro",
+            prompt_tokens=60_000,
+            completion_tokens=2_000,
+            context_window=65_536,
+            estimated_cost_usd=0.0,
+        )
+
+        self.assertEqual(len(self.bridge._chat_history), 4)
+
+    def test_context_windows_read_the_selected_repository_env_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            (root / ".env").write_text(
+                "LOCAL_CONTEXT_WINDOW=4096\nARCHITECT_CONTEXT_WINDOW=32768\n",
+                encoding="utf-8",
+            )
+            bridge = Bridge(EventWriter(self.output), tool_repository_root=root)
+
+            self.assertEqual(bridge._context_window("local"), 4096)
+            self.assertEqual(bridge._context_window("api"), 32768)
 
     def test_research_and_compaction_renderers_require_structured_json(self) -> None:
         research = _render_research_doc(
@@ -509,6 +544,49 @@ class TuiBridgeTests(unittest.TestCase):
 
         self.assertEqual(diff["path"], "main.py")
         self.assertTrue(resolved["applied"])
+
+    def test_multiple_tool_diffs_are_reviewed_and_applied_in_order(self) -> None:
+        responses = iter(
+            [
+                json.dumps(
+                    {
+                        "action": "tool",
+                        "tool": "create_file",
+                        "arguments": {"root": ".", "path": "app.py", "content": "print('app')\n"},
+                    }
+                ),
+                json.dumps(
+                    {
+                        "action": "tool",
+                        "tool": "create_file",
+                        "arguments": {"root": ".", "path": "test_app.py", "content": "import app\n"},
+                    }
+                ),
+                json.dumps({"action": "final", "answer": "two reviewed files ready"}),
+            ]
+        )
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            bridge = Bridge(
+                EventWriter(self.output),
+                tool_generate_text=lambda _prompt: next(responses),
+                tool_repository_root=root,
+            )
+            bridge._run_tool_task("Create an app and its test", "deepseek")
+            first = next(event for event in self.events() if event["type"] == "tool_diff")
+            self.assertEqual(first["path"], "app.py")
+            self.assertEqual(first["pending_count"], 2)
+
+            bridge.resolve_tool_diff(True)
+            second = [event for event in self.events() if event["type"] == "tool_diff"][-1]
+            self.assertEqual(second["path"], "test_app.py")
+            self.assertEqual(second["pending_count"], 1)
+            self.assertTrue((root / "app.py").exists())
+            self.assertFalse((root / "test_app.py").exists())
+
+            bridge.resolve_tool_diff(True)
+            self.assertTrue((root / "test_app.py").exists())
+            self.assertIsNone(bridge._pending_tool_diff)
 
     def test_chat_filesystem_request_uses_a_reviewed_tool_diff(self) -> None:
         responses = iter(

@@ -228,6 +228,11 @@ line-numbered source excerpts in the same stream. Plain assistant messages that 
 least two numbered choices retain the lighter quick-reference behavior.
 Ordinary numbers retain their normal typing behavior everywhere else.
 
+Coding and repository tool loops can prepare up to four independent file diffs
+per request. The TUI presents them one at a time; each `y` or `n` resolves only
+the visible diff before the next one is shown, so a multi-file change never
+bypasses review.
+
 `m` prepares the repository map on loopback; `o` opens it in the browser.
 Outside repository focus, `r` retains the coding-capability shortcut. `d` opens
 an inline run-history selector; `Esc` closes the active selector, and `q`
@@ -725,6 +730,8 @@ DEEPSEEK_API_KEY=your_key_here
 ARCHITECT_MODEL=deepseek-v4-pro
 HARNESS_ARCHITECT_MODE=api
 OLLAMA_KEEP_ALIVE=30s
+LOCAL_CONTEXT_WINDOW=8192
+ARCHITECT_CONTEXT_WINDOW=65536
 ```
 
 `config.yaml` separates architect profiles:
@@ -740,6 +747,12 @@ secret. If no key is available, the TUI shows a startup warning.
 Transient architect API failures are retried by default. Tune
 `ARCHITECT_RETRY_ATTEMPTS` and `ARCHITECT_RETRY_BACKOFF_SECONDS` in `.env` when
 needed.
+
+`LOCAL_CONTEXT_WINDOW` and `ARCHITECT_CONTEXT_WINDOW` set the limits used by
+the TUI's context meter. Conversation compaction is triggered only by chat,
+planning, and spec-draft requests that actually include chat history; tool and
+code-draft calls never compact history. The compaction summary runs locally on
+Qwen, not through the DeepSeek API.
 
 Check the env-file location and supported key names:
 

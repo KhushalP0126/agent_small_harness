@@ -88,12 +88,12 @@ Ask 2 to 4 high-impact clarification questions. Give each question 2 to 4 concis
 Never return markdown fences around the JSON. The application creates a formal spec only after the questionnaire is completed or the user explicitly requests a draft."""
 CHAT_SYSTEM_PROMPT = """You are a concise, helpful coding assistant.
 Answer the user's latest message directly. Do not emit tool-call JSON, do not claim to have changed files, and do not open a planning questionnaire unless the user explicitly asked to plan software."""
-CODE_DRAFT_SYSTEM_PROMPT = """You are a coding assistant preparing one safe, reviewable repository change.
-Return exactly one repository tool-call JSON object. It must propose one of these tools only:
+CODE_DRAFT_SYSTEM_PROMPT = """You are a coding assistant preparing a small, safe, reviewable repository change set.
+Return exactly one repository tool-call JSON object per turn. First inspect relevant files when the task modifies existing code. Then propose up to four independent changes:
 - create_file: {"action":"tool","tool":"create_file","arguments":{"path":"relative/path","content":"full source"}}
 - apply_search_replace: {"action":"tool","tool":"apply_search_replace","arguments":{"path":"relative/path","search":"exact existing text","replace":"replacement text"}}
 
-Generate real, complete code for the user's request. Never execute tools, never write files, never use markdown fences, and never return more than one change. If a precise single-file change is impossible, return {"action":"final","answer":"<one concise clarification question>"}."""
+Generate real, complete code for the user's request. Never write files directly and never use markdown fences. Every proposed diff is reviewed by the user before it is applied. When enough reviewed changes are prepared, return {"action":"final","answer":"<concise implementation summary>"}. If the request cannot be made safely, return one concise clarification question."""
 SPEC_SHEET_SYSTEM_PROMPT = """You are a software specification architect.
 Fill out the supplied execution spec sheet from the conversation and questionnaire answers.
 Return JSON only, with no markdown fence and no commentary, using exactly this shape:
@@ -185,6 +185,9 @@ class Bridge:
         self._pending_tool_diff: (
             ApplySearchReplaceResponse | CreateFileResponse | MoveFileResponse | None
         ) = None
+        self._pending_tool_diffs: list[
+            ApplySearchReplaceResponse | CreateFileResponse | MoveFileResponse
+        ] = []
         self._pending_action_approval: PendingActionApproval | None = None
         self._chat_history: list[dict[str, str]] = []
         self._compaction_in_progress = False
@@ -455,6 +458,7 @@ class Bridge:
             )
             return
         self._pending_tool_diff = None
+        self._pending_tool_diffs = []
         self._chat_history.append({"role": "user", "content": task})
         self._chat_history = self._chat_history[-MAX_CHAT_MESSAGES:]
         if not already_visible:
@@ -532,6 +536,7 @@ class Bridge:
                 max_turns=8,
                 on_tool_result=on_tool_result,
                 allowed_tools=allowed_tools,
+                max_mutation_proposals=4,
             ).run(task)
         except RuntimeError as exc:
             if provider == "deepseek":
@@ -558,25 +563,7 @@ class Bridge:
             exhausted=run.exhausted,
             call_count=len(run.calls),
         )
-        if proposals:
-            if len(proposals) > 1:
-                self.writer.emit(
-                    "log",
-                    level="warning",
-                    msg="multiple diffs were proposed; only the latest is pending review",
-                )
-            self._pending_tool_diff = proposals[-1]
-            proposal = self._pending_tool_diff
-            self.writer.emit(
-                "tool_diff",
-                path=(
-                    f"{proposal.path} → {proposal.destination}"
-                    if isinstance(proposal, MoveFileResponse)
-                    else proposal.path
-                ),
-                diff=proposal.diff,
-                replacements=getattr(proposal, "replacements", 1),
-            )
+        self._queue_tool_diffs(proposals)
 
     def _tool_generator(self, provider: str):
         if self._tool_generate_text is not None:
@@ -600,13 +587,14 @@ class Bridge:
         )
 
     def _generate_local(self, client: OllamaClient, prompt: str, *, system: str) -> str:
+        context_window = self._context_window("local")
         response = client.generate(
             prompt,
             model=DEFAULT_OLLAMA_MODEL,
             config=OllamaGenerationConfig(
                 temperature=0.0,
                 num_predict=1200,
-                num_ctx=LOCAL_CONTEXT_WINDOW,
+                num_ctx=context_window,
             ),
             system=system,
         )
@@ -616,12 +604,18 @@ class Bridge:
             model=DEFAULT_OLLAMA_MODEL,
             prompt_tokens=usage.get("prompt_tokens", 0),
             completion_tokens=usage.get("completion_tokens", 0),
-            context_window=LOCAL_CONTEXT_WINDOW,
+            context_window=context_window,
             estimated_cost_usd=0.0,
         )
         return response
 
-    def _generate_architect(self, prompt: str, *, system: str) -> str:
+    def _generate_architect(
+        self,
+        prompt: str,
+        *,
+        system: str,
+        history_carrying: bool = False,
+    ) -> str:
         client = self._client()
         response = client.generate(prompt, system=system)
         usage = getattr(client, "last_usage", None)
@@ -633,8 +627,9 @@ class Bridge:
                 model=str(getattr(usage, "model", DEFAULT_ARCHITECT_MODEL)),
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
-                context_window=ARCHITECT_CONTEXT_WINDOW,
+                context_window=self._context_window("api"),
                 estimated_cost_usd=float(getattr(usage, "estimated_cost_usd", 0.0) or 0.0),
+                history_carrying=history_carrying,
             )
         return response
 
@@ -647,6 +642,7 @@ class Bridge:
         completion_tokens: int,
         context_window: int,
         estimated_cost_usd: float,
+        history_carrying: bool = False,
     ) -> None:
         total_tokens = max(0, int(prompt_tokens)) + max(0, int(completion_tokens))
         context_window = max(1, int(context_window))
@@ -672,9 +668,10 @@ class Bridge:
                     level="warning",
                     msg=f"session cost has reached ${self._session_cost_usd:.2f}",
                 )
-        self._maybe_compact(backend, total_tokens / context_window)
+        if history_carrying:
+            self._maybe_compact(total_tokens / context_window)
 
-    def _maybe_compact(self, backend: str, utilization: float) -> None:
+    def _maybe_compact(self, utilization: float) -> None:
         if utilization < COMPACTION_TRIGGER_RATIO:
             return
         if len(self._chat_history) < 4 or self._compaction_in_progress:
@@ -686,7 +683,11 @@ class Bridge:
             self._compaction_in_progress = False
 
     def _run_compaction(self) -> None:
-        response = self._generate_architect(
+        # Compaction deliberately uses the small local model. It is a bounded,
+        # non-reasoning summary task and must not spend a DeepSeek request just
+        # because an API-backed conversation has become long.
+        response = self._generate_local(
+            OllamaClient(keep_alive=self._ollama_keep_alive()),
             "CONVERSATION:\n" + _chat_transcript(self._chat_history),
             system=COMPACTION_SYSTEM_PROMPT,
         ).strip()
@@ -732,12 +733,43 @@ class Bridge:
                 message=f"{type(exc).__name__}: {exc}",
             )
             return
+        if self._pending_tool_diffs and self._pending_tool_diffs[0] is proposal:
+            self._pending_tool_diffs.pop(0)
         self._pending_tool_diff = None
         self.writer.emit(
             "tool_diff_resolved",
             path=result.path,
             applied=result.applied,
             message="diff applied" if result.applied else "diff discarded",
+        )
+        self._present_next_tool_diff()
+
+    def _queue_tool_diffs(
+        self,
+        proposals: list[ApplySearchReplaceResponse | CreateFileResponse | MoveFileResponse],
+    ) -> None:
+        if not proposals:
+            return
+        self._pending_tool_diff = None
+        self._pending_tool_diffs = list(proposals)
+        self._present_next_tool_diff()
+
+    def _present_next_tool_diff(self) -> None:
+        if not self._pending_tool_diffs:
+            return
+        proposal = self._pending_tool_diffs[0]
+        self._pending_tool_diff = proposal
+        remaining = len(self._pending_tool_diffs)
+        self.writer.emit(
+            "tool_diff",
+            path=(
+                f"{proposal.path} → {proposal.destination}"
+                if isinstance(proposal, MoveFileResponse)
+                else proposal.path
+            ),
+            diff=proposal.diff,
+            replacements=getattr(proposal, "replacements", 1),
+            pending_count=remaining,
         )
 
     def resolve_action_approval(self, approved: bool) -> None:
@@ -822,7 +854,9 @@ class Bridge:
         planning_requested = _should_start_planning(latest)
         if planning_requested:
             try:
-                response = self._generate_planner(self._chat_prompt(), QUESTIONNAIRE_SYSTEM_PROMPT).strip()
+                response = self._generate_planner(
+                    self._chat_prompt(), QUESTIONNAIRE_SYSTEM_PROMPT, history_carrying=True
+                ).strip()
             except RuntimeError as exc:
                 self._report_deepseek_unavailable(exc, label="Planning")
                 return
@@ -850,7 +884,9 @@ class Bridge:
 
     def _run_plain_chat(self) -> None:
         try:
-            message = self._generate_architect(self._chat_prompt(), system=CHAT_SYSTEM_PROMPT).strip()
+            message = self._generate_architect(
+                self._chat_prompt(), system=CHAT_SYSTEM_PROMPT, history_carrying=True
+            ).strip()
         except RuntimeError as exc:
             self._report_deepseek_unavailable(exc)
             return
@@ -859,7 +895,9 @@ class Bridge:
         self.writer.emit("chat_message", role="assistant", content=message)
 
     def _run_code_draft(self, task: str) -> None:
-        proposals: list[ApplySearchReplaceResponse | CreateFileResponse] = []
+        proposals: list[
+            ApplySearchReplaceResponse | CreateFileResponse | MoveFileResponse
+        ] = []
 
         def on_tool_result(record: ToolCallRecord, raw_value: Any) -> None:
             ok = bool(record.result.get("ok"))
@@ -870,16 +908,26 @@ class Bridge:
                 ok=ok,
                 summary="draft prepared" if ok else str(record.result.get("error") or ""),
             )
-            if isinstance(raw_value, (ApplySearchReplaceResponse, CreateFileResponse)):
+            if isinstance(
+                raw_value,
+                (ApplySearchReplaceResponse, CreateFileResponse, MoveFileResponse),
+            ):
                 proposals.append(raw_value)
 
         try:
             run = ToolCallingAgent(
                 lambda prompt: self._generate_architect(prompt, system=CODE_DRAFT_SYSTEM_PROMPT),
                 build_default_tool_registry(repository_root=self.tool_repository_root),
-                max_turns=1,
+                max_turns=8,
                 on_tool_result=on_tool_result,
-                allowed_tools=("apply_search_replace", "create_file"),
+                allowed_tools=(
+                    "search_directory",
+                    "read_file",
+                    "apply_search_replace",
+                    "create_file",
+                    "move_file",
+                ),
+                max_mutation_proposals=4,
             ).run(task)
         except RuntimeError as exc:
             self._report_deepseek_unavailable(exc)
@@ -889,18 +937,12 @@ class Bridge:
         self._chat_history.append({"role": "assistant", "content": answer})
         self._chat_history = self._chat_history[-MAX_CHAT_MESSAGES:]
         self.writer.emit("tool_answer", answer=answer, exhausted=run.exhausted, call_count=len(run.calls))
-        if proposals:
-            self._pending_tool_diff = proposals[-1]
-            proposal = self._pending_tool_diff
-            self.writer.emit(
-                "tool_diff",
-                path=proposal.path,
-                diff=proposal.diff,
-                replacements=getattr(proposal, "replacements", 1),
-            )
+        self._queue_tool_diffs(proposals)
 
     def _run_spec_draft(self) -> None:
-        response = self._generate_planner(self._spec_prompt(), SPEC_SHEET_SYSTEM_PROMPT).strip()
+        response = self._generate_planner(
+            self._spec_prompt(), SPEC_SHEET_SYSTEM_PROMPT, history_carrying=True
+        ).strip()
         self.writer.emit("spec_draft", text=_render_spec_sheet(response))
 
     def _run_research(self) -> None:
@@ -1014,10 +1056,12 @@ class Bridge:
         )
         return True
 
-    def _generate_planner(self, prompt: str, system: str) -> str:
+    def _generate_planner(
+        self, prompt: str, system: str, *, history_carrying: bool = False
+    ) -> str:
         """Use DeepSeek for every interactive plan and tool decision."""
 
-        return self._generate_architect(prompt, system=system)
+        return self._generate_architect(prompt, system=system, history_carrying=history_carrying)
 
     @staticmethod
     def _architect_mode() -> str:
@@ -1058,6 +1102,20 @@ class Bridge:
         """Read the selected repository's setting, without overriding shell config."""
 
         return self._child_environment().get("OLLAMA_KEEP_ALIVE", OLLAMA_KEEP_ALIVE)
+
+    def _context_window(self, backend: str) -> int:
+        """Return the configured context window without accepting invalid values."""
+
+        key, fallback = (
+            ("LOCAL_CONTEXT_WINDOW", LOCAL_CONTEXT_WINDOW)
+            if backend == "local"
+            else ("ARCHITECT_CONTEXT_WINDOW", ARCHITECT_CONTEXT_WINDOW)
+        )
+        try:
+            configured = int(self._child_environment().get(key, str(fallback)))
+        except (TypeError, ValueError):
+            return fallback
+        return configured if configured > 0 else fallback
 
     def _load_preferences(self) -> list[str]:
         try:

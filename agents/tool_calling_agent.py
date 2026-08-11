@@ -62,6 +62,7 @@ class ToolCallingAgent:
         transcript_max_chars: int = DEFAULT_TRANSCRIPT_MAX_CHARS,
         on_tool_result: ToolResultCallback | None = None,
         allowed_tools: tuple[str, ...] = TOOL_NAMES,
+        max_mutation_proposals: int = 1,
     ) -> None:
         self.generate_text = generate_text
         self.registry = registry
@@ -69,10 +70,12 @@ class ToolCallingAgent:
         self.transcript_max_chars = max(256, int(transcript_max_chars))
         self.on_tool_result = on_tool_result
         self.allowed_tools = tuple(tool for tool in allowed_tools if tool in TOOL_NAMES)
+        self.max_mutation_proposals = max(1, min(int(max_mutation_proposals), 8))
 
     def run(self, task: str, *, max_turns_override: int | None = None) -> ToolCallingRun:
         transcript: list[dict] = []
         calls: list[ToolCallRecord] = []
+        mutation_proposals = 0
         seen_calls: set[str] = set()
         turn_limit = self.max_turns if max_turns_override is None else max(1, min(int(max_turns_override), 20))
         for turn in range(1, turn_limit + 1):
@@ -84,6 +87,7 @@ class ToolCallingAgent:
                     turn_limit,
                     self.transcript_max_chars,
                     self.allowed_tools,
+                    self.max_mutation_proposals,
                 )
             )
             action = _parse_action(response)
@@ -158,10 +162,17 @@ class ToolCallingAgent:
             if self.on_tool_result is not None:
                 self.on_tool_result(record, raw_value)
             if result_payload.get("ok") and tool in MUTATION_PROPOSAL_TOOLS:
-                return ToolCallingRun(
-                    final_answer="A reviewed diff is prepared for approval.",
-                    calls=calls,
-                )
+                mutation_proposals += 1
+                if mutation_proposals >= self.max_mutation_proposals:
+                    summary = (
+                        "A reviewed diff is prepared for approval."
+                        if mutation_proposals == 1
+                        else f"{mutation_proposals} reviewed diffs are prepared for approval."
+                    )
+                    return ToolCallingRun(
+                        final_answer=summary,
+                        calls=calls,
+                    )
             transcript.append(
                 {
                     "assistant": action,
@@ -252,6 +263,7 @@ def _tool_prompt(
     max_turns: int,
     transcript_max_chars: int = DEFAULT_TRANSCRIPT_MAX_CHARS,
     allowed_tools: tuple[str, ...] = TOOL_NAMES,
+    max_mutation_proposals: int = 1,
 ) -> str:
     requested_path = _explicit_requested_path(task)
     instructions = [
@@ -276,7 +288,15 @@ def _tool_prompt(
         [
             "For a greeting, explanation, or other non-repository question, return action=final immediately without a tool call.",
             "If the latest tool result answers the task, return action=final immediately. Never repeat an identical tool call.",
-            "After any create_file, move_file, or apply_search_replace proposal succeeds, return action=final; do not inspect or propose another change.",
+            (
+                "After a create_file, move_file, or apply_search_replace proposal succeeds, "
+                "return action=final."
+                if max_mutation_proposals == 1
+                else (
+                    "You may prepare additional independent reviewed changes until the "
+                    f"proposal budget of {max_mutation_proposals} is reached; then return action=final."
+                )
+            ),
             "On the final allowed turn, return action=final now; do not call another tool.",
             "Return exactly one JSON object and no markdown.",
             "To call a tool:",

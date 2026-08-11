@@ -152,6 +152,35 @@ class ToolCallingAgentTests(unittest.TestCase):
         self.assertEqual(len(run.calls), 1)
         self.assertIn("reviewed diff", run.final_answer)
 
+    def test_mutation_batch_collects_multiple_reviewed_diffs(self) -> None:
+        responses = iter(
+            [
+                json.dumps(
+                    {
+                        "action": "tool",
+                        "tool": "create_file",
+                        "arguments": {"root": ".", "path": "app.py", "content": "print('app')\n"},
+                    }
+                ),
+                json.dumps(
+                    {
+                        "action": "tool",
+                        "tool": "create_file",
+                        "arguments": {"root": ".", "path": "test_app.py", "content": "import app\n"},
+                    }
+                ),
+            ]
+        )
+        with TemporaryDirectory() as tmpdir:
+            run = ToolCallingAgent(
+                lambda _prompt: next(responses),
+                build_default_tool_registry(repository_root=Path(tmpdir)),
+                max_mutation_proposals=2,
+            ).run("Create an app and its test")
+
+        self.assertEqual([call.tool for call in run.calls], ["create_file", "create_file"])
+        self.assertIn("2 reviewed diffs", run.final_answer)
+
     def test_explicit_file_path_rejects_a_different_mutation_target(self) -> None:
         response = json.dumps(
             {
