@@ -61,6 +61,25 @@ pie title "Qwen 1.5B task outcomes"
 | Model tokens | 5,606 | 16,973 | 3.03× baseline |
 | Aggregate wall time | 262.4s | 153.4s | Shielded was faster |
 
+## Controlled local-model comparison
+
+On 2026-08-11, the same versioned ten-task Compute Shield corpus was run
+sequentially on the installed Qwen 1.5B and 3B models. Both completed all ten
+shielded tasks. The 3B run used fewer model tokens and tool calls, but took
+longer wall-clock time. This is an observed two-model result, not evidence of
+a general parameter-scaling relationship.
+
+| Measure | Qwen 1.5B | Qwen 3B | 3B − 1.5B |
+| --- | ---: | ---: | ---: |
+| Shielded successes | 10/10 | 10/10 | 0 tasks |
+| Shielded tokens | 19,432 | 14,341 | -5,091 |
+| Shielded tool calls | 17 | 12 | -5 |
+| Shielded wall time | 205.6s | 355.3s | +149.6s |
+
+The generated comparison is
+[local-model-comparison-2026-08-11.md](docs/results/local-model-comparison-2026-08-11.md);
+the two raw reports are published alongside it under `docs/results/raw/`.
+
 ## What the evidence supports
 
 ```mermaid
@@ -83,6 +102,8 @@ Not supported today:
 
 - A claim that the shielded loop saves tokens or money.
 - Generalization from the present corpus to other models or repositories.
+- A monotonic relationship between model parameter count and completion: both
+  local models completed the same fixed corpus.
 - Safe multi-user hosting.
 
 ## Next measurement

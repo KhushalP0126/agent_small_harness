@@ -5,6 +5,16 @@
 > [`ARCHITECTURE.md`](ARCHITECTURE.md); the reproducible research protocol is
 > [`docs/RESEARCH.md`](docs/RESEARCH.md).
 
+## Research evidence
+
+The published reports and raw inputs are retained under
+[`docs/results/`](docs/results/). On the fixed ten-task Compute Shield corpus,
+Qwen 1.5B and Qwen 3B both completed 10/10 shielded tasks; 3B used fewer model
+tokens and tool calls but took longer wall-clock time. This is a controlled
+two-model observation, not a parameter-scaling claim. See
+[REPORT.md](REPORT.md) and
+[docs/results/local-model-comparison-2026-08-11.md](docs/results/local-model-comparison-2026-08-11.md).
+
 Agent Small Harness is a Python-first research and engineering prototype for
 validated code generation. It studies how far small local coding models can go
 when they are wrapped in deterministic software-engineering gates, scoped repair

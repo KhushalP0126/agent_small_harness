@@ -79,8 +79,21 @@ make research-compute-shield \
   COMPUTE_SHIELD_ARGS="--output artifacts/research/compute-shield-10-rerun.json"
 ```
 
-Run local-model experiments only on hardware that can sustain
-`qwen2.5-coder:1.5b`; the repository makes no 3B result claim.
+Run local-model experiments only on hardware that can sustain the selected
+model. The 2026-08-11 Qwen 1.5B/3B comparison is published, but it is a
+single fixed-corpus observation rather than a general 3B performance claim.
+
+## Local model-size comparison
+
+The frozen ten-task Compute Shield corpus can compare the installed local
+`qwen2.5-coder:1.5b` and `qwen2.5-coder:3b` models. The comparison renderer
+shows completion, token, tool-call, and wall-clock deltas, but explicitly
+labels the result as a two-model observation rather than a parameter-scaling
+law:
+
+```bash
+make research-model-comparison
+```
 
 ## Independent fixture corpus
 

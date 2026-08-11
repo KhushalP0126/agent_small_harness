@@ -9,6 +9,7 @@ from agents.artifact_manager import ARTIFACT_SCHEMA_VERSION, ArtifactManager
 from harness_kernel.e2e_benchmark import AgentRunMetrics, BenchmarkTask, run_paired_benchmark
 from harness_kernel.live_session import build_live_session_receipt
 from harness_kernel.provenance import collect_provenance, configured_model_settings
+from scripts.render_local_model_comparison import render_comparison
 from scripts.render_research_report import render_report
 
 
@@ -108,6 +109,30 @@ class ResearchProvenanceTests(unittest.TestCase):
                 outcome="answered",
                 tool_calls=0,
             )
+
+    def test_model_comparison_reports_observed_difference_without_scaling_claim(self) -> None:
+        def payload(successes: int, tokens: int) -> dict:
+            rows = [
+                {
+                    "baseline": {"duration_seconds": 1, "tool_calls": 0},
+                    "shielded": {"duration_seconds": 2, "tool_calls": 1},
+                }
+                for _ in range(10)
+            ]
+            return {
+                "schema_version": 2,
+                "report": {
+                    "baseline_successes": 10,
+                    "shielded_successes": successes,
+                    "baseline_tokens": 100,
+                    "shielded_tokens": tokens,
+                    "results": rows,
+                },
+            }
+
+        rendered = render_comparison(payload(8, 200), payload(9, 300))
+        self.assertIn("more shielded completions", rendered)
+        self.assertIn("not a parameter-scaling law", rendered)
 
 
 if __name__ == "__main__":
