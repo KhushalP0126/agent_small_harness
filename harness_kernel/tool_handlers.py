@@ -20,7 +20,11 @@ from backends.ollama_client import (
 )
 from engines.base import EngineFinding
 from engines.lint_engine import LintEngine
-from harness_kernel.container_sandbox import run_source_isolated
+from harness_kernel.container_sandbox import (
+    DEFAULT_CONTAINER_FS_POLICY,
+    enforce_container_only_tool_policy,
+    run_source_isolated,
+)
 from harness_kernel.local_sandbox import MAX_CAPTURE_BYTES
 from harness_kernel.tool_paths import repository_relative, resolve_within_root
 from harness_kernel.tool_registry import ToolError, ToolHandler, ToolRegistry
@@ -729,11 +733,12 @@ def _make_execute_script_handler(
 ) -> ToolHandler[ExecuteScriptRequest, ExecuteScriptResponse]:
     def invoke(request: ExecuteScriptRequest) -> ExecuteScriptResponse:
         resolve_within_root(repository_root, request.root)
-        if request.sandbox_mode == "local" and not allow_local_sandbox:
-            raise ToolError(
-                "Local script execution is disabled for registered tools; use the container policy",
-                kind="local_sandbox_disabled",
-            )
+        # Host-enforced container-only tool policy (local requires explicit approval).
+        enforce_container_only_tool_policy(
+            mode=request.sandbox_mode,
+            allow_local_sandbox=allow_local_sandbox,
+            allow_local_fallback=False,
+        )
         if not request.source.strip():
             raise ToolError("Script source cannot be empty", kind="invalid_source")
         if len(request.source.encode("utf-8")) > 128 * 1024:
@@ -747,6 +752,11 @@ def _make_execute_script_handler(
             timeout_seconds=timeout,
             mode=request.sandbox_mode,
             runtime=request.runtime,
+            network_enabled=False,
+            allow_local_fallback=False,
+            enforce_container_only_tools=True,
+            allow_local_sandbox=allow_local_sandbox,
+            policy=DEFAULT_CONTAINER_FS_POLICY,
         )
         return ExecuteScriptResponse(
             returncode=result.returncode,
