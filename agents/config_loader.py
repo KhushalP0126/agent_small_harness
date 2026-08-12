@@ -42,6 +42,8 @@ class PolicyConfig:
     allow_state_flow_warnings: bool = False
     allow_lint_errors: bool = False
     allow_lint_skips: bool = False
+    allow_import_risk_hard_block: bool = False
+    allow_import_risk_advisory_block: bool = True
 
     def to_validation_policy(self) -> dict[str, Any]:
         policy = dict(DEFAULT_POLICY)
@@ -59,6 +61,8 @@ class PolicyConfig:
                 "allow_state_flow_warnings": self.allow_state_flow_warnings,
                 "allow_lint_errors": self.allow_lint_errors,
                 "allow_lint_skips": self.allow_lint_skips,
+                "allow_import_risk_hard_block": self.allow_import_risk_hard_block,
+                "allow_import_risk_advisory_block": self.allow_import_risk_advisory_block,
             }
         )
         return policy
@@ -190,6 +194,8 @@ class HarnessConfig:
                 "allow_state_flow_warnings",
                 "allow_lint_errors",
                 "allow_lint_skips",
+                "allow_import_risk_hard_block",
+                "allow_import_risk_advisory_block",
             },
             "engines.policy",
         )
@@ -263,6 +269,10 @@ class HarnessConfig:
                     allow_state_flow_warnings=_bool(policy, "allow_state_flow_warnings", False),
                     allow_lint_errors=_bool(policy, "allow_lint_errors", False),
                     allow_lint_skips=_bool(policy, "allow_lint_skips", False),
+                    allow_import_risk_hard_block=_bool(policy, "allow_import_risk_hard_block", False),
+                    allow_import_risk_advisory_block=_bool(
+                        policy, "allow_import_risk_advisory_block", True
+                    ),
                 ),
                 behavior=BehaviorConfig(
                     enabled=_bool(behavior, "enabled", True),

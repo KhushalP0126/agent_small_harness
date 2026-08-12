@@ -16,6 +16,13 @@ from harness_kernel.tool_registry import ToolError
 
 CommandRunner = Callable[..., subprocess.CompletedProcess[bytes]]
 
+# Host-enforced filesystem policy for container-only execution.
+# Only the scratch workspace is bind-mounted; the container root is read-only
+# with a noexec tmpfs on /tmp. Network defaults to disabled ("none").
+# Local fallback is never implicit (allow_local_fallback must be explicit).
+HOST_FS_ALLOWLIST = ("/workspace", "/tmp")
+CONTAINER_DEFAULT_NETWORK = "none"
+
 
 @dataclass(frozen=True)
 class SandboxResult:

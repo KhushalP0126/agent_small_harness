@@ -28,7 +28,7 @@ def _next_version(version: str) -> str:
 
 
 def merge_proposal(registry_path: Path, proposal_path: Path, dry_run: bool = False) -> dict[str, Any]:
-    registry = _load_json(registry_path) or {"schema_version": "1.0", "libraries": {}}
+    registry = _load_json(registry_path) or {"schema_version": "2.0", "libraries": {}}
     proposal_payload = _load_json(proposal_path)
     if not proposal_payload.get("available"):
         raise ValueError(f"Proposal is not available for approval: {proposal_path}")
@@ -36,14 +36,43 @@ def merge_proposal(registry_path: Path, proposal_path: Path, dry_run: bool = Fal
     library = proposal.get("library") or proposal_payload.get("library")
     if not library:
         raise ValueError(f"Proposal missing library name: {proposal_path}")
+    language = (
+        proposal.get("language")
+        or proposal_payload.get("language")
+        or "python"
+    ).strip().lower()
 
     libraries = registry.setdefault("libraries", {})
-    existing = libraries.get(library, {})
+
+    def _is_nested_language_schema(payload: dict[str, Any]) -> bool:
+        if not payload:
+            return True
+        for value in payload.values():
+            if not isinstance(value, dict):
+                return False
+            # Flat library schema has allow-list fields at this level.
+            if "allowed_calls" in value or "allowed_constants" in value:
+                return False
+            if value and not all(isinstance(item, dict) for item in value.values()):
+                return False
+        return True
+
+    if _is_nested_language_schema(libraries):
+        bucket = libraries.setdefault(language, {})
+    else:
+        # Migrate flat -> nested on write.
+        flat = {key: value for key, value in libraries.items()}
+        libraries.clear()
+        libraries["python"] = flat
+        bucket = libraries.setdefault(language, {})
+    registry["schema_version"] = registry.get("schema_version") or "2.0"
+
+    existing = bucket.get(library, {})
     existing_calls = set(existing.get("allowed_calls", []))
     proposed_calls = set(proposal.get("allowed_calls", []))
     merged_calls = sorted(existing_calls | proposed_calls)
     added_calls = sorted(proposed_calls - existing_calls)
-    libraries[library] = {
+    bucket[library] = {
         "allowed_calls": merged_calls,
         "context": existing.get("context") or proposal.get("context", ""),
         "unknown_api_repair": existing.get("unknown_api_repair") or proposal.get("unknown_api_repair", ""),

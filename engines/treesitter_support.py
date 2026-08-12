@@ -8,29 +8,44 @@ from typing import Any
 _LANGUAGE_MODULES = {
     "c": "tree_sitter_c",
     "cpp": "tree_sitter_cpp",
+    "rust": "tree_sitter_rust",
+    "javascript": "tree_sitter_javascript",
 }
 
+# Core structural engines historically require C/C++ grammars.
+_CORE_LANGUAGES = ("c", "cpp")
+
 _available: bool | None = None
+_language_available: dict[str, bool] = {}
 _parsers: dict[str, Any] = {}
 _tree_cache: dict[tuple[str, str], Any] = {}
 _TREE_CACHE_LIMIT = 64
 
 
 def supported_languages() -> tuple[str, ...]:
-    return tuple(_LANGUAGE_MODULES)
+    return tuple(lang for lang in _LANGUAGE_MODULES if is_language_available(lang))
+
+
+def is_language_available(language: str) -> bool:
+    language = language.strip().lower()
+    if language not in _LANGUAGE_MODULES:
+        return False
+    if language in _language_available:
+        return _language_available[language]
+    try:
+        importlib.import_module("tree_sitter")
+        importlib.import_module(_LANGUAGE_MODULES[language])
+        _language_available[language] = True
+    except Exception:
+        _language_available[language] = False
+    return _language_available[language]
 
 
 def is_available() -> bool:
-    """Return True only if tree-sitter core and both grammars import cleanly."""
+    """Return True only if tree-sitter core and both C/C++ grammars import cleanly."""
     global _available
     if _available is None:
-        try:
-            importlib.import_module("tree_sitter")
-            for module_name in _LANGUAGE_MODULES.values():
-                importlib.import_module(module_name)
-            _available = True
-        except Exception:
-            _available = False
+        _available = all(is_language_available(lang) for lang in _CORE_LANGUAGES)
     return _available
 
 
@@ -38,6 +53,8 @@ def get_parser(language: str) -> Any:
     language = language.strip().lower()
     if language not in _LANGUAGE_MODULES:
         raise ValueError(f"Unsupported tree-sitter language: {language}")
+    if not is_language_available(language):
+        raise ValueError(f"Tree-sitter grammar unavailable for language: {language}")
     if language not in _parsers:
         from tree_sitter import Language, Parser
 

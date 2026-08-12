@@ -679,8 +679,10 @@ class ScalabilityAgentTests(unittest.TestCase):
             registry = json.loads(registry_path.read_text(encoding="utf-8"))
             self.assertEqual(result["old_version"], "1.0")
             self.assertEqual(result["new_version"], "1.1")
-            self.assertIn("loads", registry["libraries"]["json"]["allowed_calls"])
-            self.assertEqual(registry["libraries"]["json"]["context"], "Existing json context.")
+            # Flat registries are migrated under the language key (default: python).
+            json_schema = registry["libraries"]["python"]["json"]
+            self.assertIn("loads", json_schema["allowed_calls"])
+            self.assertEqual(json_schema["context"], "Existing json context.")
 
 
 class HistorianLearningTests(unittest.TestCase):

@@ -1,0 +1,147 @@
+{
+  "schema_version": "1.0",
+  "categories": {
+    "process_exec": {
+      "enforcement": "hard_block",
+      "python": {
+        "imports": ["subprocess", "pty", "multiprocessing"],
+        "calls": [
+          "os.system",
+          "os.popen",
+          "os.exec",
+          "os.execl",
+          "os.execle",
+          "os.execlp",
+          "os.execlpe",
+          "os.execv",
+          "os.execve",
+          "os.execvp",
+          "os.execvpe",
+          "os.spawn",
+          "os.spawnl",
+          "os.spawnle",
+          "os.spawnlp",
+          "os.spawnlpe",
+          "os.spawnv",
+          "os.spawnve",
+          "os.spawnvp",
+          "os.spawnvpe",
+          "subprocess.run",
+          "subprocess.call",
+          "subprocess.Popen",
+          "subprocess.check_output",
+          "subprocess.check_call"
+        ]
+      },
+      "c": {
+        "imports": [],
+        "calls": ["system", "popen", "execl", "execle", "execlp", "execv", "execve", "execvp", "execvpe"]
+      },
+      "cpp": {
+        "imports": [],
+        "calls": ["system", "popen", "execl", "execle", "execlp", "execv", "execve", "execvp", "execvpe"]
+      },
+      "rust": {
+        "imports": ["std::process", "std::process::Command"],
+        "calls": ["Command::new", "std::process::Command::new"]
+      },
+      "javascript": {
+        "imports": ["child_process", "node:child_process"],
+        "calls": ["child_process.exec", "child_process.spawn", "child_process.execSync", "child_process.spawnSync"]
+      }
+    },
+    "raw_filesystem": {
+      "enforcement": "advisory",
+      "python": {
+        "imports": ["shutil", "tempfile", "pathlib"],
+        "calls": ["os.remove", "os.unlink", "os.rmdir", "shutil.rmtree", "pathlib.Path.write_text", "pathlib.Path.write_bytes"]
+      },
+      "c": {
+        "imports": [],
+        "calls": ["remove", "unlink", "rmdir"]
+      },
+      "cpp": {
+        "imports": [],
+        "calls": ["remove", "unlink", "rmdir"]
+      },
+      "rust": {
+        "imports": ["std::fs"],
+        "calls": ["std::fs::remove_file", "std::fs::remove_dir_all", "std::fs::write"]
+      },
+      "javascript": {
+        "imports": ["fs", "node:fs", "fs/promises", "node:fs/promises"],
+        "calls": ["fs.writeFileSync", "fs.unlinkSync", "fs.rmSync", "fs.writeFile", "fs.unlink"]
+      }
+    },
+    "network": {
+      "enforcement": "advisory",
+      "python": {
+        "imports": ["socket", "http", "http.client", "urllib", "urllib.request", "urllib.parse", "ftplib", "smtplib", "asyncio.streams"],
+        "calls": ["socket.socket", "urllib.request.urlopen", "http.client.HTTPConnection", "http.client.HTTPSConnection"]
+      },
+      "c": {
+        "imports": [],
+        "calls": ["socket", "connect", "accept", "send", "recv"]
+      },
+      "cpp": {
+        "imports": [],
+        "calls": ["socket", "connect", "accept", "send", "recv"]
+      },
+      "rust": {
+        "imports": ["std::net", "std::net::TcpStream", "std::net::UdpSocket"],
+        "calls": ["TcpStream::connect", "UdpSocket::bind"]
+      },
+      "javascript": {
+        "imports": ["net", "node:net", "http", "node:http", "https", "node:https", "undici"],
+        "calls": ["net.connect", "http.request", "https.request", "fetch"]
+      }
+    },
+    "unsafe_memory": {
+      "enforcement": "hard_block",
+      "python": {
+        "imports": ["ctypes", "cffi"],
+        "calls": ["ctypes.CDLL", "ctypes.cdll", "ctypes.memmove", "ctypes.memset"]
+      },
+      "c": {
+        "imports": [],
+        "calls": ["gets", "strcpy", "strcat", "sprintf", "vsprintf", "malloc", "realloc", "free"]
+      },
+      "cpp": {
+        "imports": [],
+        "calls": ["gets", "strcpy", "strcat", "sprintf", "vsprintf", "malloc", "realloc", "free"]
+      },
+      "rust": {
+        "imports": [],
+        "calls": ["std::mem::transmute", "transmute"],
+        "constructs": ["unsafe"]
+      },
+      "javascript": {
+        "imports": [],
+        "calls": []
+      }
+    },
+    "dynamic_eval": {
+      "enforcement": "hard_block",
+      "python": {
+        "imports": [],
+        "calls": ["eval", "exec", "compile", "__import__"]
+      },
+      "c": {
+        "imports": [],
+        "calls": []
+      },
+      "cpp": {
+        "imports": [],
+        "calls": []
+      },
+      "rust": {
+        "imports": [],
+        "calls": []
+      },
+      "javascript": {
+        "imports": [],
+        "calls": ["eval", "Function"]
+      }
+    }
+  }
+}

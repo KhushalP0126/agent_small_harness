@@ -149,27 +149,107 @@ class TreeSitterHazardsEngine(_TreeSitterEngine):
     name = "engine-2-hazards"
 
     def scan(self, source: str) -> list[EngineFinding]:
+        from engines.import_extractors import extract_imports
+        from engines.import_risk import match_call_risks, match_import_risks
+        from engines.base import EngineDiagnostic
+
         state = decompose(self.language, source)
-        if state.unsafe_calls:
-            names = sorted(set(state.unsafe_calls))
+        imports = extract_imports(self.language, source)
+        hits = match_import_risks(self.language, imports)
+        call_sites = [(name, 0) for name in state.unsafe_calls]
+        # Also collect all call names from decompose path (unsafe_calls already filtered
+        # by legacy set during traverse). Re-scan via risk table using those names and
+        # a secondary full call walk for category coverage beyond UNSAFE_CALLS.
+        hits.extend(match_call_risks(self.language, call_sites))
+        # Full call scan for category table (process_exec, unsafe_memory, ...).
+        from engines.treesitter_support import parse_tree
+
+        try:
+            tree = parse_tree(self.language, source)
+        except Exception:
+            tree = None
+        if tree is not None:
+            calls: list[tuple[str, int]] = []
+
+            def visit(node):
+                if node.type == "call_expression":
+                    name = _callee_name(node.child_by_field_name("function"))
+                    if name:
+                        line = node.start_point[0] + 1 if hasattr(node, "start_point") else 0
+                        calls.append((name, line))
+                for child in node.children:
+                    visit(child)
+
+            visit(tree.root_node)
+            hits.extend(match_call_risks(self.language, calls))
+
+        seen: set[tuple[str, str, int, str]] = set()
+        unique = []
+        for hit in hits:
+            key = (hit.category, hit.symbol, hit.line, hit.source)
+            if key in seen:
+                continue
+            seen.add(key)
+            unique.append(hit)
+
+        if not unique:
             return [
                 EngineFinding(
                     engine=self.name,
-                    severity="High",
-                    summary="Unsafe API usage",
-                    details="Unsafe C/C++ APIs detected: " + ", ".join(names) + ".",
-                    metrics={"unsafe_calls": names},
+                    severity="Low",
+                    summary="No unsafe API usage detected",
+                    details="No denylisted unsafe APIs were found.",
+                    metrics={"unsafe_calls": [], "risk_categories": []},
                 )
             ]
-        return [
-            EngineFinding(
-                engine=self.name,
-                severity="Low",
-                summary="No unsafe API usage detected",
-                details="No denylisted unsafe APIs were found.",
-                metrics={"unsafe_calls": []},
+
+        by_category: dict[str, list] = {}
+        for hit in unique:
+            by_category.setdefault(hit.category, []).append(hit)
+
+        findings: list[EngineFinding] = []
+        for category, category_hits in sorted(by_category.items()):
+            enforcement = category_hits[0].enforcement
+            symbols = sorted({hit.symbol for hit in category_hits})
+            lines = sorted({hit.line for hit in category_hits if hit.line})
+            severity = "High" if enforcement == "hard_block" else "Medium"
+            # Keep legacy summary for unsafe_memory so older tests remain meaningful,
+            # while also emitting stable risk_category metrics for policy.
+            if category in {"unsafe_memory", "process_exec"} and enforcement == "hard_block":
+                summary = "Unsafe API usage"
+                details = "Unsafe C/C++ APIs detected: " + ", ".join(symbols) + "."
+            elif enforcement == "hard_block":
+                summary = f"Import risk ({category})"
+                details = f"Hard-block category {category} matched: {', '.join(symbols)}."
+            else:
+                summary = f"Advisory import risk ({category})"
+                details = f"Advisory category {category} matched: {', '.join(symbols)}."
+            findings.append(
+                EngineFinding(
+                    engine=self.name,
+                    severity=severity,
+                    summary=summary,
+                    details=details,
+                    metrics={
+                        "unsafe_calls": symbols,
+                        "risk_category": category,
+                        "enforcement": enforcement,
+                        "symbols": symbols,
+                        "language": self.language,
+                        "lines": lines,
+                    },
+                    diagnostic=EngineDiagnostic(
+                        violation="IMPORT_RISK_BLOCK"
+                        if enforcement == "hard_block"
+                        else "IMPORT_RISK_ADVISORY",
+                        threshold=enforcement,
+                        actual=", ".join(symbols),
+                        location=", ".join(f"line {line}" for line in lines) or "call site",
+                        recommended_refactor=f"Remove or replace {category} usage.",
+                    ),
+                )
             )
-        ]
+        return findings
 
 
 def treesitter_engine_factories(language: str) -> list[Callable[[], BaseEngine]]:

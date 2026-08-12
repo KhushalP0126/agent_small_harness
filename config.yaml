@@ -19,6 +19,8 @@ engines:
     allow_state_flow_warnings: false
     allow_lint_errors: false
     allow_lint_skips: false
+    allow_import_risk_hard_block: false
+    allow_import_risk_advisory_block: true
   behavior:
     enabled: true
     timeout_seconds: 1.0

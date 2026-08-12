@@ -1,90 +1,92 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "2.0",
   "libraries": {
-    "deal": {
-      "allowed_calls": [
-        "example",
-        "pre",
-        "post",
-        "ensure",
-        "raises",
-        "reason"
-      ],
-      "context": "Use Deal decorators to attach executable examples and contracts to pure helper functions. Do not use Deal as a substitute for behavior tests.",
-      "unknown_api_repair": "Use registered Deal decorators such as deal.example, deal.pre, or deal.post.",
-      "adapter_contract": "Treat Deal as a contract annotation layer. Generated production logic should remain testable without relying on decorator side effects."
-    },
-    "pygame": {
-      "allowed_calls": [
-        "init",
-        "quit",
-        "display.set_mode",
-        "display.set_caption",
-        "display.flip",
-        "display.get_surface",
-        "display.update",
-        "event.get",
-        "key.get_pressed",
-        "Rect",
-        "draw.rect",
-        "draw.circle",
-        "draw.line",
-        "draw.polygon",
-        "font.Font",
-        "font.SysFont",
-        "time.Clock"
-      ],
-      "allowed_constants": [
-        "KEYDOWN",
-        "KEYUP",
-        "QUIT",
-        "K_UP",
-        "K_DOWN",
-        "K_LEFT",
-        "K_RIGHT",
-        "K_w",
-        "K_a",
-        "K_s",
-        "K_d",
-        "K_r",
-        "K_ESCAPE",
-        "K_SPACE"
-      ],
-      "context": "Use pygame.display for windows, pygame.event for input, pygame.draw for drawing primitives, and pygame.time.Clock for frame timing.",
-      "unknown_api_repair": "Use the documented pygame namespace path, such as pygame.draw.rect(...) instead of pygame.rect(...).",
-      "adapter_contract": "Wrap pygame event/input/rendering calls behind local helpers. Generated business logic should consume simple values such as pressed keys, positions, rectangles, and frame ticks rather than reasoning about pygame internals."
-    },
-    "pandas": {
-      "allowed_calls": [
-        "DataFrame",
-        "Series",
-        "read_csv",
-        "read_json",
-        "concat",
-        "merge",
-        "to_datetime",
-        "isna",
-        "notna"
-      ],
-      "context": "Use top-level pandas constructors and readers for data loading and frame construction. DataFrame method-chain validation is intentionally out of scope for this registry.",
-      "unknown_api_repair": "Use a registered top-level pandas API or move DataFrame method-chain logic behind local helpers.",
-      "adapter_contract": "Treat pandas as an opaque tabular-data dependency. Put DataFrame operations behind local adapter helpers with explicit input/output examples or schemas."
-    },
-    "sqlalchemy": {
-      "allowed_calls": [
-        "create_engine",
-        "select",
-        "text",
-        "insert",
-        "update",
-        "delete",
-        "MetaData",
-        "Table",
-        "Column"
-      ],
-      "context": "Use SQLAlchemy top-level constructors and expression helpers. ORM model semantics are out of scope for this registry.",
-      "unknown_api_repair": "Use a registered SQLAlchemy constructor or expression helper and avoid invented top-level calls.",
-      "adapter_contract": "Treat SQLAlchemy as an opaque persistence dependency. Keep query construction in adapter helpers and validate inputs/outputs at the application boundary."
+    "python": {
+      "deal": {
+        "allowed_calls": [
+          "example",
+          "pre",
+          "post",
+          "ensure",
+          "raises",
+          "reason"
+        ],
+        "context": "Use Deal decorators to attach executable examples and contracts to pure helper functions. Do not use Deal as a substitute for behavior tests.",
+        "unknown_api_repair": "Use registered Deal decorators such as deal.example, deal.pre, or deal.post.",
+        "adapter_contract": "Treat Deal as a contract annotation layer. Generated production logic should remain testable without relying on decorator side effects."
+      },
+      "pygame": {
+        "allowed_calls": [
+          "init",
+          "quit",
+          "display.set_mode",
+          "display.set_caption",
+          "display.flip",
+          "display.get_surface",
+          "display.update",
+          "event.get",
+          "key.get_pressed",
+          "Rect",
+          "draw.rect",
+          "draw.circle",
+          "draw.line",
+          "draw.polygon",
+          "font.Font",
+          "font.SysFont",
+          "time.Clock"
+        ],
+        "allowed_constants": [
+          "KEYDOWN",
+          "KEYUP",
+          "QUIT",
+          "K_UP",
+          "K_DOWN",
+          "K_LEFT",
+          "K_RIGHT",
+          "K_w",
+          "K_a",
+          "K_s",
+          "K_d",
+          "K_r",
+          "K_ESCAPE",
+          "K_SPACE"
+        ],
+        "context": "Use pygame.display for windows, pygame.event for input, pygame.draw for drawing primitives, and pygame.time.Clock for frame timing.",
+        "unknown_api_repair": "Use the documented pygame namespace path, such as pygame.draw.rect(...) instead of pygame.rect(...).",
+        "adapter_contract": "Wrap pygame event/input/rendering calls behind local helpers. Generated business logic should consume simple values such as pressed keys, positions, rectangles, and frame ticks rather than reasoning about pygame internals."
+      },
+      "pandas": {
+        "allowed_calls": [
+          "DataFrame",
+          "Series",
+          "read_csv",
+          "read_json",
+          "concat",
+          "merge",
+          "to_datetime",
+          "isna",
+          "notna"
+        ],
+        "context": "Use top-level pandas constructors and readers for data loading and frame construction. DataFrame method-chain validation is intentionally out of scope for this registry.",
+        "unknown_api_repair": "Use a registered top-level pandas API or move DataFrame method-chain logic behind local helpers.",
+        "adapter_contract": "Treat pandas as an opaque tabular-data dependency. Put DataFrame operations behind local adapter helpers with explicit input/output examples or schemas."
+      },
+      "sqlalchemy": {
+        "allowed_calls": [
+          "create_engine",
+          "select",
+          "text",
+          "insert",
+          "update",
+          "delete",
+          "MetaData",
+          "Table",
+          "Column"
+        ],
+        "context": "Use SQLAlchemy top-level constructors and expression helpers. ORM model semantics are out of scope for this registry.",
+        "unknown_api_repair": "Use a registered SQLAlchemy constructor or expression helper and avoid invented top-level calls.",
+        "adapter_contract": "Treat SQLAlchemy as an opaque persistence dependency. Keep query construction in adapter helpers and validate inputs/outputs at the application boundary."
+      }
     }
   }
 }

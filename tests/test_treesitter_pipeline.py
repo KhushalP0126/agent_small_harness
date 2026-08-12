@@ -65,7 +65,8 @@ class TreeSitterEngineTests(unittest.TestCase):
         source = (C_DIR / "unsafe.c").read_text()
         findings = EngineRegistry.default().findings_for(source, "c")
         kinds = {violation.kind for violation in validate_findings(findings).violations}
-        self.assertIn("unsafe_call", kinds)
+        # Category enforcement maps legacy unsafe APIs to hard-block import risk.
+        self.assertTrue(kinds & {"import_risk_block", "unsafe_call"})
 
 
 @unittest.skipUnless(TREE_SITTER, SKIP_REASON)

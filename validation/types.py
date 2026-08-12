@@ -13,8 +13,11 @@ ViolationKind = Literal[
     "external_dependency",
     "unknown_api",
     "unsafe_call",
+    "import_risk_block",
+    "import_risk_advisory",
     "algorithmic_cost",
     "lint_error",
+    "lint_skipped",
     "formal_counterexample",
     "bounds_risk",
     "state_flow_risk",
@@ -30,6 +33,7 @@ RepairHint = Literal[
     "use_standard_library",
     "use_registered_api",
     "remove_unsafe_call",
+    "remove_import_risk",
     "precompute_lookup",
     "fix_lint_error",
     "satisfy_contract",
@@ -56,3 +60,4 @@ class Violation:
 class ValidationResult:
     is_compliant: bool
     violations: list[Violation] = field(default_factory=list)
+    advisories: list[Violation] = field(default_factory=list)

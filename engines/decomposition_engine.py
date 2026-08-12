@@ -55,6 +55,17 @@ class SymbolRecord:
 
 
 @dataclass
+class ImportRecord:
+    """Language-agnostic import/dependency record."""
+
+    name: str
+    language: str
+    kind: str  # module | header | crate | require
+    line: int
+    bound_symbols: list[str] = field(default_factory=list)
+
+
+@dataclass
 class MembershipCheck:
     container: str
     scope_path: tuple[str, ...]
@@ -86,6 +97,7 @@ class StructuralIR:
     module_state_names: list[str] = field(default_factory=list)
     loop_mutation_targets: list[str] = field(default_factory=list)
     symbols: list[SymbolRecord] = field(default_factory=list)
+    imports: list[ImportRecord] = field(default_factory=list)
     membership_checks: list[MembershipCheck] = field(default_factory=list)
     bounds_risks: list[BoundsRiskRecord] = field(default_factory=list)
     state_flow_risks: list[StateFlowRiskRecord] = field(default_factory=list)
@@ -475,4 +487,8 @@ class DecompositionEngine:
         builder.ir.explicit_globals = sorted(set(builder.ir.explicit_globals))
         builder.ir.module_state_names = sorted(set(builder.ir.module_state_names))
         builder.ir.loop_mutation_targets = sorted(builder.loop_mutation_targets)
+        # Populate shared import IR (Python extractor; other languages use extract_imports).
+        from engines.import_extractors import extract_imports
+
+        builder.ir.imports = extract_imports("python", source)
         return builder.ir
