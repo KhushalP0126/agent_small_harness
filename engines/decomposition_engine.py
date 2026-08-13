@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import ast
+import sys
 from dataclasses import dataclass, field
+
+_STDLIB_ROOTS = set(getattr(sys, "stdlib_module_names", set())) | {"__future__"}
 
 
 STATE_NAME_HINTS = (
@@ -56,13 +59,27 @@ class SymbolRecord:
 
 @dataclass
 class ImportRecord:
-    """Language-agnostic import/dependency record."""
+    """Language-agnostic import/dependency record.
+
+    For Python:
+    - ``name`` is the imported module path (``pygame``, ``pygame.draw``, or a
+      relative module marker).
+    - ``bound_symbols`` are local names introduced by the statement.
+    - ``bound_paths`` parallel ``bound_symbols`` with the registered-library API
+      prefix used for allow-list checks (empty for plain ``import mod``;
+      ``draw.rect`` for ``from pygame.draw import rect as r``).
+    - ``is_stdlib`` marks standard-library roots (relative imports are never stdlib).
+    - ``relative_level`` is the ``from .x import ...`` level (0 for absolute).
+    """
 
     name: str
-    language: str
-    kind: str  # module | header | crate | require
-    line: int
+    language: str = "python"
+    kind: str = "module"  # module | header | crate | require
+    line: int = 0
     bound_symbols: list[str] = field(default_factory=list)
+    bound_paths: list[str] = field(default_factory=list)
+    is_stdlib: bool = False
+    relative_level: int = 0
 
 
 @dataclass
@@ -301,6 +318,57 @@ class _IRBuilder(ast.NodeVisitor):
         self.ir.explicit_globals.extend(node.names)
         self.generic_visit(node)
 
+    def visit_Import(self, node: ast.Import) -> None:
+        for alias in node.names:
+            root = alias.name.split(".", 1)[0]
+            local = alias.asname or root
+            self.ir.imports.append(
+                ImportRecord(
+                    name=alias.name,
+                    language="python",
+                    kind="module",
+                    line=getattr(node, "lineno", 0),
+                    bound_symbols=[local],
+                    bound_paths=[""],
+                    is_stdlib=root in _STDLIB_ROOTS,
+                    relative_level=0,
+                )
+            )
+        self.generic_visit(node)
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        level = int(node.level or 0)
+        if level:
+            module_name = "." * level + (node.module or "")
+            root = ""
+            is_stdlib = False
+            imported_path: list[str] = []
+        else:
+            module_name = node.module or ""
+            root = module_name.split(".", 1)[0] if module_name else ""
+            is_stdlib = bool(root) and root in _STDLIB_ROOTS
+            imported_path = module_name.split(".")[1:] if module_name else []
+        bound_symbols: list[str] = []
+        bound_paths: list[str] = []
+        for alias in node.names:
+            local_name = alias.asname or alias.name
+            bound_symbols.append(local_name)
+            # Preserve original imported symbol name for allow-list prefixes.
+            bound_paths.append(".".join([*imported_path, alias.name]) if not level else alias.name)
+        self.ir.imports.append(
+            ImportRecord(
+                name=module_name or ".",
+                language="python",
+                kind="module",
+                line=getattr(node, "lineno", 0),
+                bound_symbols=bound_symbols,
+                bound_paths=bound_paths,
+                is_stdlib=is_stdlib,
+                relative_level=level,
+            )
+        )
+        self.generic_visit(node)
+
     def visit_Assign(self, node: ast.Assign) -> None:
         if self.scope_stack[-1] == "module" and isinstance(node.value, (ast.List, ast.Dict, ast.Set)):
             for target in node.targets:
@@ -481,14 +549,11 @@ class DecompositionEngine:
     name = "engine-0-decomposition"
 
     def decompose(self, source: str) -> StructuralIR:
+        """Build StructuralIR in a single Python AST pass, including imports."""
         tree = ast.parse(source)
         builder = _IRBuilder(source)
         builder.visit(tree)
         builder.ir.explicit_globals = sorted(set(builder.ir.explicit_globals))
         builder.ir.module_state_names = sorted(set(builder.ir.module_state_names))
         builder.ir.loop_mutation_targets = sorted(builder.loop_mutation_targets)
-        # Populate shared import IR (Python extractor; other languages use extract_imports).
-        from engines.import_extractors import extract_imports
-
-        builder.ir.imports = extract_imports("python", source)
         return builder.ir

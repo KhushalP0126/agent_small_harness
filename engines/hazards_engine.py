@@ -25,11 +25,12 @@ MUTATING_METHODS = {
     "setdefault",
 }
 
+# Kept for external callers / tests that imported the previous constant.
 ALLOWED_IMPORT_ROOTS = set(getattr(sys, "stdlib_module_names", set())) | {"__future__"}
 
 
 def _import_root(name: str) -> str:
-    return name.split(".", 1)[0]
+    return name.lstrip(".").split(".", 1)[0]
 
 
 def _attribute_chain(node: ast.AST) -> list[str]:
@@ -58,47 +59,57 @@ def _external_imports_from_records(
     imports: list[ImportRecord],
     registered_libraries: set[str],
 ) -> list[str]:
+    """Policy: non-stdlib, non-registered absolute Python imports."""
     found: set[str] = set()
     for record in imports:
         if record.language != "python":
             continue
-        root = _import_root(record.name.lstrip("."))
+        if getattr(record, "relative_level", 0):
+            continue
+        if getattr(record, "is_stdlib", False):
+            continue
+        root = _import_root(record.name)
         if not root or root == ".":
             continue
-        if root not in ALLOWED_IMPORT_ROOTS and root not in registered_libraries:
+        if root not in registered_libraries:
             found.add(root)
     return sorted(found)
 
 
-def _import_bindings_ast(
-    source: str, registry: LibraryRegistry, language: str = "python"
+def _import_bindings_from_records(
+    imports: list[ImportRecord],
+    registry: LibraryRegistry,
+    language: str = "python",
 ) -> dict[str, tuple[str, str]]:
-    """Map local bound name -> (library_root, call_prefix)."""
-    tree = ast.parse(source)
+    """Map local bound name -> (library_root, call_prefix) from shared IR."""
     bindings: dict[str, tuple[str, str]] = {}
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                root = _import_root(alias.name)
-                if registry.is_registered(root, language=language):
-                    local_name = alias.asname or root
-                    bindings[local_name] = (root, "")
-        elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
-            root = _import_root(node.module)
-            if registry.is_registered(root, language=language):
-                imported_path = node.module.split(".")[1:]
-                for alias in node.names:
-                    local_name = alias.asname or alias.name
-                    prefix = ".".join([*imported_path, alias.name])
-                    bindings[local_name] = (root, prefix)
+    for record in imports:
+        if record.language != language or record.kind != "module":
+            continue
+        if getattr(record, "relative_level", 0):
+            continue
+        root = _import_root(record.name)
+        if not root or not registry.is_registered(root, language=language):
+            continue
+        symbols = list(record.bound_symbols or [])
+        paths = list(getattr(record, "bound_paths", None) or [])
+        # Pad paths if an older ImportRecord lacked bound_paths.
+        while len(paths) < len(symbols):
+            paths.append("")
+        for local_name, prefix in zip(symbols, paths):
+            bindings[local_name] = (root, prefix)
     return bindings
 
 
 def _unknown_api_calls(
-    source: str, registry: LibraryRegistry, language: str = "python"
+    source: str,
+    registry: LibraryRegistry,
+    *,
+    imports: list[ImportRecord],
+    language: str = "python",
 ) -> list[dict]:
     tree = ast.parse(source)
-    bindings = _import_bindings_ast(source, registry, language=language)
+    bindings = _import_bindings_from_records(imports, registry, language=language)
     unknown: list[dict] = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.Call):
@@ -113,7 +124,7 @@ def _unknown_api_calls(
         schema = registry.get(library, language=language)
         if schema is None:
             continue
-        # Phase 4: registered library calls are opaque — only allow-list is checked.
+        # Registered library calls are opaque — only allow-list is checked.
         suffix = ".".join(chain[1:])
         call_path = ".".join(part for part in (prefix, suffix) if part)
         if call_path and call_path not in schema.allowed_calls:
@@ -208,8 +219,9 @@ class HazardsEngine(BaseEngine):
         language = self.language
         if language == "python":
             ir = ir or DecompositionEngine().decompose(source)
-            imports = list(ir.imports) if ir.imports else extract_imports("python", source)
+            imports = list(ir.imports)
         else:
+            # Non-Python extraction stays in import_extractors until multilang IR lands.
             imports = extract_imports(language, source)
             if ir is not None and not ir.imports:
                 ir.imports = list(imports)
@@ -274,7 +286,10 @@ class HazardsEngine(BaseEngine):
                 )
 
             unknown_api_calls = _unknown_api_calls(
-                source, self.library_registry, language=language
+                source,
+                self.library_registry,
+                imports=imports,
+                language=language,
             )
             if unknown_api_calls:
                 calls = [f"{item['library']}.{item['call']}" for item in unknown_api_calls]

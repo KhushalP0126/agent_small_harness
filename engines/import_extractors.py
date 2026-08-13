@@ -23,38 +23,10 @@ def extract_imports(language: str, source: str) -> list[ImportRecord]:
 
 
 def _extract_python(source: str) -> list[ImportRecord]:
-    tree = ast.parse(source)
-    records: list[ImportRecord] = []
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                local = alias.asname or alias.name.split(".", 1)[0]
-                records.append(
-                    ImportRecord(
-                        name=alias.name,
-                        language="python",
-                        kind="module",
-                        line=getattr(node, "lineno", 0),
-                        bound_symbols=[local],
-                    )
-                )
-        elif isinstance(node, ast.ImportFrom):
-            if node.level:
-                # Relative imports stay module-kind but keep dotted path empty-safe.
-                module_name = "." * node.level + (node.module or "")
-            else:
-                module_name = node.module or ""
-            bound = [alias.asname or alias.name for alias in node.names]
-            records.append(
-                ImportRecord(
-                    name=module_name or ".",
-                    language="python",
-                    kind="module",
-                    line=getattr(node, "lineno", 0),
-                    bound_symbols=bound,
-                )
-            )
-    return records
+    """Compatibility wrapper — preferred path is DecompositionEngine.decompose()."""
+    from engines.decomposition_engine import DecompositionEngine
+
+    return list(DecompositionEngine().decompose(source).imports)
 
 
 def _node_text(node: Any) -> str:
