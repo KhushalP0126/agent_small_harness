@@ -41,6 +41,31 @@ class StructuredSpecRunnerTests(unittest.TestCase):
         self.assertFalse(graph.is_compliant)
         self.assertEqual(graph.missing_symbols["main.py"], ["helpers.missing"])
 
+    def test_import_graph_resolves_rust_crate_modules_and_symbols(self) -> None:
+        graph = analyze_import_graph(
+            {
+                "helpers.rs": "pub fn present() -> i32 { 1 }\n",
+                "main.rs": "use crate::helpers::missing;\nfn main() { missing(); }\n",
+            }
+        )
+        self.assertFalse(graph.is_compliant)
+        self.assertEqual(graph.missing_symbols["main.rs"], ["crate::helpers::missing.missing"])
+
+    def test_import_graph_resolves_javascript_relative_modules_and_symbols(self) -> None:
+        graph = analyze_import_graph(
+            {
+                "helpers.js": "export function present() { return 1; }\n",
+                "main.js": "import { missing } from './helpers.js';\nmissing();\n",
+            }
+        )
+        self.assertFalse(graph.is_compliant)
+        self.assertEqual(graph.missing_symbols["main.js"], ["./helpers.js.missing"])
+
+    def test_import_graph_rejects_missing_javascript_relative_module(self) -> None:
+        graph = analyze_import_graph({"main.js": "import './missing.js';\n"})
+        self.assertFalse(graph.is_compliant)
+        self.assertEqual(graph.missing_imports["main.js"], ["./missing.js"])
+
     def test_cross_file_contract_validation_checks_owned_signature(self) -> None:
         contract = FunctionContract(
             name="build",

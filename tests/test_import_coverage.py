@@ -95,6 +95,14 @@ class ImportRiskCategoryTests(unittest.TestCase):
         result = validate_findings(findings)
         self.assertFalse(result.is_compliant)
 
+    def test_rust_and_javascript_risk_rules_cover_unsafe_constructs_and_calls(self) -> None:
+        from engines.import_risk import match_call_risks, match_construct_risks
+
+        rust = match_construct_risks("rust", [("unsafe", 3)])
+        javascript = match_call_risks("javascript", [("eval", 2), ("Function", 4)])
+        self.assertEqual(rust[0].category, "unsafe_memory")
+        self.assertTrue(all(hit.category == "dynamic_eval" for hit in javascript))
+
 
 class LibraryRegistryMultiLanguageTests(unittest.TestCase):
     def test_nested_python_schema_loads(self) -> None:

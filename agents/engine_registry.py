@@ -44,7 +44,7 @@ class EngineRegistry:
         # that language's grammar is present.
         from engines.compilation_engine import CompilationEngine
 
-        for language in ("c", "cpp"):
+        for language in ("c", "cpp", "rust", "javascript"):
             registry.register(
                 language,
                 [lambda language=language: CompilationEngine(language)],
@@ -58,8 +58,7 @@ class EngineRegistry:
                 from engines.treesitter_engine import treesitter_engine_factories
 
                 factories: list[EngineFactory] = []
-                if language in {"c", "cpp"}:
-                    factories.append(lambda language=language: CompilationEngine(language))
+                factories.append(lambda language=language: CompilationEngine(language))
                 factories.extend(treesitter_engine_factories(language))
                 registry.register(language, factories)
         except Exception:

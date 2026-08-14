@@ -95,7 +95,12 @@ class TreeSitterRegistryAndControllerTests(unittest.TestCase):
             self.assertTrue(registry.has_language(language))
             self.assertEqual(
                 [engine.name for engine in registry.engines_for(language)],
-                ["engine-1-math", "engine-2-hazards", "engine-3-branching"],
+                [
+                    "engine-compilation",
+                    "engine-1-math",
+                    "engine-2-hazards",
+                    "engine-3-branching",
+                ],
             )
 
     def test_controller_flags_complex_c(self) -> None:

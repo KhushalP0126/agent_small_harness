@@ -19,9 +19,9 @@ from harness_kernel.profiling import AlgorithmicProfiler, ProfileResult
 
 
 class CompilationEngineTests(unittest.TestCase):
-    def test_registry_always_exposes_compilation_gate_for_c_and_cpp(self) -> None:
+    def test_registry_always_exposes_compilation_gate_for_supported_non_python_languages(self) -> None:
         registry = EngineRegistry.default()
-        for language in ("c", "cpp"):
+        for language in ("c", "cpp", "rust", "javascript"):
             self.assertTrue(registry.has_language(language))
             self.assertEqual(
                 registry.engines_for(language)[0].name,
@@ -58,6 +58,24 @@ class CompilationEngineTests(unittest.TestCase):
             "int add(int a, int b) { return a + b; }\n"
         )
         self.assertEqual(findings, [])
+
+    @unittest.skipUnless(shutil.which("rustc"), "rustc unavailable")
+    def test_valid_rust_passes(self) -> None:
+        self.assertEqual(CompilationEngine("rust").scan("pub fn add(a: i32, b: i32) -> i32 { a + b }\n"), [])
+
+    @unittest.skipUnless(shutil.which("rustc"), "rustc unavailable")
+    def test_invalid_rust_fails(self) -> None:
+        finding = CompilationEngine("rust").scan("pub fn broken( {\n")[0]
+        self.assertEqual(finding.metrics["compile_status"], "fail")
+
+    @unittest.skipUnless(shutil.which("node"), "node unavailable")
+    def test_valid_javascript_passes(self) -> None:
+        self.assertEqual(CompilationEngine("javascript").scan("export function add(a, b) { return a + b; }\n"), [])
+
+    @unittest.skipUnless(shutil.which("node"), "node unavailable")
+    def test_invalid_javascript_fails(self) -> None:
+        finding = CompilationEngine("javascript").scan("function broken( {\n")[0]
+        self.assertEqual(finding.metrics["compile_status"], "fail")
 
     @unittest.skipUnless(
         treesitter_support.is_available()

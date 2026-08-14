@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import ast
 import importlib
+import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 from typing import Any, Iterable
+
+from engines.import_extractors import extract_imports
 
 
 @dataclass(frozen=True)
@@ -24,6 +27,21 @@ STDLIB_ROOTS = set(getattr(sys, "stdlib_module_names", set())) | {"__future__"}
 
 
 def analyze_import_graph(files: dict[str, str], external_roots: set[str] | None = None) -> FileImportGraph:
+    """Validate generated sibling imports for every supported source language.
+
+    Python retains its precise AST/module validation below.  C/C++, Rust, and
+    JavaScript use their extracted ``ImportRecord`` kinds and only make claims
+    about project-relative imports, never system crates/packages.
+    """
+    languages = {_language_for_path(path) for path in files}
+    if languages <= {"python"}:
+        return _analyze_python_import_graph(files, external_roots)
+    return _analyze_project_import_graph(files, external_roots or set())
+
+
+def _analyze_python_import_graph(
+    files: dict[str, str], external_roots: set[str] | None = None
+) -> FileImportGraph:
     external_roots = external_roots or set()
     module_to_file = {_module_name(path): path for path in files}
     imports_by_file: dict[str, list[str]] = {}
@@ -41,6 +59,48 @@ def analyze_import_graph(files: dict[str, str], external_roots: set[str] | None 
         ]
         if unresolved:
             missing_symbols[path] = unresolved
+    return FileImportGraph(
+        files=sorted(files),
+        imports_by_file=imports_by_file,
+        missing_imports=missing_imports,
+        missing_symbols=missing_symbols,
+    )
+
+
+def _analyze_project_import_graph(
+    files: dict[str, str], external_roots: set[str],
+) -> FileImportGraph:
+    normalized_files = {_normalized_path(path): source for path, source in files.items()}
+    exports = {
+        path: _defined_symbols_for_language(source, _language_for_path(path))
+        for path, source in normalized_files.items()
+    }
+    imports_by_file: dict[str, list[str]] = {}
+    missing_imports: dict[str, list[str]] = {}
+    missing_symbols: dict[str, list[str]] = {}
+    for original_path, source in files.items():
+        path = _normalized_path(original_path)
+        language = _language_for_path(path)
+        imports = extract_imports(language, source)
+        imports_by_file[original_path] = sorted(record.name for record in imports)
+        missing: list[str] = []
+        unresolved: list[str] = []
+        for record in imports:
+            target, requested_symbols, is_local = _resolve_project_import(
+                path, source, record.name, record.kind, record.line, language, normalized_files
+            )
+            if not is_local:
+                continue
+            if target is None:
+                missing.append(record.name)
+                continue
+            for symbol in requested_symbols:
+                if symbol not in exports.get(target, set()):
+                    unresolved.append(f"{record.name}.{symbol}")
+        if missing:
+            missing_imports[original_path] = sorted(set(missing))
+        if unresolved:
+            missing_symbols[original_path] = sorted(set(unresolved))
     return FileImportGraph(
         files=sorted(files),
         imports_by_file=imports_by_file,
@@ -227,3 +287,146 @@ def _local_imports(source: str, module_to_file: dict[str, str], external_roots: 
 
 def _looks_local_root(root: str, external_roots: set[str]) -> bool:
     return bool(root) and root not in STDLIB_ROOTS and root not in external_roots
+
+
+def _normalized_path(path: str) -> str:
+    return str(PurePosixPath(path))
+
+
+def _language_for_path(path: str) -> str:
+    suffix = PurePosixPath(path).suffix.lower()
+    return {
+        ".py": "python",
+        ".pyi": "python",
+        ".c": "c",
+        ".h": "c",
+        ".cpp": "cpp",
+        ".cc": "cpp",
+        ".cxx": "cpp",
+        ".hpp": "cpp",
+        ".hh": "cpp",
+        ".hxx": "cpp",
+        ".rs": "rust",
+        ".js": "javascript",
+        ".mjs": "javascript",
+        ".cjs": "javascript",
+        ".jsx": "javascript",
+    }.get(suffix, "python")
+
+
+def _resolve_project_import(
+    path: str,
+    source: str,
+    name: str,
+    kind: str,
+    line: int,
+    language: str,
+    files: dict[str, str],
+) -> tuple[str | None, set[str], bool]:
+    """Return (target_file, requested_symbols, is_project_relative).
+
+    ``ImportRecord.kind`` defines which names are local candidates.  Packages
+    such as ``std``/``node:fs`` remain external so a generated project is not
+    rejected merely because its toolchain dependency is absent from the file map.
+    """
+    if language in {"c", "cpp"} and kind == "header":
+        line_text = _line_at(source, line)
+        if '"' not in line_text:
+            return None, set(), False
+        target = _find_file(_join(path, name), files) or _find_suffix(name, files)
+        return target, set(), True
+    if language == "rust" and kind == "crate":
+        if not name.startswith(("crate::", "self::", "super::")):
+            return None, set(), False
+        target, remaining = _resolve_rust_path(path, name, files)
+        return target, ({remaining} if remaining else set()), True
+    if language == "javascript" and kind in {"module", "require"}:
+        if not name.startswith(("./", "../", "/")):
+            return None, set(), False
+        target = _resolve_javascript_path(path, name, files)
+        return target, _javascript_imported_symbols(_line_at(source, line), name), True
+    return None, set(), False
+
+
+def _line_at(source: str, line: int) -> str:
+    lines = source.splitlines()
+    return lines[line - 1] if 0 < line <= len(lines) else ""
+
+
+def _join(path: str, target: str) -> str:
+    return str((PurePosixPath(path).parent / target))
+
+
+def _find_file(candidate: str, files: dict[str, str]) -> str | None:
+    normalized = _normalized_path(candidate)
+    return normalized if normalized in files else None
+
+
+def _find_suffix(name: str, files: dict[str, str]) -> str | None:
+    matches = [path for path in files if path == name or path.endswith("/" + name)]
+    return matches[0] if len(matches) == 1 else None
+
+
+def _resolve_rust_path(path: str, name: str, files: dict[str, str]) -> tuple[str | None, str]:
+    parts = [part for part in name.split("::") if part and part not in {"crate", "self", "super"}]
+    base = PurePosixPath(path).parent
+    if name.startswith("super::"):
+        base = base.parent
+    # The longest matching module prefix belongs to the generated project;
+    # any remaining final segment is an imported symbol to validate.
+    for length in range(len(parts), 0, -1):
+        module = PurePosixPath(*parts[:length])
+        for candidate in (base / module.with_suffix(".rs"), base / module / "mod.rs"):
+            target = _find_file(str(candidate), files)
+            if target is not None:
+                return target, "::".join(parts[length:]).split("::", 1)[0]
+    return None, ""
+
+
+def _resolve_javascript_path(path: str, name: str, files: dict[str, str]) -> str | None:
+    raw = _join(path, name)
+    pure = PurePosixPath(raw)
+    candidates = [pure]
+    if not pure.suffix:
+        candidates.extend(pure.with_suffix(suffix) for suffix in (".js", ".mjs", ".cjs"))
+        candidates.extend(pure / item for item in ("index.js", "index.mjs", "index.cjs"))
+    for candidate in candidates:
+        target = _find_file(str(candidate), files)
+        if target is not None:
+            return target
+    return None
+
+
+def _javascript_imported_symbols(line: str, module_name: str) -> set[str]:
+    if module_name not in line:
+        return set()
+    match = re.search(r"import\s*\{([^}]+)\}\s*from", line)
+    if match:
+        return {
+            item.strip().split(" as ", 1)[0].strip()
+            for item in match.group(1).split(",")
+            if item.strip()
+        }
+    match = re.search(r"(?:const|let|var)\s*\{([^}]+)\}\s*=\s*require", line)
+    if match:
+        return {
+            item.strip().split(":", 1)[0].strip()
+            for item in match.group(1).split(",")
+            if item.strip()
+        }
+    return set()
+
+
+def _defined_symbols_for_language(source: str, language: str) -> set[str]:
+    if language == "python":
+        return _defined_symbols(source)
+    if language == "rust":
+        return set(re.findall(r"\bpub\s+(?:fn|struct|enum|trait|const|static|mod)\s+([A-Za-z_]\w*)", source))
+    if language == "javascript":
+        symbols = set(
+            re.findall(r"\bexport\s+(?:default\s+)?(?:async\s+)?(?:function|class|const|let|var)\s+([A-Za-z_$][\w$]*)", source)
+        )
+        for names in re.findall(r"\bexport\s*\{([^}]+)\}", source):
+            symbols.update(item.strip().split(" as ", 1)[0].strip() for item in names.split(",") if item.strip())
+        return symbols
+    return set()

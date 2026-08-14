@@ -24,15 +24,14 @@ BRANCH_TYPES: dict[str, set[str]] = {
 DECISION_EXTRA = {"case_statement", "conditional_expression", "catch_clause"}
 LOGICAL_OPERATORS = {"&&", "||"}
 
-# Security-focused denylist of unsafe C/C++ APIs (documented; extend as needed).
-UNSAFE_CALLS = {
-    "gets",
-    "strcpy",
-    "strcat",
-    "sprintf",
-    "vsprintf",
-    "system",
-    "popen",
+# Fast pre-filter for the canonical risk-category table.  The table remains
+# authoritative; this makes the language-specific dangerous forms explicit to
+# the structural traversal as well.
+UNSAFE_CALLS: dict[str, set[str]] = {
+    "c": {"gets", "strcpy", "strcat", "sprintf", "vsprintf", "system", "popen"},
+    "cpp": {"gets", "strcpy", "strcat", "sprintf", "vsprintf", "system", "popen"},
+    "rust": {"std::mem::transmute", "transmute"},
+    "javascript": {"eval", "Function"},
 }
 
 
@@ -43,6 +42,7 @@ class TreeSitterStructural:
     decision_points: int = 0
     branch_count: int = 0
     unsafe_calls: list[str] = field(default_factory=list)
+    constructs: list[tuple[str, int]] = field(default_factory=list)
 
 
 def _loop_types(language: str) -> set[str]:
@@ -97,8 +97,15 @@ def decompose(language: str, source: str) -> TreeSitterStructural:
                     state.decision_points += 1
         elif node_type == "call_expression":
             name = _callee_name(node.child_by_field_name("function"))
-            if name in UNSAFE_CALLS:
+            if name in UNSAFE_CALLS.get(language, set()):
                 state.unsafe_calls.append(name)
+        elif node_type == "new_expression":
+            name = _callee_name(node.child_by_field_name("constructor"))
+            if name in UNSAFE_CALLS.get(language, set()):
+                state.unsafe_calls.append(name)
+        elif language == "rust" and node_type == "unsafe_block":
+            line = node.start_point[0] + 1 if hasattr(node, "start_point") else 0
+            state.constructs.append(("unsafe", line))
         for child in node.children:
             visit(child, current_path)
 
@@ -167,13 +174,14 @@ class TreeSitterHazardsEngine(_TreeSitterEngine):
 
     def scan(self, source: str) -> list[EngineFinding]:
         from engines.import_extractors import extract_imports
-        from engines.import_risk import match_call_risks, match_import_risks
+        from engines.import_risk import match_call_risks, match_construct_risks, match_import_risks
         from engines.base import EngineDiagnostic
 
         state = decompose(self.language, source)
         imports = extract_imports(self.language, source)
         hits = match_import_risks(self.language, imports)
         call_sites = [(name, 0) for name in state.unsafe_calls]
+        hits.extend(match_construct_risks(self.language, state.constructs))
         # Also collect all call names from decompose path (unsafe_calls already filtered
         # by legacy set during traverse). Re-scan via risk table using those names and
         # a secondary full call walk for category coverage beyond UNSAFE_CALLS.
@@ -189,8 +197,9 @@ class TreeSitterHazardsEngine(_TreeSitterEngine):
             calls: list[tuple[str, int]] = []
 
             def visit(node):
-                if node.type == "call_expression":
-                    name = _callee_name(node.child_by_field_name("function"))
+                if node.type in {"call_expression", "new_expression"}:
+                    field = "function" if node.type == "call_expression" else "constructor"
+                    name = _callee_name(node.child_by_field_name(field))
                     if name:
                         line = node.start_point[0] + 1 if hasattr(node, "start_point") else 0
                         calls.append((name, line))

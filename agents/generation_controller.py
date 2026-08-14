@@ -202,7 +202,7 @@ class GenerationController(BaseAgent):
             self.event_sink(dict(event))
 
     def _emit_compilation_event(self, findings: list[EngineFinding]) -> None:
-        if (self.language or "").strip().lower() not in {"c", "cpp"}:
+        if (self.language or "").strip().lower() not in {"c", "cpp", "rust", "javascript", "js"}:
             return
         compilation = [
             finding

@@ -1026,13 +1026,13 @@ class HistorianLearningTests(unittest.TestCase):
 
 
 class ControllerIntegrationTests(unittest.TestCase):
-    def test_unsupported_language_routes_to_manual_review(self) -> None:
+    def test_unregistered_language_routes_to_manual_review(self) -> None:
         controller = GenerationController(
             max_retries=0,
             draft_supplier=lambda _prompt: "fn main() {}",
-            language="rust",
+            language="go",
         )
-        result = controller.run(target="rust-draft", initial_prompt="generate")
+        result = controller.run(target="go-draft", initial_prompt="generate")
         self.assertEqual(result.payload["final_status"], "manual_review_required")
         violations = result.payload["attempts"][0]["validation"]["violations"]
         self.assertEqual(violations[0]["kind"], "parse_error")

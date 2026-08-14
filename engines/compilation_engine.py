@@ -9,7 +9,7 @@ from engines.base import BaseEngine, EngineFinding
 
 
 class CompilationEngine(BaseEngine):
-    """Strict, timeout-bounded C/C++ syntax and warning gate."""
+    """Timeout-bounded syntax/build gate for compiled and interpreted drafts."""
 
     name = "engine-compilation"
 
@@ -21,8 +21,10 @@ class CompilationEngine(BaseEngine):
         compiler: str | None = None,
     ) -> None:
         normalized = language.strip().lower()
-        if normalized not in {"c", "cpp"}:
-            raise ValueError("CompilationEngine supports only c and cpp")
+        aliases = {"c++": "cpp", "cxx": "cpp", "rs": "rust", "js": "javascript"}
+        normalized = aliases.get(normalized, normalized)
+        if normalized not in {"c", "cpp", "rust", "javascript"}:
+            raise ValueError("CompilationEngine supports c, cpp, rust, and javascript")
         self.language = normalized
         self.timeout_seconds = timeout_seconds
         self.compiler = compiler
@@ -35,7 +37,7 @@ class CompilationEngine(BaseEngine):
                     engine=self.name,
                     severity="Low",
                     summary="Compilation gate skipped",
-                    details=f"No C/C++ compiler is available for {self.language}.",
+                    details=f"No syntax/build tool is available for {self.language}.",
                     metrics={
                         "compile_status": "skipped",
                         "language": self.language,
@@ -43,22 +45,16 @@ class CompilationEngine(BaseEngine):
                 )
             ]
 
-        suffix = ".c" if self.language == "c" else ".cpp"
+        suffix = {
+            "c": ".c",
+            "cpp": ".cpp",
+            "rust": ".rs",
+            "javascript": ".js",
+        }[self.language]
         with tempfile.TemporaryDirectory(prefix="harness-compile-") as temp_dir:
             source_path = Path(temp_dir) / f"draft{suffix}"
             source_path.write_text(source, encoding="utf-8")
-            command = [
-                compiler,
-                "-fsyntax-only",
-                "-Wall",
-                "-Wextra",
-                "-Werror",
-                str(source_path),
-            ]
-            if self.language == "cpp":
-                command.insert(1, "-std=c++17")
-            else:
-                command.insert(1, "-std=c11")
+            command = self._command(compiler, source_path, Path(temp_dir))
             try:
                 completed = subprocess.run(
                     command,
@@ -105,12 +101,35 @@ class CompilationEngine(BaseEngine):
         ]
 
     def _find_compiler(self) -> str | None:
-        candidates = (
-            ("clang++", "g++")
-            if self.language == "cpp"
-            else ("clang", "gcc")
-        )
+        candidates = {
+            "c": ("clang", "gcc"),
+            "cpp": ("clang++", "g++"),
+            "rust": ("rustc",),
+            "javascript": ("node",),
+        }[self.language]
         return next(
             (resolved for name in candidates if (resolved := shutil.which(name))),
             None,
         )
+
+    def _command(self, tool: str, source_path: Path, temp_dir: Path) -> list[str]:
+        if self.language == "c":
+            return [tool, "-std=c11", "-fsyntax-only", "-Wall", "-Wextra", "-Werror", str(source_path)]
+        if self.language == "cpp":
+            return [tool, "-std=c++17", "-fsyntax-only", "-Wall", "-Wextra", "-Werror", str(source_path)]
+        if self.language == "rust":
+            # A library crate lets contract fragments compile without forcing a
+            # generated ``main`` function, while still type-checking the draft.
+            return [
+                tool,
+                "--edition",
+                "2021",
+                "--crate-type",
+                "lib",
+                "--emit",
+                "metadata",
+                "-o",
+                str(temp_dir / "draft.rmeta"),
+                str(source_path),
+            ]
+        return [tool, "--check", str(source_path)]
