@@ -86,7 +86,7 @@ definition of the product or controller behavior.
 | Structured-spec applications | Architect-ordered contract queues carry accepted field types and method arities forward, validate imports per contract, assemble one Python program, and run contract examples plus the headless smoke test outside the harness process with sanitized environments and disposable working directories. |
 | Review evidence | Optional run artifacts preserve prompts, attempts, diffs, findings, execution traces, validation results, token estimates, and timelines. |
 | Human review TUI | The Rust `ratatui` client is the default terminal interface. It uses a non-blocking JSONL bridge and in-process Mermaid/image rendering. The older Textual console remains an artifact-review fallback. |
-| C/C++ compilation gate | Registered C/C++ drafts run a strict, timeout-bounded compiler pass (`-Wall -Wextra -Werror -fsyntax-only`) before later validation. Optional tree-sitter engines add structural checks when installed. |
+| Multi-language parser and engines | Python has the full AST engine suite. C/C++ add strict compiler gates; C/C++, Rust, and JavaScript add tree-sitter parsing plus structural/import-risk checks whenever their installed grammar is available. Rust and JavaScript retain isolated sandbox execution even when that optional parser dependency is absent. |
 | Algorithmic profiling | An opt-in behavioral profiler measures repeated callable variants, reports median/spread and optional hardware counters, and only identifies a faster ordering beyond a documented noise floor. |
 | Compute Shield metrics | A task-level evaluator reads recorded model-token telemetry from paired artifacts, preserves each comparison row, and reports the exact aggregate delta; it is evidence, not an acceptance gate. |
 | API boundary | FastAPI exposes synchronous runs, asynchronous submission, persisted job status, and health checks. |
@@ -649,7 +649,7 @@ Those outcomes are recorded in artifact metadata and the contract queue results.
 | `agents/plan_mode.py` | Converts raw user intent and optional repository context into behavior examples, constraints, graph context, and `TaskIR` |
 | `agents/engine_registry.py` | Routes parsed source to the registered engine set |
 | `agents/job_store.py` | File-locked append-only JSONL job store used by asynchronous run/status endpoints |
-| `agents/parse_contract.py` | Language detection and parser gate |
+| `agents/parse_contract.py` | Language detection and parser gate for Python, C/C++, Rust, and JavaScript |
 | `agents/repair_strategy.py` | Converts violations into scoped repair instructions |
 | `agents/template_registry.py` | Optional injected template-route selector, with no built-in app-specific route |
 | `harness_kernel/task_ir.py` | Structured task/spec handoff types |
@@ -660,6 +660,7 @@ Those outcomes are recorded in artifact metadata and the contract queue results.
 | `harness_kernel/profiling.py` | Opt-in repeated behavioral comparison with a documented noise floor |
 | `harness_kernel/compute_shield.py` | Paired artifact-token accounting and aggregate delta |
 | `engines/compilation_engine.py` | Strict Clang/GCC compilation gate for C/C++ |
+| `engines/import_extractors.py` | Shared Python, C/C++, Rust, and JavaScript import extraction |
 | `engines/` | Remaining static analysis engines |
 | `validation/behavior.py` | Isolated behavior execution, `ExecutionTrace`, and derived behavior results |
 | `validation/debugger.py` | Bounded trace-to-spec repair hints for debugger mode |

@@ -91,11 +91,12 @@ class ParseContractTests(unittest.TestCase):
         self.assertEqual(result.finding.summary, "Draft parse failure")
 
     def test_unknown_language_is_gated(self) -> None:
-        # A language with no registered engine set stays gated (C/C++ are now supported
-        # via tree-sitter, so use a genuinely unregistered language here).
-        result = ParseContractAgent().parse("fn main() {}", language="rust")
+        # A language with no registered engine set stays gated. Rust and
+        # JavaScript are tree-sitter-capable, so use a genuinely unregistered
+        # language here.
+        result = ParseContractAgent().parse("package main", language="go")
         self.assertIsInstance(result, ParseFailure)
-        self.assertEqual(result.language, "rust")
+        self.assertEqual(result.language, "go")
         self.assertEqual(result.finding.summary, "Unsupported language")
         self.assertEqual(result.finding.engine, "engine-parse-contract")
 
@@ -126,7 +127,7 @@ class EngineRegistryTests(unittest.TestCase):
         self.assertEqual(registry_summaries, direct_summaries)
 
     def test_unknown_language_returns_no_findings(self) -> None:
-        self.assertEqual(EngineRegistry.default().findings_for("anything", "rust"), [])
+        self.assertEqual(EngineRegistry.default().findings_for("anything", "go"), [])
 
     def test_register_adds_language(self) -> None:
         registry = EngineRegistry()

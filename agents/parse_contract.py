@@ -10,11 +10,24 @@ from engines.base import EngineFinding
 
 PARSE_CONTRACT_ENGINE = "engine-parse-contract"
 SUPPORTED_LANGUAGES = {"python"}
-TREE_SITTER_LANGUAGES = {"c", "cpp"}
+TREE_SITTER_LANGUAGES = {"c", "cpp", "rust", "javascript"}
 
 PYTHON_EXTENSIONS = (".py", ".pyi")
 C_EXTENSIONS = (".c", ".h")
 CPP_EXTENSIONS = (".cpp", ".cc", ".cxx", ".hpp", ".hh", ".hxx")
+RUST_EXTENSIONS = (".rs",)
+JAVASCRIPT_EXTENSIONS = (".js", ".mjs", ".cjs", ".jsx")
+
+LANGUAGE_ALIASES = {
+    "py": "python",
+    "python3": "python",
+    "c++": "cpp",
+    "cxx": "cpp",
+    "rs": "rust",
+    "js": "javascript",
+    "node": "javascript",
+    "nodejs": "javascript",
+}
 
 
 @dataclass
@@ -38,7 +51,8 @@ def detect_language(source: str, language: str | None = None, filename: str | No
     Python-only flows are unchanged.
     """
     if language:
-        return language.strip().lower()
+        normalized = language.strip().lower()
+        return LANGUAGE_ALIASES.get(normalized, normalized)
     if filename:
         lowered = filename.lower()
         if lowered.endswith(PYTHON_EXTENSIONS):
@@ -47,6 +61,10 @@ def detect_language(source: str, language: str | None = None, filename: str | No
             return "cpp"
         if lowered.endswith(C_EXTENSIONS):
             return "c"
+        if lowered.endswith(RUST_EXTENSIONS):
+            return "rust"
+        if lowered.endswith(JAVASCRIPT_EXTENSIONS):
+            return "javascript"
     return _sniff_language(source)
 
 CPP_SIGNALS = (
@@ -59,8 +77,31 @@ CPP_SIGNALS = (
     "::",
 )
 
+RUST_SIGNALS = (
+    "fn ",
+    "let mut ",
+    "impl ",
+    "pub ",
+    "use ",
+    "::",
+)
+
+JAVASCRIPT_SIGNALS = (
+    "function ",
+    "const ",
+    "let ",
+    "=>",
+    "require(",
+    "module.exports",
+)
+
 
 def _sniff_language(source: str) -> str:
+    """Infer a supported language from distinctive syntax, without parsing it.
+
+    The signals intentionally favour Rust/JavaScript markers before the looser
+    C++ ``::`` marker.  Explicit language and filename hints still win.
+    """
     c_signals = 0
     if "#include" in source:
         c_signals += 2
@@ -68,6 +109,17 @@ def _sniff_language(source: str) -> str:
         c_signals += 1
 
     cpp_signals = sum(1 for token in CPP_SIGNALS if token in source)
+    rust_keywords = {"fn ", "let mut ", "impl ", "pub ", "use "}
+    rust_signals = sum(
+        2 if token in rust_keywords else 1
+        for token in RUST_SIGNALS
+        if token in source
+    )
+    javascript_signals = sum(
+        2 if token in {"function ", "const ", "=>", "require(", "module.exports"} else 1
+        for token in JAVASCRIPT_SIGNALS
+        if token in source
+    )
 
     python_signals = 0
     for line in source.splitlines():
@@ -76,11 +128,20 @@ def _sniff_language(source: str) -> str:
             python_signals += 2
         if stripped.endswith(":"):
             python_signals += 1
-    if cpp_signals and (c_signals or cpp_signals) >= python_signals:
+    # Rust source commonly uses ``::`` too; it must be considered before C++.
+    if rust_signals > max(cpp_signals, c_signals, python_signals, javascript_signals):
+        return "rust"
+    if javascript_signals > max(cpp_signals, c_signals, python_signals, rust_signals):
+        return "javascript"
+    if cpp_signals and (c_signals or cpp_signals) >= max(python_signals, rust_signals, javascript_signals):
         return "cpp"
 
-    if c_signals > python_signals:
+    if c_signals > max(python_signals, javascript_signals):
         return "c"
+    if rust_signals > python_signals:
+        return "rust"
+    if javascript_signals > python_signals:
+        return "javascript"
     return "python"
 
 
@@ -137,7 +198,7 @@ class ParseContractAgent(BaseAgent):
         try:
             from engines import treesitter_support
 
-            if not treesitter_support.is_available():
+            if not treesitter_support.is_language_available(language):
                 return self._unsupported(language)
             tree = treesitter_support.parse_tree(language, source)
             root = tree.root_node

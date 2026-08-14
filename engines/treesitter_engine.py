@@ -11,8 +11,15 @@ from engines.treesitter_support import parse_tree
 LOOP_TYPES: dict[str, set[str]] = {
     "c": {"for_statement", "while_statement", "do_statement"},
     "cpp": {"for_statement", "while_statement", "do_statement", "for_range_loop"},
+    "rust": {"for_expression", "while_expression", "loop_expression"},
+    "javascript": {"for_statement", "while_statement", "do_statement", "for_in_statement"},
 }
-BRANCH_TYPES = {"if_statement"}
+BRANCH_TYPES: dict[str, set[str]] = {
+    "c": {"if_statement"},
+    "cpp": {"if_statement"},
+    "rust": {"if_expression", "match_expression"},
+    "javascript": {"if_statement", "switch_statement"},
+}
 # Extra decision points beyond loops/ifs (switch cases, ternary, C++ exception handlers).
 DECISION_EXTRA = {"case_statement", "conditional_expression", "catch_clause"}
 LOGICAL_OPERATORS = {"&&", "||"}
@@ -42,22 +49,32 @@ def _loop_types(language: str) -> set[str]:
     return LOOP_TYPES.get(language, LOOP_TYPES["c"])
 
 
+def _branch_types(language: str) -> set[str]:
+    return BRANCH_TYPES.get(language, BRANCH_TYPES["c"])
+
+
 def _callee_name(node: Any) -> str:
     if node is None:
         return ""
     if node.type == "identifier":
         return node.text.decode("utf-8", "replace")
     # Qualified / scoped / member calls: take the trailing identifier.
-    if node.type in {"field_expression", "scoped_identifier", "qualified_identifier"}:
-        identifiers = [child for child in node.children if child.type == "identifier"]
-        if identifiers:
-            return identifiers[-1].text.decode("utf-8", "replace")
+    if node.type in {
+        "field_expression",
+        "scoped_identifier",
+        "qualified_identifier",
+        "member_expression",
+    }:
+        text = node.text.decode("utf-8", "replace").strip()
+        if text:
+            return text
     return ""
 
 
 def decompose(language: str, source: str) -> TreeSitterStructural:
     tree = parse_tree(language, source)
     loops = _loop_types(language)
+    branches = _branch_types(language)
     state = TreeSitterStructural()
 
     def visit(node: Any, loop_path: list[str]) -> None:
@@ -69,7 +86,7 @@ def decompose(language: str, source: str) -> TreeSitterStructural:
                 state.max_loop_depth = len(current_path)
                 state.deepest_loop_types = list(current_path)
             state.decision_points += 1
-        elif node_type in BRANCH_TYPES:
+        elif node_type in branches:
             state.decision_points += 1
             state.branch_count += 1
         elif node_type in DECISION_EXTRA:

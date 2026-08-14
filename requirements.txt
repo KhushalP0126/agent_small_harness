@@ -1,4 +1,4 @@
-# Optional dependency for multi-language (C/C++) structural analysis via tree-sitter.
+# Optional dependency for multi-language structural analysis via tree-sitter.
 # Python analysis uses the stdlib `ast` and needs none of these. If these are not
 # installed, C/C++ are gracefully gated by the parse contract (routed to manual review).
 tree-sitter==0.25.2

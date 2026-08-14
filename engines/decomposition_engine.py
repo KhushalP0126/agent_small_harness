@@ -106,6 +106,7 @@ class StateFlowRiskRecord:
 
 @dataclass
 class StructuralIR:
+    language: str = "python"
     functions: list[FunctionRecord] = field(default_factory=list)
     loops: list[LoopRecord] = field(default_factory=list)
     branches: list[BranchRecord] = field(default_factory=list)
@@ -548,8 +549,28 @@ class _IRBuilder(ast.NodeVisitor):
 class DecompositionEngine:
     name = "engine-0-decomposition"
 
-    def decompose(self, source: str) -> StructuralIR:
-        """Build StructuralIR in a single Python AST pass, including imports."""
+    def decompose(self, source: str, language: str = "python") -> StructuralIR:
+        """Build language-aware structural data without parsing non-Python as Python.
+
+        Python retains the rich stdlib-AST analysis used by its engine suite.
+        Tree-sitter languages expose the shared import IR here; their structural
+        loops, branches, and hazards are analysed by ``treesitter_engine``.
+        """
+        normalized = {
+            "c++": "cpp",
+            "cxx": "cpp",
+            "rs": "rust",
+            "js": "javascript",
+            "node": "javascript",
+            "nodejs": "javascript",
+        }.get(language.strip().lower(), language.strip().lower())
+        if normalized != "python":
+            from engines.import_extractors import extract_imports
+
+            return StructuralIR(
+                language=normalized,
+                imports=extract_imports(normalized, source),
+            )
         tree = ast.parse(source)
         builder = _IRBuilder(source)
         builder.visit(tree)

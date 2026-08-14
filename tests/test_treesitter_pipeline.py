@@ -86,6 +86,18 @@ class TreeSitterRegistryAndControllerTests(unittest.TestCase):
             ],
         )
 
+    def test_registry_adds_rust_and_javascript_when_grammars_are_available(self) -> None:
+        from unittest.mock import patch
+
+        with patch("engines.treesitter_support.is_language_available", return_value=True):
+            registry = EngineRegistry.default()
+        for language in ("rust", "javascript"):
+            self.assertTrue(registry.has_language(language))
+            self.assertEqual(
+                [engine.name for engine in registry.engines_for(language)],
+                ["engine-1-math", "engine-2-hazards", "engine-3-branching"],
+            )
+
     def test_controller_flags_complex_c(self) -> None:
         source = (C_DIR / "nested_branchy.c").read_text()
         controller = GenerationController(
@@ -134,9 +146,31 @@ class GatingContractTests(unittest.TestCase):
     """These must hold even when tree-sitter is absent."""
 
     def test_unknown_language_is_unsupported(self) -> None:
-        result = ParseContractAgent().parse("fn main() {}", language="rust")
+        result = ParseContractAgent().parse("package main", language="go")
         self.assertIsInstance(result, ParseFailure)
         self.assertEqual(result.finding.summary, "Unsupported language")
+
+    def test_detects_rust_and_javascript_without_tree_sitter(self) -> None:
+        self.assertEqual(detect_language("fn main() { let mut n = 0; n += 1; }"), "rust")
+        self.assertEqual(
+            detect_language("const answer = () => require('node:fs');"),
+            "javascript",
+        )
+        self.assertEqual(detect_language("", filename="src/main.rs"), "rust")
+        self.assertEqual(detect_language("", filename="app.mjs"), "javascript")
+
+    def test_decomposition_extracts_non_python_imports_without_python_ast(self) -> None:
+        from engines.decomposition_engine import DecompositionEngine
+
+        rust = DecompositionEngine().decompose("use std::fs;\n", language="rust")
+        javascript = DecompositionEngine().decompose(
+            "const fs = require('node:fs');\n",
+            language="javascript",
+        )
+        self.assertEqual(rust.language, "rust")
+        self.assertEqual([item.name for item in rust.imports], ["std::fs"])
+        self.assertEqual(javascript.language, "javascript")
+        self.assertEqual([item.name for item in javascript.imports], ["node:fs"])
 
     def test_empty_registry_returns_no_findings(self) -> None:
         self.assertEqual(EngineRegistry().findings_for("anything", "c"), [])

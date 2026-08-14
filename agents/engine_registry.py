@@ -40,7 +40,8 @@ class EngineRegistry:
         registry = cls(tool_registry=tool_registry)
         registry.register("python", python_engine_factories())
         # Strict compilation is useful even when optional tree-sitter grammars
-        # are unavailable. Structural C/C++ engines are appended when present.
+        # are unavailable. Structural engines are appended per language when
+        # that language's grammar is present.
         from engines.compilation_engine import CompilationEngine
 
         for language in ("c", "cpp"):
@@ -51,17 +52,16 @@ class EngineRegistry:
         try:
             from engines import treesitter_support
 
-            if treesitter_support.is_available():
+            for language in ("c", "cpp", "rust", "javascript"):
+                if not treesitter_support.is_language_available(language):
+                    continue
                 from engines.treesitter_engine import treesitter_engine_factories
 
-                for language in ("c", "cpp"):
-                    registry.register(
-                        language,
-                        [
-                            lambda language=language: CompilationEngine(language),
-                            *treesitter_engine_factories(language),
-                        ],
-                    )
+                factories: list[EngineFactory] = []
+                if language in {"c", "cpp"}:
+                    factories.append(lambda language=language: CompilationEngine(language))
+                factories.extend(treesitter_engine_factories(language))
+                registry.register(language, factories)
         except Exception:
             pass
         return registry
