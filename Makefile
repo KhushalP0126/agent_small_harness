@@ -42,7 +42,7 @@ IMAGE ?= agent-small-harness:local
 ARTIFACT_ARGS = $(if $(filter 1 true yes,$(SAVE_ARTIFACTS)),--save-artifacts --artifact-root "$(ARTIFACT_ROOT)",)
 DOC_ARGS = --doc-agent "$(DOC_AGENT)" $(if $(DOC_MODEL),--doc-model "$(DOC_MODEL)",) $(if $(DOC_OUTPUT),--doc-output "$(DOC_OUTPUT)",)
 
-.PHONY: help bootstrap setup install install-formal install-kernel env-path init-env api-dev tui rust-tui tui_rust start test-rust check research-check research-agent-benchmark research-fixture-deepseek research-fixture-qwen research-report research-model-comparison record-live-session research-compute-shield docker-build sandbox-run agent-benchmark test test-engine-expansion compute-shield test-claude-fixes test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-fixture resume-coding-capability test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-worker-limit-architect resume-worker-limit test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-python-ladder-stateful test-python-ladder-stateful-architect test-plan-mode-ladder test-raw-vs-harness test-raw-vs-harness-architect test-raw-vs-harness-repeated test-raw-vs-harness-ablation test-formal-experiment structured-spec structured-spec-plan resume-structured-spec repo-map review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library tool-agent ollama-smoke inference-smoke live-repair day1 clean-history clean-cache clean-generated
+.PHONY: help bootstrap setup install install-formal install-kernel env-path init-env api-dev tui rust-tui tui_rust start test-rust check research-check research-agent-benchmark research-fixture-deepseek research-fixture-qwen research-report research-model-comparison record-live-session research-compute-shield docker-build sandbox-run agent-benchmark test test-engine-expansion compute-shield test-claude-fixes test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-fixture resume-coding-capability test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-worker-limit-architect resume-worker-limit test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-python-ladder-stateful test-python-ladder-stateful-architect test-plan-mode-ladder test-raw-vs-harness test-raw-vs-harness-architect test-raw-vs-harness-repeated test-raw-vs-harness-ablation test-formal-experiment formal-counterexample-smoke structured-spec structured-spec-plan resume-structured-spec repo-map review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library tool-agent ollama-smoke inference-smoke live-repair day1 clean-history clean-cache clean-generated
 
 help:
 	@printf "agent-coder_structure\n\n"
@@ -62,6 +62,7 @@ help:
 	@printf "\nValidation and maintenance:\n"
 	@printf "  make test                        Run the full Python test suite\n"
 	@printf "  make test-rust                   Run Rust protocol, UI-state, and renderer tests\n"
+	@printf "  make formal-counterexample-smoke Verify CrossHair counterexamples reach the repair surface\n"
 	@printf "  make docker-build                Build the isolated execution image\n"
 	@printf "  make sandbox-run SOURCE=... LANGUAGE=python  Run source without network\n"
 	@printf "  make clean-cache                 Remove Python test caches (keeps artifacts and Rust build cache)\n"
@@ -231,6 +232,9 @@ test-raw-vs-harness-ablation:
 
 test-formal-experiment:
 	$(PYTHON) scripts/run_formal_experiment.py
+
+formal-counterexample-smoke:
+	$(PYTHON) scripts/run_formal_experiment.py --bad
 
 structured-spec:
 	@test -n "$(SPEC_PATH)" || (echo "Set SPEC_PATH, e.g. make structured-spec SPEC_PATH=examples/specs/my_spec.md" && exit 1)

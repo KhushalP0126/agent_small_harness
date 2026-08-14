@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING, Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from prompt.budget import estimate_tokens
+
 if TYPE_CHECKING:
     from harness_kernel.tool_registry import ToolRegistry
 
@@ -103,6 +105,7 @@ class OllamaModelSupplier:
         self.model = model
         self.config = config or OllamaGenerationConfig()
         self.system_prompt = system_prompt
+        self.telemetry: list[dict[str, int | str | float]] = []
         if tool_registry is None:
             from harness_kernel.tool_handlers import build_default_tool_registry
 
@@ -116,6 +119,7 @@ class OllamaModelSupplier:
             config=self._config_for_prompt(prompt),
             system=self.system_prompt,
         )
+        self._record_usage("draft", prompt)
         return self._extract_code(response)
 
     def repair_draft(self, draft: str, retry_prompt: str) -> str:
@@ -129,7 +133,28 @@ class OllamaModelSupplier:
             config=self._config_for_prompt(prompt),
             system=self.system_prompt,
         )
+        self._record_usage("repair", prompt)
         return self._extract_code(response)
+
+    def _record_usage(self, stage: str, prompt: str) -> None:
+        usage = getattr(self.client, "last_usage", {})
+        if not isinstance(usage, dict):
+            usage = {}
+        prompt_tokens = int(usage.get("prompt_tokens", estimate_tokens(prompt)) or 0)
+        completion_tokens = int(usage.get("completion_tokens", 0) or 0)
+        self.telemetry.append(
+            {
+                "stage": stage,
+                "model": self.model,
+                "prompt_tokens": prompt_tokens,
+                "completion_tokens": completion_tokens,
+                "total_tokens": int(
+                    usage.get("total_tokens", prompt_tokens + completion_tokens)
+                    or 0
+                ),
+                "estimated_cost_usd": 0.0,
+            }
+        )
 
     def _generate(
         self,

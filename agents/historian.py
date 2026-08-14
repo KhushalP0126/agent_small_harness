@@ -32,6 +32,44 @@ _MATCH_STOPWORDS = {
 }
 
 
+def _nonnegative_int(value: object) -> int:
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _nonnegative_float(value: object) -> float:
+    try:
+        return max(0.0, float(value))
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _route_metrics(records: list[dict]) -> dict:
+    """Summarize observed outcome and cost for one execution route."""
+    total = len(records)
+    completed = sum(1 for record in records if record.get("final_status") == "completed")
+    costs = [
+        _nonnegative_float(record.get("estimated_model_cost_usd"))
+        for record in records
+        if "estimated_model_cost_usd" in record
+    ]
+    tokens = [
+        _nonnegative_int(record.get("total_model_tokens"))
+        for record in records
+        if "total_model_tokens" in record
+    ]
+    return {
+        "total_runs": total,
+        "success_rate": 0.0 if total == 0 else completed / total,
+        "cost_observations": len(costs),
+        "avg_estimated_cost_usd": 0.0 if not costs else sum(costs) / len(costs),
+        "token_observations": len(tokens),
+        "avg_total_model_tokens": 0.0 if not tokens else sum(tokens) / len(tokens),
+    }
+
+
 class HistorianAgent(BaseAgent):
     """Loads lessons, records generations, and learns from repair sessions.
 
@@ -253,9 +291,13 @@ class HistorianAgent(BaseAgent):
         route_used: str = "",
         model: str = "",
         template_name: str = "",
+        model_usage: dict | None = None,
     ) -> dict:
         """Create a normalized labeled sample from a controller session."""
         classification = classification or {}
+        usage = model_usage or session.get("model_usage") or {}
+        if not isinstance(usage, dict):
+            usage = {}
         attempts = session.get("attempts", [])
         failed_engines: list[str] = []
         failed_kinds: list[str] = []
@@ -287,6 +329,10 @@ class HistorianAgent(BaseAgent):
             "route_used": route_used or session.get("route", ""),
             "model": model,
             "template": template_name,
+            "total_model_tokens": _nonnegative_int(usage.get("total_tokens", 0)),
+            "estimated_model_cost_usd": _nonnegative_float(
+                usage.get("estimated_cost_usd", 0.0)
+            ),
             "repair_attempts": max(0, len(attempts) - 1),
             "final_status": session.get("final_status", "unknown"),
             "failed_engines": sorted(set(failed_engines)),
@@ -363,6 +409,11 @@ class HistorianAgent(BaseAgent):
             failed_engines = Counter(engine for record in group for engine in record.get("failed_engines", []))
             failed_kinds = Counter(kind for record in group for kind in record.get("failed_kinds", []))
             routes = Counter(record.get("route_used", "") for record in group if record.get("route_used"))
+            route_records: dict[str, list[dict]] = defaultdict(list)
+            for record in group:
+                route = record.get("route_used", "")
+                if route:
+                    route_records[route].append(record)
             contribution_labels = Counter(
                 record.get("contribution", {}).get("label", "")
                 for record in group
@@ -401,6 +452,10 @@ class HistorianAgent(BaseAgent):
                 "top_failed_engine": failed_engines.most_common(1)[0][0] if failed_engines else "",
                 "top_failure_kind": failed_kinds.most_common(1)[0][0] if failed_kinds else "",
                 "best_observed_route": routes.most_common(1)[0][0] if routes else "",
+                "route_metrics": {
+                    route: _route_metrics(records)
+                    for route, records in sorted(route_records.items())
+                },
             }
         if stats_path is not None:
             stats_path.parent.mkdir(parents=True, exist_ok=True)

@@ -11,22 +11,24 @@ if str(ROOT) not in sys.path:
 from validation.formal import validate_with_crosshair
 
 
-GOOD_SOURCE = """
+GOOD_SOURCE = '''
 def clamp_value(value: int, lower: int, upper: int) -> int:
-    assert lower <= upper
+    """pre: lower <= upper
+    post: _ >= lower and _ <= upper
+    """
     result = min(max(value, lower), upper)
-    assert lower <= result <= upper
     return result
-""".strip()
+'''.strip()
 
 
-BAD_SOURCE = """
+BAD_SOURCE = '''
 def clamp_value(value: int, lower: int, upper: int) -> int:
-    assert lower <= upper
+    """pre: lower <= upper
+    post: _ >= lower and _ <= upper
+    """
     result = value
-    assert lower <= result <= upper
     return result
-""".strip()
+'''.strip()
 
 
 def main() -> int:
@@ -42,6 +44,8 @@ def main() -> int:
     print(f"CrossHair compliant: {result.is_compliant}")
     for issue in result.issues:
         print(f"- {issue.summary}: {issue.details}")
+        if issue.counterexample:
+            print(f"  Counterexample: {issue.counterexample}")
     return 0 if result.is_compliant or args.bad else 1
 
 

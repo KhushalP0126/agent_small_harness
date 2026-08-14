@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 import subprocess
 import sys
 import tempfile
@@ -17,6 +18,7 @@ class FormalIssue:
     tool: str
     summary: str
     details: str
+    counterexample: str = ""
 
 
 @dataclass
@@ -93,6 +95,7 @@ def validate_with_crosshair(
     )
     if completed.returncode == 0:
         return FormalResult(is_compliant=True)
+    counterexample = _crosshair_counterexample(output)
     return FormalResult(
         is_compliant=False,
         issues=[
@@ -100,6 +103,19 @@ def validate_with_crosshair(
                 tool="crosshair",
                 summary="CrossHair found a contract or assertion issue",
                 details=output or f"crosshair exited with code {completed.returncode}",
+                counterexample=counterexample,
             )
         ],
     )
+
+
+def _crosshair_counterexample(output: str) -> str:
+    """Return CrossHair's concrete failing call when its output provides one."""
+    for line in output.splitlines():
+        call = re.search(r"\bwhen calling\s+(.+)", line, flags=re.IGNORECASE)
+        if call:
+            return call.group(1).strip()
+        explicit = re.search(r"\bcounterexample\s*[:=]\s*(.+)", line, flags=re.IGNORECASE)
+        if explicit:
+            return explicit.group(1).strip()
+    return ""

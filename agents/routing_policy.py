@@ -56,10 +56,40 @@ class RoutingPolicyAgent(BaseAgent):
         candidate_keys.append(f"language:{classification.get('language', 'unknown')}")
         for key in candidate_keys:
             group = groups.get(key, {})
+            measured_route = self._best_measured_route(group)
+            if measured_route:
+                return measured_route
             route = group.get("best_observed_route", "")
             if route and group.get("success_rate", 0) >= 0.5:
                 return route
         return ""
+
+    @staticmethod
+    def _best_measured_route(group: dict) -> str:
+        """Choose a reliable route, preferring lower observed cost on ties.
+
+        Historic files without telemetry retain the legacy ``best_observed_route``
+        fallback above. A route must first clear the same 50% success floor;
+        cost never promotes an unreliable route merely because it is cheaper.
+        """
+        metrics = group.get("route_metrics", {})
+        if not isinstance(metrics, dict):
+            return ""
+        candidates: list[tuple[float, float, float, str]] = []
+        for route, sample in metrics.items():
+            if not isinstance(route, str) or not isinstance(sample, dict):
+                continue
+            success_rate = float(sample.get("success_rate", 0.0))
+            if success_rate < 0.5:
+                continue
+            has_cost = int(sample.get("cost_observations", 0)) > 0
+            cost = float(sample.get("avg_estimated_cost_usd", 0.0)) if has_cost else float("inf")
+            has_tokens = int(sample.get("token_observations", 0)) > 0
+            tokens = float(sample.get("avg_total_model_tokens", 0.0)) if has_tokens else float("inf")
+            candidates.append((-success_rate, cost, tokens, route))
+        if not candidates:
+            return ""
+        return min(candidates)[3]
 
     def run(
         self,

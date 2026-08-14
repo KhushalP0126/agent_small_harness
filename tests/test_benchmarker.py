@@ -38,7 +38,13 @@ from prompt.constraint_types import BranchConstraint, ConstraintBlock, LoopConst
 from prompt.retry_builder import build_retry_prompt, build_small_worker_retry_prompt
 from validation.behavior import BehaviorCase, FunctionBehaviorSpec, mixed_hard_case_spec, validate_function_behavior
 from validation.finding_aggregator import aggregate_violations
-from validation.formal import FormalIssue, FormalResult, validate_with_crosshair
+from validation.formal import (
+    FormalIssue,
+    FormalResult,
+    _crosshair_counterexample,
+    is_crosshair_available,
+    validate_with_crosshair,
+)
 from validation.policy import validate_findings
 from validation.types import ValidationResult, Violation
 from scripts.run_coding_capability import _behavior_spec, _build_prompt, _worker_contribution
@@ -1139,6 +1145,8 @@ def analyze(matrix):
         self.assertIn("return 1", response)
         self.assertEqual(stub_client.calls[0]["model"], DEFAULT_OLLAMA_MODEL)
         self.assertEqual(stub_client.calls[0]["config"].num_predict, 128)
+        self.assertEqual(supplier.telemetry[0]["stage"], "draft")
+        self.assertGreater(supplier.telemetry[0]["total_tokens"], 0)
 
     def test_ollama_supplier_extracts_fenced_python_code(self) -> None:
         class StubClient:
@@ -1406,6 +1414,10 @@ def analyze(matrix):
         result = validate_with_crosshair("def identity(x: int) -> int:\n    return x\n", timeout_seconds=0.1)
         self.assertTrue(result.is_compliant)
 
+    def test_crosshair_counterexample_extracts_concrete_call(self) -> None:
+        output = "candidate.py:3: error: false when calling identity(1) (which returns 0)"
+        self.assertEqual(_crosshair_counterexample(output), "identity(1) (which returns 0)")
+
     def test_generation_controller_blocks_formal_counterexample(self) -> None:
         source = "def identity(x: int) -> int:\n    return x\n"
         formal_result = FormalResult(
@@ -1415,6 +1427,7 @@ def analyze(matrix):
                     tool="crosshair",
                     summary="Counterexample found",
                     details="x=0 violates the postcondition",
+                    counterexample="identity(0) -> -1",
                 )
             ],
         )
@@ -1432,6 +1445,50 @@ def analyze(matrix):
         formal_validation = result.payload["attempts"][0]["formal_validation"]
         self.assertFalse(formal_validation["is_compliant"])
         self.assertEqual(result.payload["human_review"]["formal_issues"][0]["summary"], "Counterexample found")
+        self.assertEqual(
+            formal_validation["issues"][0]["counterexample"],
+            "identity(0) -> -1",
+        )
+
+    def test_retry_prompt_separates_formal_counterexample_from_generic_findings(self) -> None:
+        violation = Violation(
+            engine="formal-crosshair",
+            kind="formal_counterexample",
+            severity="error",
+            summary="Postcondition can fail",
+            rationale="CrossHair found a failing input.",
+            current_value="identity(0) -> -1",
+            allowed_value="identity(0) -> 0",
+            evidence={"issue": {"counterexample": "identity(0) -> -1"}},
+        )
+        prompt = build_retry_prompt("def identity(value):\n    return -1\n", [violation])
+        self.assertIn("Formal counterexample: identity(0) -> -1", prompt)
+
+    def test_crosshair_witness_reaches_real_controller_repair_prompt(self) -> None:
+        if not is_crosshair_available():
+            self.skipTest("CrossHair is not installed")
+        bad = '''
+def identity(value: int) -> int:
+    """post: _ == value"""
+    return 0
+'''.strip()
+        good = '''
+def identity(value: int) -> int:
+    """post: _ == value"""
+    return value
+'''.strip()
+        prompts: list[str] = []
+        controller = GenerationController(
+            max_retries=1,
+            draft_supplier=lambda _prompt: bad,
+            repair_supplier=lambda _draft, prompt: prompts.append(prompt) or good,
+            crosshair_enabled=True,
+        )
+        result = controller.run(target="formal-witness", initial_prompt="Generate identity.")
+        self.assertEqual(result.payload["final_status"], "completed")
+        self.assertTrue(prompts)
+        self.assertIn("Formal counterexample:", prompts[0])
+        self.assertIn("identity(", prompts[0])
 
     def test_build_ollama_controller_exposes_backend_hooks(self) -> None:
         controller = build_ollama_controller(max_retries=1)

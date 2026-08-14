@@ -480,6 +480,35 @@ class ScalabilityAgentTests(unittest.TestCase):
         self.assertEqual(route.worker, "library_context_first")
         self.assertEqual(route.reason, "selected from historian route statistics")
 
+    def test_routing_policy_prefers_lower_cost_when_success_rates_tie(self) -> None:
+        stats = {
+            "groups": {
+                "language:python": {
+                    "route_metrics": {
+                        "architect_llm": {
+                            "success_rate": 0.8,
+                            "cost_observations": 3,
+                            "avg_estimated_cost_usd": 0.16,
+                            "token_observations": 3,
+                            "avg_total_model_tokens": 1400,
+                        },
+                        "small_llm": {
+                            "success_rate": 0.8,
+                            "cost_observations": 3,
+                            "avg_estimated_cost_usd": 0.01,
+                            "token_observations": 3,
+                            "avg_total_model_tokens": 500,
+                        },
+                    }
+                }
+            }
+        }
+        route = RoutingPolicyAgent().decide(
+            {"task_type": "general_code", "language": "python", "libraries": []},
+            stats=stats,
+        )
+        self.assertEqual(route.worker, "small_llm")
+
     def test_routing_policy_escalates_state_machine_tasks_after_one_worker_attempt(self) -> None:
         route = RoutingPolicyAgent().decide(
             {
@@ -884,12 +913,15 @@ class HistorianLearningTests(unittest.TestCase):
                 classification={"task_type": "data", "language": "python", "libraries": ["pandas"]},
                 route_used="template_then_small_llm",
                 model="qwen",
+                model_usage={"total_tokens": 240, "estimated_cost_usd": 0.012},
             )
             self.assertEqual(record["task_type"], "data")
             self.assertEqual(record["libraries"], ["pandas"])
             self.assertEqual(record["failed_engines"], ["engine-2-hazards", "engine-4-cost"])
             self.assertEqual(record["failed_kinds"], ["algorithmic_cost", "unknown_api"])
             self.assertEqual(record["human_review_reason"], "stagnant_repair")
+            self.assertEqual(record["total_model_tokens"], 240)
+            self.assertEqual(record["estimated_model_cost_usd"], 0.012)
         finally:
             path.unlink()
 
@@ -915,6 +947,8 @@ class HistorianLearningTests(unittest.TestCase):
                     "failed_engines": ["engine-2-hazards"],
                     "failed_kinds": ["unknown_api"],
                     "contribution": {"label": "small_helped_architect", "score": 0.5},
+                    "total_model_tokens": 300,
+                    "estimated_model_cost_usd": 0.01,
                 },
             )
             historian.append_run_sample(
@@ -929,6 +963,8 @@ class HistorianLearningTests(unittest.TestCase):
                     "failed_engines": ["engine-2-hazards"],
                     "failed_kinds": ["unknown_api"],
                     "contribution": {"label": "small_no_progress", "score": 0.0},
+                    "total_model_tokens": 600,
+                    "estimated_model_cost_usd": 0.02,
                 },
             )
             stats = historian.aggregate_run_stats(runs_path, stats_path)
@@ -939,6 +975,9 @@ class HistorianLearningTests(unittest.TestCase):
             self.assertEqual(pandas_stats["avg_contribution_score"], 0.25)
             self.assertEqual(pandas_stats["top_contribution"], "small_helped_architect")
             self.assertEqual(pandas_stats["top_failed_engine"], "engine-2-hazards")
+            route_metrics = pandas_stats["route_metrics"]
+            self.assertEqual(route_metrics["library_context_first"]["avg_total_model_tokens"], 300.0)
+            self.assertEqual(route_metrics["small_llm"]["avg_estimated_cost_usd"], 0.02)
             self.assertTrue(stats_path.read_text(encoding="utf-8").strip())
         finally:
             history_path.unlink()

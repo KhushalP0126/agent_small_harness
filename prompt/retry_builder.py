@@ -117,6 +117,21 @@ def _unit_test_hint(violation: Violation | None) -> str:
     return hint if isinstance(hint, str) else ""
 
 
+def _formal_counterexample(violation: Violation | None) -> str:
+    """Extract a concrete verifier witness without treating it as generic noise."""
+    if (
+        violation is None
+        or violation.kind != "formal_counterexample"
+        or not isinstance(violation.evidence, dict)
+    ):
+        return ""
+    issue = violation.evidence.get("issue", {})
+    if not isinstance(issue, dict):
+        return ""
+    witness = issue.get("counterexample", "")
+    return witness.strip() if isinstance(witness, str) else ""
+
+
 def _scoped_code(original_code: str, violation: Violation | None) -> str:
     function_name = _function_name(violation)
     if not function_name:
@@ -167,6 +182,9 @@ def build_small_worker_retry_prompt(
             unit_test = _unit_test_hint(failed_violation)
             if unit_test:
                 sections.append(f"  Unit test: {unit_test}")
+            counterexample = _formal_counterexample(failed_violation)
+            if counterexample:
+                sections.append(f"  Formal counterexample: {counterexample}")
         sections.append("")
     if preserve_context.strip():
         sections.extend(
@@ -233,6 +251,9 @@ def build_retry_prompt(
                 f"  Repair hint: {violation.repair_hint}",
             ]
         )
+        counterexample = _formal_counterexample(violation)
+        if counterexample:
+            sections.append(f"  Formal counterexample: {counterexample}")
     semantic_hints = _semantic_repair_hints(violations, source=original_code)
     if semantic_hints:
         sections.extend(["", "SEMANTIC REPAIR HINTS:"])

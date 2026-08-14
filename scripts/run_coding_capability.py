@@ -341,22 +341,31 @@ def _worker_contribution(session: dict) -> dict[str, Any]:
     }
 
 
-def _fixture_supplier(task_name: str) -> tuple[Any, Any]:
+def _fixture_supplier(task_name: str) -> tuple[Any, Any, None]:
     solution = FIXTURE_SOLUTIONS[task_name]
-    return (lambda _prompt: solution), (lambda _draft, _retry_prompt: solution)
+    return (lambda _prompt: solution), (lambda _draft, _retry_prompt: solution), None
 
 
-def _ollama_supplier(model: str) -> tuple[Any, Any]:
+def _ollama_supplier(model: str) -> tuple[Any, Any, OllamaModelSupplier]:
     supplier = OllamaModelSupplier(model=model)
-    return supplier.generate_draft, supplier.repair_draft
+    return supplier.generate_draft, supplier.repair_draft, supplier
 
 
-def _model_supplier(task: dict, model: str, supplier_mode: str) -> tuple[Any, Any, str]:
+def _model_supplier(task: dict, model: str, supplier_mode: str) -> tuple[Any, Any, str, Any | None]:
     if supplier_mode == "fixture":
-        draft_supplier, repair_supplier = _fixture_supplier(task["name"])
-        return draft_supplier, repair_supplier, "fixture-supplier"
-    draft_supplier, repair_supplier = _ollama_supplier(model)
-    return draft_supplier, repair_supplier, model
+        draft_supplier, repair_supplier, supplier = _fixture_supplier(task["name"])
+        return draft_supplier, repair_supplier, "fixture-supplier", supplier
+    draft_supplier, repair_supplier, supplier = _ollama_supplier(model)
+    return draft_supplier, repair_supplier, model, supplier
+
+
+def _usage_summary(model_telemetry: list[dict[str, Any]]) -> dict[str, float | int]:
+    return {
+        "total_tokens": sum(int(call.get("total_tokens", 0)) for call in model_telemetry),
+        "estimated_cost_usd": sum(
+            float(call.get("estimated_cost_usd", 0.0)) for call in model_telemetry
+        ),
+    }
 
 
 def run_tasks(
@@ -405,7 +414,7 @@ def run_tasks(
         spec = _behavior_spec(task)
         prompt = _build_prompt(task, spec)
         active_behavior_spec = spec if config.engines.behavior.enabled else None
-        draft_supplier, repair_supplier, model_label = _model_supplier(
+        draft_supplier, repair_supplier, model_label, worker_supplier = _model_supplier(
             task,
             model=model,
             supplier_mode=supplier_mode,
@@ -415,13 +424,16 @@ def run_tasks(
             if save_artifacts
             else None
         )
+        architect_supplier = (
+            ArchitectModelSupplier()
+            if architect_after_repair_attempts is not None
+            else None
+        )
         controller = GenerationController(
             max_retries=max_retries,
             draft_supplier=draft_supplier,
             repair_supplier=repair_supplier,
-            architect_supplier=ArchitectModelSupplier().repair_draft
-            if architect_after_repair_attempts is not None
-            else None,
+            architect_supplier=architect_supplier.repair_draft if architect_supplier else None,
             architect_after_repair_attempts=architect_after_repair_attempts,
             policy=policy,
             behavior_spec=active_behavior_spec,
@@ -444,6 +456,10 @@ def run_tasks(
             resume_from=resume_checkpoint,
         )
         session = result.payload
+        model_telemetry = list(getattr(worker_supplier, "telemetry", []))
+        if architect_supplier is not None:
+            model_telemetry.extend(getattr(architect_supplier, "telemetry", []))
+        model_usage = _usage_summary(model_telemetry)
         sessions.append(session)
         completed = session.get("final_status") == "completed"
         if completed:
@@ -473,6 +489,7 @@ def run_tasks(
                     "contribution": contribution,
                     "supplier_mode": supplier_mode,
                     "architect_after_repair_attempts": architect_after_repair_attempts,
+                    "model_telemetry": model_telemetry,
                 },
             )
         worker_summary = ",".join(repair_workers) if repair_workers else "none"
@@ -514,6 +531,7 @@ def run_tasks(
                 route_used=session.get("route", ""),
                 model=model_label,
                 template_name="",
+                model_usage=model_usage,
             )
             run_record["case_name"] = task["name"]
             run_record["contribution"] = contribution
