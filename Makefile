@@ -42,7 +42,7 @@ IMAGE ?= agent-small-harness:local
 ARTIFACT_ARGS = $(if $(filter 1 true yes,$(SAVE_ARTIFACTS)),--save-artifacts --artifact-root "$(ARTIFACT_ROOT)",)
 DOC_ARGS = --doc-agent "$(DOC_AGENT)" $(if $(DOC_MODEL),--doc-model "$(DOC_MODEL)",) $(if $(DOC_OUTPUT),--doc-output "$(DOC_OUTPUT)",)
 
-.PHONY: help bootstrap setup install install-formal install-kernel env-path init-env api-dev tui rust-tui tui_rust start test-rust check research-check research-agent-benchmark research-fixture-deepseek research-fixture-qwen research-report research-model-comparison record-live-session research-compute-shield docker-build sandbox-run agent-benchmark test test-engine-expansion compute-shield test-claude-fixes test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-fixture resume-coding-capability test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-worker-limit-architect resume-worker-limit test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-python-ladder-stateful test-python-ladder-stateful-architect test-plan-mode-ladder test-raw-vs-harness test-raw-vs-harness-architect test-raw-vs-harness-repeated test-raw-vs-harness-ablation test-formal-experiment structured-spec structured-spec-plan resume-structured-spec repo-map review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library tool-agent ollama-smoke inference-smoke live-repair day1 clean-history clean-cache
+.PHONY: help bootstrap setup install install-formal install-kernel env-path init-env api-dev tui rust-tui tui_rust start test-rust check research-check research-agent-benchmark research-fixture-deepseek research-fixture-qwen research-report research-model-comparison record-live-session research-compute-shield docker-build sandbox-run agent-benchmark test test-engine-expansion compute-shield test-claude-fixes test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-fixture resume-coding-capability test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-worker-limit-architect resume-worker-limit test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-python-ladder-stateful test-python-ladder-stateful-architect test-plan-mode-ladder test-raw-vs-harness test-raw-vs-harness-architect test-raw-vs-harness-repeated test-raw-vs-harness-ablation test-formal-experiment structured-spec structured-spec-plan resume-structured-spec repo-map review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library tool-agent ollama-smoke inference-smoke live-repair day1 clean-history clean-cache clean-generated
 
 help:
 	@printf "agent-coder_structure\n\n"
@@ -65,6 +65,7 @@ help:
 	@printf "  make docker-build                Build the isolated execution image\n"
 	@printf "  make sandbox-run SOURCE=... LANGUAGE=python  Run source without network\n"
 	@printf "  make clean-cache                 Remove Python test caches (keeps artifacts and Rust build cache)\n"
+	@printf "  make clean-generated             Remove rebuildable Python/Rust caches and run artifacts\n"
 	@printf "\nInteractive chat and tools use DeepSeek; local models remain benchmark-only.\n"
 	@printf "See setup/README.md, ARCHITECTURE.md, and docs/results/ for details.\n"
 
@@ -303,3 +304,7 @@ clean-cache:
 	@find . -type d -name '__pycache__' -prune -exec rm -rf {} +
 	@rm -rf .pytest_cache
 	@printf "Removed Python caches. Artifacts, .env, local history, and Rust build output were kept.\n"
+
+clean-generated: clean-cache
+	@rm -rf artifacts rust_tui/target
+	@printf "Removed rebuildable artifacts and Rust build output. Local history, .env, and source files were kept.\n"
