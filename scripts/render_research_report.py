@@ -41,6 +41,7 @@ def render_report(payload: dict[str, Any], *, title: str) -> str:
         "## Configured variants",
         "",
         *_variant_lines(payload.get("variant_metadata", {})),
+        *_scope_lines(payload.get("variant_metadata", {})),
         "",
         "## Descriptive summary",
         "",
@@ -106,9 +107,17 @@ def _variant_lines(variants: Any) -> list[str]:
         if not entries:
             lines.append(f"- {variant}: metadata unavailable")
             continue
+        emitted: set[tuple[str, str, str, str, str]] = set()
         for entry in entries:
             if not isinstance(entry, dict):
                 continue
+            identity = tuple(
+                str(entry.get(key, "unknown"))
+                for key in ("provider", "model", "context_window", "thinking_type", "reasoning_effort")
+            )
+            if identity in emitted:
+                continue
+            emitted.add(identity)
             lines.append(
                 "- "
                 f"{variant}: `{entry.get('provider', 'unknown')}` / `{entry.get('model', 'unknown')}` "
@@ -117,6 +126,21 @@ def _variant_lines(variants: Any) -> list[str]:
                 f"· reasoning `{entry.get('reasoning_effort', 'unknown')}`"
             )
     return lines or ["- Variant metadata was not supplied."]
+
+
+def _scope_lines(variants: Any) -> list[str]:
+    if not isinstance(variants, dict):
+        return []
+    scopes = {
+        str(entry.get("scope"))
+        for entries in variants.values()
+        if isinstance(entries, list)
+        for entry in entries
+        if isinstance(entry, dict) and entry.get("scope")
+    }
+    if not scopes:
+        return []
+    return [f"- Scope: `{scope}`" for scope in sorted(scopes)]
 
 
 def _interpretation(token_delta: float) -> str:

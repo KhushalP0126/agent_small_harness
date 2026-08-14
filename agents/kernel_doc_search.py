@@ -45,6 +45,8 @@ class KernelLibraryDocumentationSearchAgent:
         self,
         library: str,
         public_symbols: list[str] | None = None,
+        *,
+        language: str = "python",
     ) -> DocumentationSearchResult:
         symbols = [symbol for symbol in (public_symbols or [])[:20] if symbol]
         query = f"{library} official documentation"
@@ -68,6 +70,7 @@ class KernelLibraryDocumentationSearchAgent:
                 searched_by_model=False,
                 query=query,
                 documentation=documentation,
+                documented_api=[],
                 raw_response=json.dumps(payload, sort_keys=True),
             )
         except Exception as exc:  # noqa: BLE001 - persisted as reviewable discovery metadata
@@ -77,6 +80,7 @@ class KernelLibraryDocumentationSearchAgent:
                 searched_by_model=False,
                 query=query,
                 documentation=[],
+                documented_api=[],
                 error=f"{exc.__class__.__name__}: {exc}",
             )
         finally:
@@ -88,10 +92,12 @@ class KernelLibraryDocumentationSearchAgent:
         library: str,
         public_symbols: list[str] | None = None,
         documentation: list[dict] | None = None,
+        *,
+        language: str = "python",
     ) -> str:
         symbols = ", ".join((public_symbols or [])[:40]) or "none"
         lines = [
-            f"# {library} Syntax and Documentation Notes",
+            f"# {library} ({language}) Syntax and Documentation Notes",
             "",
             "Documentation was discovered and verified with a Kernel browser.",
             "",

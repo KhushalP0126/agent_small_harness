@@ -46,15 +46,30 @@ def _nonnegative_float(value: object) -> float:
         return 0.0
 
 
+def _optional_nonnegative_float(value: object) -> float | None:
+    """Return a price only when the backend actually supplied one."""
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        return max(0.0, float(value))
+    except (TypeError, ValueError):
+        return None
+
+
 def _route_metrics(records: list[dict]) -> dict:
     """Summarize observed outcome and cost for one execution route."""
     total = len(records)
     completed = sum(1 for record in records if record.get("final_status") == "completed")
     costs = [
-        _nonnegative_float(record.get("estimated_model_cost_usd"))
+        cost
         for record in records
-        if "estimated_model_cost_usd" in record
+        if (cost := _optional_nonnegative_float(record.get("estimated_model_cost_usd"))) is not None
     ]
+    unpriced_cost_observations = sum(
+        1
+        for record in records
+        if _optional_nonnegative_float(record.get("estimated_model_cost_usd")) is None
+    )
     tokens = [
         _nonnegative_int(record.get("total_model_tokens"))
         for record in records
@@ -64,6 +79,7 @@ def _route_metrics(records: list[dict]) -> dict:
         "total_runs": total,
         "success_rate": 0.0 if total == 0 else completed / total,
         "cost_observations": len(costs),
+        "unpriced_cost_observations": unpriced_cost_observations,
         "avg_estimated_cost_usd": 0.0 if not costs else sum(costs) / len(costs),
         "token_observations": len(tokens),
         "avg_total_model_tokens": 0.0 if not tokens else sum(tokens) / len(tokens),
@@ -330,9 +346,10 @@ class HistorianAgent(BaseAgent):
             "model": model,
             "template": template_name,
             "total_model_tokens": _nonnegative_int(usage.get("total_tokens", 0)),
-            "estimated_model_cost_usd": _nonnegative_float(
-                usage.get("estimated_cost_usd", 0.0)
+            "estimated_model_cost_usd": _optional_nonnegative_float(
+                usage.get("estimated_cost_usd")
             ),
+            "model_pricing_basis": str(usage.get("pricing_basis", "unknown")),
             "repair_attempts": max(0, len(attempts) - 1),
             "final_status": session.get("final_status", "unknown"),
             "failed_engines": sorted(set(failed_engines)),
@@ -392,7 +409,7 @@ class HistorianAgent(BaseAgent):
     def aggregate_run_stats(self, runs_path: Path, stats_path: Path | None = None) -> dict:
         """Aggregate raw JSONL samples into route stats keyed by task/library/language."""
         records = self._load_run_samples(runs_path)
-        stats = {"schema_version": "1.0", "groups": {}}
+        stats = {"schema_version": "1.1", "run_samples": len(records), "groups": {}}
         grouped: dict[str, list[dict]] = defaultdict(list)
         for record in records:
             keys = [

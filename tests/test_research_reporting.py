@@ -4,6 +4,7 @@ import unittest
 
 from harness_kernel.e2e_benchmark import AgentRunMetrics, BenchmarkTask
 from harness_kernel.research_reporting import run_repeated_paired_benchmark, summarize_reports
+from scripts.render_research_report import _scope_lines, _variant_lines
 
 
 class ResearchReportingTests(unittest.TestCase):
@@ -54,6 +55,17 @@ class ResearchReportingTests(unittest.TestCase):
         summary = summarize_reports([report])
         self.assertEqual(summary["baseline_tool_calls"]["mean"], 2)
         self.assertEqual(summary["shielded_duration_seconds"]["mean"], 2.5)
+
+    def test_renderer_deduplicates_variant_identity_and_surfaces_scope(self) -> None:
+        variants = {
+            "baseline": [
+                {"provider": "ollama", "model": "qwen", "context_window": 8192, "scope": "python-only"},
+                {"provider": "ollama", "model": "qwen", "context_window": 8192, "scope": "python-only"},
+            ],
+            "shielded": [],
+        }
+        self.assertEqual(len([line for line in _variant_lines(variants) if "ollama" in line]), 1)
+        self.assertEqual(_scope_lines(variants), ["- Scope: `python-only`"])
 
 
 if __name__ == "__main__":

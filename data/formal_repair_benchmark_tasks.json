@@ -1,0 +1,14 @@
+[
+  {
+    "task_id": "formal-clamp-value",
+    "category": "formal_repair",
+    "prompt": "Repair clamp_value so its stated lower/upper postcondition holds for every valid input.",
+    "suggested_max_turns": 1
+  },
+  {
+    "task_id": "formal-identity",
+    "category": "formal_repair",
+    "prompt": "Repair identity so its postcondition returns the input unchanged.",
+    "suggested_max_turns": 1
+  }
+]

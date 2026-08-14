@@ -920,6 +920,15 @@ browser, or `DOC_AGENT=none` to write an import-only proposal without
 documentation search. Kernel search requires `requirements-kernel.txt` and
 `KERNEL_API_KEY` in `.env`.
 
+Every proposal records its target language and documentation-derived API
+candidates, but never promotes model-suggested calls into the trusted registry
+automatically. Review the source URL and example before approval. For a
+non-Python library, use the language-aware CLI directly:
+
+```bash
+python3 scripts/discover_library.py serde_json --language rust --doc-agent deepseek
+```
+
 Approve a reviewed proposal into the trusted library registry:
 
 ```bash

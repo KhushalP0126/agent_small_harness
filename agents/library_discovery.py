@@ -16,6 +16,7 @@ from agents.library_doc_search import LibraryDocumentationSearchAgent
 class LibraryDiscovery:
     library: str
     available: bool
+    language: str = "python"
     origin: str = ""
     public_symbols: list[str] = field(default_factory=list)
     environment: dict[str, Any] = field(default_factory=dict)
@@ -35,23 +36,41 @@ class LibraryDiscoveryAgent(BaseAgent):
         self.architect_config = architect_config or ArchitectConfig()
         self.documentation_search = documentation_search
 
-    def discover(self, library: str) -> LibraryDiscovery:
-        spec = importlib.util.find_spec(library)
+    def discover(self, library: str, *, language: str = "python") -> LibraryDiscovery:
+        normalized_language = language.strip().lower() or "python"
+        # Importlib can safely inspect installed Python modules without
+        # importing them. Other languages are documentation-first proposals:
+        # no model-discovered call is trusted until a reviewer approves it.
+        spec = importlib.util.find_spec(library) if normalized_language == "python" else None
         if spec is None or spec.origin is None:
+            proposal = self.build_proposal(library, [], language=normalized_language)
+            if self.documentation_search is not None:
+                documentation_result = self.documentation_search.search(
+                    library, [], language=normalized_language
+                )
+                proposal["documentation_search"] = documentation_result.to_dict()
+                proposal["documentation"] = documentation_result.documentation
+                proposal["documented_api_candidates"] = documentation_result.documented_api
             return LibraryDiscovery(
                 library=library,
+                language=normalized_language,
                 available=False,
                 environment=self._environment_summary(),
+                proposal=proposal,
             )
         origin = spec.origin
         symbols = self._public_symbols(Path(origin)) if origin.endswith(".py") else []
-        proposal = self.build_proposal(library, symbols)
+        proposal = self.build_proposal(library, symbols, language=normalized_language)
         if self.documentation_search is not None:
-            documentation_result = self.documentation_search.search(library, symbols)
+            documentation_result = self.documentation_search.search(
+                library, symbols, language=normalized_language
+            )
             proposal["documentation_search"] = documentation_result.to_dict()
             proposal["documentation"] = documentation_result.documentation
+            proposal["documented_api_candidates"] = documentation_result.documented_api
         return LibraryDiscovery(
             library=library,
+            language=normalized_language,
             available=True,
             origin=origin,
             public_symbols=symbols,
@@ -84,27 +103,33 @@ class LibraryDiscoveryAgent(BaseAgent):
                         symbols.add(target.id)
         return sorted(symbols)
 
-    def build_proposal(self, library: str, symbols: list[str]) -> dict[str, Any]:
+    def build_proposal(
+        self, library: str, symbols: list[str], *, language: str = "python"
+    ) -> dict[str, Any]:
         allowed_calls = sorted({symbol for symbol in symbols if symbol and not symbol.startswith("_")})
         return {
             "schema_version": "1.0",
             "library": library,
+            "language": language,
             "proposal_status": "candidate",
             "allowed_calls": allowed_calls,
+            "documented_api_candidates": [],
+            "requires_human_approval": True,
             "context": (
-                f"Discovered public top-level symbols for `{library}`. Review before approving into the trusted registry."
+                f"Discovered {language} API candidates for `{library}`. "
+                "Review documentation provenance and approve explicitly before adding any call to the trusted registry."
             ),
             "unknown_api_repair": (
                 f"Use a reviewed `{library}` API from the trusted registry or approve a discovered candidate first."
             ),
         }
 
-    def write_proposal(self, library: str, proposal_dir: Path) -> Path:
-        discovery = self.discover(library)
+    def write_proposal(self, library: str, proposal_dir: Path, *, language: str = "python") -> Path:
+        discovery = self.discover(library, language=language)
         proposal_dir.mkdir(parents=True, exist_ok=True)
         path = proposal_dir / f"{library}.json"
         path.write_text(json.dumps(asdict(discovery), indent=2, sort_keys=True) + "\n", encoding="utf-8")
         return path
 
-    def run(self, library: str) -> AgentResult:
-        return AgentResult(agent=self.name, payload=asdict(self.discover(library)))
+    def run(self, library: str, *, language: str = "python") -> AgentResult:
+        return AgentResult(agent=self.name, payload=asdict(self.discover(library, language=language)))

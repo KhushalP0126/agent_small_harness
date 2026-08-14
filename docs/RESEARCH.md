@@ -31,6 +31,38 @@ Published evidence belongs in [`results/`](results/). The two observed runs
 above were more expensive than their direct baselines, so this project reports
 them as diagnostic evidence rather than a token-saving result.
 
+## Formal counterexample repair study (Python only)
+
+The CrossHair repair path is intentionally scoped to Python contracts. It does
+not establish a verification result for C, C++, Rust, or JavaScript. The
+pre-registered A/B runner starts each variant from the same broken contract
+fixture; the guided prompt receives CrossHair's concrete failing call and the
+baseline omits only that line.
+
+```bash
+make research-formal-repair RESEARCH_RUNS=3 MODEL=qwen2.5-coder:1.5b
+make research-report \
+  REPORT_INPUT=docs/results/raw/formal-counterexample-repair-YYYY-MM-DD.json \
+  REPORT_OUTPUT=docs/results/formal-counterexample-repair-YYYY-MM-DD.md
+```
+
+This command intentionally performs local model calls. It writes every run,
+including failures, and must not be presented as an effectiveness result until
+the resulting raw JSON and dated report are committed.
+
+## Cost-aware route evidence
+
+API calls can report an estimated dollar cost; local Ollama calls are instead
+marked `local_unpriced`. They are **not** recorded as measured `$0.00` calls.
+When routes tie on success and their pricing differs in availability, the
+routing policy compares observed tokens before any available dollar subtotal.
+Use the report below to determine whether real history has enough multi-route
+data to support a routing claim:
+
+```bash
+make routing-report
+```
+
 ## Reproduce a deterministic checkout
 
 ```bash
@@ -150,5 +182,7 @@ hashes—not keys, raw private prompts, or absolute local paths.
 2. Rerun the frozen Qwen 1.5B corpus, then run both Qwen 1.5B and DeepSeek on
    the independent fixture corpus.
 3. Record the five controlled approval-reviewed session receipts.
-4. Accumulate further real sessions only after the controlled receipt set is
+4. Run and publish the Python/CrossHair counterexample-repair A/B study; keep
+   its Python-only scope explicit.
+5. Accumulate further real sessions only after the controlled receipt set is
    complete; do not elevate anecdotal success into a benchmark claim.

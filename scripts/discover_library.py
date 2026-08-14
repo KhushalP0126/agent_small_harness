@@ -73,7 +73,12 @@ def _documentation_search_agent(provider: str, model: str, config_path: Path) ->
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Discover a library surface and write a reviewable proposal.")
-    parser.add_argument("library", help="Importable Python package name, e.g. json or pandas.")
+    parser.add_argument("library", help="Library/package name, e.g. json, serde, or express.")
+    parser.add_argument(
+        "--language",
+        default="python",
+        help="Library language for documentation and registry proposals (default: python).",
+    )
     parser.add_argument("--proposal-dir", default=str(DEFAULT_PROPOSAL_DIR))
     parser.add_argument(
         "--doc-agent",
@@ -92,7 +97,7 @@ def main() -> None:
 
     documentation_search = _documentation_search_agent(args.doc_agent, args.doc_model, args.config)
     agent = LibraryDiscoveryAgent(documentation_search=documentation_search)
-    path = agent.write_proposal(args.library, Path(args.proposal_dir))
+    path = agent.write_proposal(args.library, Path(args.proposal_dir), language=args.language)
     payload = json.loads(path.read_text(encoding="utf-8"))
     proposal = payload.get("proposal", {})
     if args.doc_output:
@@ -105,6 +110,7 @@ def main() -> None:
                 args.library,
                 public_symbols=payload.get("public_symbols", []),
                 documentation=proposal.get("documentation", []),
+                language=payload.get("language", args.language),
             ),
             encoding="utf-8",
         )

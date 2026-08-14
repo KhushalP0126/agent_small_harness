@@ -105,7 +105,10 @@ class OllamaModelSupplier:
         self.model = model
         self.config = config or OllamaGenerationConfig()
         self.system_prompt = system_prompt
-        self.telemetry: list[dict[str, int | str | float]] = []
+        # Local inference has a resource cost, but not a provider-reported
+        # dollar cost. Keep that distinction in telemetry so routing never
+        # mistakes an unavailable price for a measured $0.00 observation.
+        self.telemetry: list[dict[str, Any]] = []
         if tool_registry is None:
             from harness_kernel.tool_handlers import build_default_tool_registry
 
@@ -152,7 +155,8 @@ class OllamaModelSupplier:
                     usage.get("total_tokens", prompt_tokens + completion_tokens)
                     or 0
                 ),
-                "estimated_cost_usd": 0.0,
+                "estimated_cost_usd": None,
+                "pricing_basis": "local_unpriced",
             }
         )
 

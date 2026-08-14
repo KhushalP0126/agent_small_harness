@@ -509,6 +509,35 @@ class ScalabilityAgentTests(unittest.TestCase):
         )
         self.assertEqual(route.worker, "small_llm")
 
+    def test_routing_policy_uses_tokens_when_local_price_is_unavailable(self) -> None:
+        stats = {
+            "groups": {
+                "language:python": {
+                    "route_metrics": {
+                        "small_llm": {
+                            "success_rate": 0.8,
+                            "cost_observations": 0,
+                            "unpriced_cost_observations": 3,
+                            "token_observations": 3,
+                            "avg_total_model_tokens": 1200,
+                        },
+                        "architect_llm": {
+                            "success_rate": 0.8,
+                            "cost_observations": 3,
+                            "avg_estimated_cost_usd": 0.05,
+                            "token_observations": 3,
+                            "avg_total_model_tokens": 400,
+                        },
+                    }
+                }
+            }
+        }
+        route = RoutingPolicyAgent().decide(
+            {"task_type": "general_code", "language": "python", "libraries": []},
+            stats=stats,
+        )
+        self.assertEqual(route.worker, "architect_llm")
+
     def test_routing_policy_escalates_state_machine_tasks_after_one_worker_attempt(self) -> None:
         route = RoutingPolicyAgent().decide(
             {
@@ -597,6 +626,37 @@ class ScalabilityAgentTests(unittest.TestCase):
         self.assertEqual(discovered.proposal["documentation_search"]["provider"], "deepseek")
         self.assertTrue(discovered.proposal["documentation_search"]["searched_by_model"])
         self.assertEqual(discovered.proposal["documentation"][0]["title"], "json docs")
+
+    def test_library_discovery_keeps_non_python_documented_api_reviewable(self) -> None:
+        doc_agent = LibraryDocumentationSearchAgent(
+            provider="deepseek",
+            model="test-model",
+            generate_text=lambda _prompt: json.dumps(
+                {
+                    "documentation": [
+                        {"title": "Serde docs", "url": "https://docs.rs/serde", "note": "Official API."}
+                    ],
+                    "documented_api": [
+                        {
+                            "symbol": "serde_json::from_str",
+                            "example": "serde_json::from_str::<T>(text)?",
+                            "source_url": "https://docs.rs/serde_json",
+                        }
+                    ],
+                }
+            ),
+        )
+        discovered = LibraryDiscoveryAgent(documentation_search=doc_agent).discover(
+            "serde_json", language="rust"
+        )
+        self.assertEqual(discovered.language, "rust")
+        self.assertFalse(discovered.available)
+        self.assertEqual(discovered.proposal["allowed_calls"], [])
+        self.assertTrue(discovered.proposal["requires_human_approval"])
+        self.assertEqual(
+            discovered.proposal["documented_api_candidates"][0]["symbol"],
+            "serde_json::from_str",
+        )
 
     def test_library_documentation_agent_generates_markdown_notes(self) -> None:
         doc_agent = LibraryDocumentationSearchAgent(

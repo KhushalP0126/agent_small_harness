@@ -47,7 +47,8 @@ from validation.formal import (
 )
 from validation.policy import validate_findings
 from validation.types import ValidationResult, Violation
-from scripts.run_coding_capability import _behavior_spec, _build_prompt, _worker_contribution
+from scripts.run_coding_capability import _behavior_spec, _build_prompt, _usage_summary, _worker_contribution
+from scripts.run_formal_repair_benchmark_agent import _baseline_prompt
 from scripts.review_run import render_review
 from scripts.run_formal_experiment import GOOD_SOURCE
 from scripts.run_plan_mode_ladder import _keep_first_break as keep_first_plan_break
@@ -101,9 +102,20 @@ class BenchmarkerTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             manager = ArtifactManager(Path(tmpdir))
             paths = manager.create_run(prefix="unit")
-            manager.save_session(session, paths, metadata={"case_name": "unit"})
+            manager.save_session(
+                session,
+                paths,
+                metadata={
+                    "case_name": "unit",
+                    "model_telemetry": [
+                        {"total_tokens": 12, "estimated_cost_usd": None, "pricing_basis": "local_unpriced"}
+                    ],
+                },
+            )
             metadata = json.loads((paths.run_dir / "metadata.json").read_text(encoding="utf-8"))
             self.assertEqual(metadata["telemetry"]["total_retry_prompt_tokens_estimate"], 4)
+            self.assertIsNone(metadata["telemetry"]["estimated_model_cost_usd"])
+            self.assertEqual(metadata["telemetry"]["unpriced_model_call_count"], 1)
             self.assertTrue((paths.run_dir / "session_summary.json").is_file())
             self.assertEqual(
                 (paths.run_dir / "attempt_0.py").read_text(encoding="utf-8"),
@@ -1147,6 +1159,22 @@ def analyze(matrix):
         self.assertEqual(stub_client.calls[0]["config"].num_predict, 128)
         self.assertEqual(supplier.telemetry[0]["stage"], "draft")
         self.assertGreater(supplier.telemetry[0]["total_tokens"], 0)
+        self.assertIsNone(supplier.telemetry[0]["estimated_cost_usd"])
+        self.assertEqual(supplier.telemetry[0]["pricing_basis"], "local_unpriced")
+
+    def test_usage_summary_marks_local_calls_unpriced_instead_of_free(self) -> None:
+        summary = _usage_summary(
+            [{"total_tokens": 240, "estimated_cost_usd": None, "pricing_basis": "local_unpriced"}]
+        )
+        self.assertEqual(summary["total_tokens"], 240)
+        self.assertIsNone(summary["estimated_cost_usd"])
+        self.assertEqual(summary["pricing_basis"], "local_unpriced")
+
+    def test_formal_benchmark_control_removes_only_counterexample_line(self) -> None:
+        prompt = "VIOLATIONS:\n  Formal counterexample: identity(0) -> -1\n  Repair hint: satisfy_contract"
+        control = _baseline_prompt(prompt)
+        self.assertNotIn("Formal counterexample", control)
+        self.assertIn("Repair hint: satisfy_contract", control)
 
     def test_ollama_supplier_extracts_fenced_python_code(self) -> None:
         class StubClient:

@@ -178,6 +178,12 @@ class ArtifactManager:
         retry_prompt_chars = [len(attempt.get("retry_prompt", "")) for attempt in attempts]
         draft_chars = [len(attempt.get("draft", "")) for attempt in attempts]
         model_calls = metadata.get("model_telemetry", [])
+        priced_costs = [
+            float(call["estimated_cost_usd"])
+            for call in model_calls
+            if isinstance(call.get("estimated_cost_usd"), (int, float))
+            and not isinstance(call.get("estimated_cost_usd"), bool)
+        ]
         return {
             "attempt_count": len(attempts),
             "total_retry_prompt_chars": sum(retry_prompt_chars),
@@ -189,7 +195,14 @@ class ArtifactManager:
             "total_model_prompt_tokens": sum(int(call.get("prompt_tokens", 0)) for call in model_calls),
             "total_model_completion_tokens": sum(int(call.get("completion_tokens", 0)) for call in model_calls),
             "total_model_tokens": sum(int(call.get("total_tokens", 0)) for call in model_calls),
-            "estimated_model_cost_usd": sum(float(call.get("estimated_cost_usd", 0.0)) for call in model_calls),
+            "estimated_model_cost_usd": sum(priced_costs) if priced_costs else None,
+            "priced_model_call_count": len(priced_costs),
+            "unpriced_model_call_count": sum(
+                1
+                for call in model_calls
+                if not isinstance(call.get("estimated_cost_usd"), (int, float))
+                or isinstance(call.get("estimated_cost_usd"), bool)
+            ),
             "model_calls": model_calls,
         }
 

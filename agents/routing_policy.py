@@ -82,14 +82,20 @@ class RoutingPolicyAgent(BaseAgent):
             success_rate = float(sample.get("success_rate", 0.0))
             if success_rate < 0.5:
                 continue
-            has_cost = int(sample.get("cost_observations", 0)) > 0
-            cost = float(sample.get("avg_estimated_cost_usd", 0.0)) if has_cost else float("inf")
             has_tokens = int(sample.get("token_observations", 0)) > 0
             tokens = float(sample.get("avg_total_model_tokens", 0.0)) if has_tokens else float("inf")
+            has_cost = int(sample.get("cost_observations", 0)) > 0
+            cost = float(sample.get("avg_estimated_cost_usd", 0.0)) if has_cost else float("inf")
             candidates.append((-success_rate, cost, tokens, route))
         if not candidates:
             return ""
-        return min(candidates)[3]
+        # Dollar estimates are only comparable if *every* successful route
+        # has a provider-reported price. Local Ollama telemetry intentionally
+        # has no dollar value, so compare resource use first in mixed routes.
+        all_priced = all(cost != float("inf") for _, cost, _, _ in candidates)
+        if all_priced:
+            return min(candidates)[3]
+        return min((success, tokens, cost, route) for success, cost, tokens, route in candidates)[3]
 
     def run(
         self,

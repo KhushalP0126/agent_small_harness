@@ -359,12 +359,35 @@ def _model_supplier(task: dict, model: str, supplier_mode: str) -> tuple[Any, An
     return draft_supplier, repair_supplier, model, supplier
 
 
-def _usage_summary(model_telemetry: list[dict[str, Any]]) -> dict[str, float | int]:
+def _usage_summary(model_telemetry: list[dict[str, Any]]) -> dict[str, float | int | str | None]:
+    """Preserve token use even when a route has no dollar-price signal.
+
+    Local Ollama calls deliberately report ``None`` for cost.  Summing missing
+    prices as zero makes the router treat local work as a measured free API
+    route.  Mixed sessions retain any API subtotal, but label it partial.
+    """
+    priced_costs: list[float] = []
+    unpriced_calls = 0
+    for call in model_telemetry:
+        value = call.get("estimated_cost_usd")
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            priced_costs.append(max(0.0, float(value)))
+        else:
+            unpriced_calls += 1
+    if not model_telemetry:
+        pricing_basis = "no_model_calls"
+    elif unpriced_calls == 0:
+        pricing_basis = "provider_reported"
+    elif not priced_costs:
+        pricing_basis = "local_unpriced"
+    else:
+        pricing_basis = "partial_provider_reported"
     return {
         "total_tokens": sum(int(call.get("total_tokens", 0)) for call in model_telemetry),
-        "estimated_cost_usd": sum(
-            float(call.get("estimated_cost_usd", 0.0)) for call in model_telemetry
-        ),
+        "estimated_cost_usd": sum(priced_costs) if priced_costs else None,
+        "pricing_basis": pricing_basis,
+        "priced_call_count": len(priced_costs),
+        "unpriced_call_count": unpriced_calls,
     }
 
 
