@@ -1,6 +1,36 @@
 {
-  "schema_version": "2.0",
+  "schema_version": "2.1",
   "libraries": {
+    "javascript": {
+      "lodash": {
+        "allowed_calls": [
+          "filter",
+          "get",
+          "map",
+          "reduce"
+        ],
+        "context": "Reviewed Lodash collection and object helpers. Keep collection transformation behind local helpers; do not treat the package as a general-purpose runtime capability.",
+        "unknown_api_repair": "Use a reviewed Lodash call (map, filter, reduce, or get), or submit the documented API for explicit review.",
+        "documented_api": [
+          {
+            "symbol": "filter",
+            "source_url": "https://lodash.com/docs/"
+          },
+          {
+            "symbol": "get",
+            "source_url": "https://lodash.com/docs/"
+          },
+          {
+            "symbol": "map",
+            "source_url": "https://lodash.com/docs/"
+          },
+          {
+            "symbol": "reduce",
+            "source_url": "https://lodash.com/docs/"
+          }
+        ]
+      }
+    },
     "python": {
       "deal": {
         "allowed_calls": [
@@ -86,6 +116,46 @@
         "context": "Use SQLAlchemy top-level constructors and expression helpers. ORM model semantics are out of scope for this registry.",
         "unknown_api_repair": "Use a registered SQLAlchemy constructor or expression helper and avoid invented top-level calls.",
         "adapter_contract": "Treat SQLAlchemy as an opaque persistence dependency. Keep query construction in adapter helpers and validate inputs/outputs at the application boundary."
+      }
+    },
+    "rust": {
+      "serde_json": {
+        "allowed_calls": [
+          "from_slice",
+          "from_str",
+          "from_value",
+          "to_string",
+          "to_string_pretty",
+          "to_value"
+        ],
+        "context": "Reviewed serde_json serialization and deserialization helpers. Keep serialization at an application boundary and handle Result errors explicitly.",
+        "unknown_api_repair": "Use a reviewed serde_json call or submit the documented API for explicit review.",
+        "documented_api": [
+          {
+            "symbol": "from_slice",
+            "source_url": "https://docs.rs/serde_json/latest/serde_json/"
+          },
+          {
+            "symbol": "from_str",
+            "source_url": "https://docs.rs/serde_json/latest/serde_json/fn.from_str.html"
+          },
+          {
+            "symbol": "from_value",
+            "source_url": "https://docs.rs/serde_json/latest/serde_json/fn.from_value.html"
+          },
+          {
+            "symbol": "to_string",
+            "source_url": "https://docs.rs/serde_json/latest/serde_json/fn.to_string.html"
+          },
+          {
+            "symbol": "to_string_pretty",
+            "source_url": "https://docs.rs/serde_json/latest/serde_json/"
+          },
+          {
+            "symbol": "to_value",
+            "source_url": "https://docs.rs/serde_json/latest/serde_json/"
+          }
+        ]
       }
     }
   }

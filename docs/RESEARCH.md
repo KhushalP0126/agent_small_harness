@@ -21,6 +21,12 @@ review the recorded HTTPS sources, then explicitly approve with
 `make approve-library LIB=<name> APPROVE_DOCUMENTATION=1`. Documentation is
 evidence for a reviewed allow-list entry, never automatic trust.
 
+The initial non-Python entries are intentionally small: Rust `serde_json`
+serialization helpers and JavaScript Lodash collection/object helpers, each
+with source URLs stored alongside the allow-list. They establish and test the
+review workflow; future entries should come from observed generated drafts and
+the same documented approval path, not from broad pre-population.
+
 ## Claims and non-claims
 
 The repository can currently support these claims:

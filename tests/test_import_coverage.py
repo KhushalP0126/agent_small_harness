@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -114,10 +116,15 @@ class LibraryRegistryMultiLanguageTests(unittest.TestCase):
         self.assertIsNotNone(schema)
         self.assertIn("DataFrame", schema.allowed_calls)
 
-    def test_legacy_flat_schema_still_loads(self) -> None:
-        import json
-        import tempfile
+    def test_reviewed_default_rust_and_javascript_library_surfaces_are_available(self) -> None:
+        registry = LibraryRegistry()
 
+        self.assertTrue(registry.is_registered("serde_json", language="rust"))
+        self.assertIn("from_str", registry.get("serde_json", language="rust").allowed_calls)
+        self.assertTrue(registry.is_registered("lodash", language="javascript"))
+        self.assertIn("map", registry.get("lodash", language="javascript").allowed_calls)
+
+    def test_legacy_flat_schema_still_loads(self) -> None:
         payload = {
             "schema_version": "1.0",
             "libraries": {
@@ -134,6 +141,54 @@ class LibraryRegistryMultiLanguageTests(unittest.TestCase):
             registry = LibraryRegistry(path)
             self.assertTrue(registry.is_registered("demo", language="python"))
             self.assertEqual(registry.libraries("python"), {"demo"})
+
+    def test_reviewed_rust_and_javascript_calls_use_language_specific_schemas(self) -> None:
+        payload = {
+            "schema_version": "2.0",
+            "libraries": {
+                "rust": {
+                    "serde_json": {
+                        "allowed_calls": ["from_str"],
+                        "context": "Reviewed serde_json API.",
+                        "unknown_api_repair": "Use reviewed serde_json calls.",
+                    }
+                },
+                "javascript": {
+                    "lodash": {
+                        "allowed_calls": ["map"],
+                        "context": "Reviewed lodash API.",
+                        "unknown_api_repair": "Use reviewed lodash calls.",
+                    }
+                },
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "reg.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            registry = LibraryRegistry(path)
+
+            rust_findings = HazardsEngine(registry, language="rust").scan(
+                "use serde_json;\nfn main() { serde_json::to_string(&1); }\n"
+            )
+            javascript_findings = HazardsEngine(registry, language="javascript").scan(
+                "const lodash = require('lodash');\nlodash.filter([], Boolean);\n"
+            )
+
+        rust_unknown = [item for item in rust_findings if item.diagnostic.violation == "UNKNOWN_API"]
+        javascript_unknown = [item for item in javascript_findings if item.diagnostic.violation == "UNKNOWN_API"]
+        self.assertEqual(rust_unknown[0].metrics["unknown_api_calls"], ["serde_json.to_string"])
+        self.assertEqual(javascript_unknown[0].metrics["unknown_api_calls"], ["lodash.filter"])
+
+    def test_reviewed_default_calls_do_not_raise_unknown_api_findings(self) -> None:
+        rust_findings = HazardsEngine(language="rust").scan(
+            "use serde_json;\nfn main() { let _ = serde_json::from_str::<i32>(\"1\"); }\n"
+        )
+        javascript_findings = HazardsEngine(language="javascript").scan(
+            "const lodash = require('lodash');\nlodash.map([1], value => value);\n"
+        )
+
+        self.assertFalse(any(item.diagnostic.violation == "UNKNOWN_API" for item in rust_findings))
+        self.assertFalse(any(item.diagnostic.violation == "UNKNOWN_API" for item in javascript_findings))
 
 
 class SerializationIncludesAdvisories(unittest.TestCase):

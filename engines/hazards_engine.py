@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import re
 import sys
 
 from engines.base import BaseEngine, EngineDiagnostic, EngineFinding
@@ -108,6 +109,8 @@ def _unknown_api_calls(
     imports: list[ImportRecord],
     language: str = "python",
 ) -> list[dict]:
+    if language != "python":
+        return _non_python_unknown_api_calls(source, registry, imports=imports, language=language)
     tree = ast.parse(source)
     bindings = _import_bindings_from_records(imports, registry, language=language)
     unknown: list[dict] = []
@@ -139,6 +142,109 @@ def _unknown_api_calls(
                 }
             )
     return unknown
+
+
+def _non_python_unknown_api_calls(
+    source: str,
+    registry: LibraryRegistry,
+    *,
+    imports: list[ImportRecord],
+    language: str,
+) -> list[dict]:
+    """Check qualified calls for reviewed Rust/JavaScript library surfaces.
+
+    The registry deliberately remains conservative: only a library explicitly
+    imported by the draft and explicitly approved for that language is
+    inspected. Unknown packages are left to the dependency/import policies,
+    rather than being mistaken for trusted APIs.
+    """
+
+    if language not in {"rust", "javascript"}:
+        return []
+    library_names: set[str] = set()
+    for record in imports:
+        if record.language != language:
+            continue
+        if language == "rust":
+            name = record.name.split("::", 1)[0]
+        else:
+            name = record.name
+            if name.startswith(("./", "../", "/")):
+                continue
+        if registry.is_registered(name, language=language):
+            library_names.add(name)
+
+    unknown: list[dict] = []
+    for library in sorted(library_names):
+        schema = registry.get(library, language=language)
+        if schema is None:
+            continue
+        aliases = {library}
+        if language == "javascript":
+            escaped = re.escape(library)
+            aliases.update(
+                match.group("alias")
+                for pattern in (
+                    rf"\bimport\s+(?P<alias>[A-Za-z_$][\w$]*)\s+from\s+['\"]{escaped}['\"]",
+                    rf"\b(?:const|let|var)\s+(?P<alias>[A-Za-z_$][\w$]*)\s*=\s*require\s*\(\s*['\"]{escaped}['\"]\s*\)",
+                    rf"\bimport\s+\*\s+as\s+(?P<alias>[A-Za-z_$][\w$]*)\s+from\s+['\"]{escaped}['\"]",
+                )
+                for match in re.finditer(pattern, source)
+            )
+        for alias in aliases:
+            separator = "::" if language == "rust" else "."
+            pattern = rf"\b{re.escape(alias)}{re.escape(separator)}(?P<call>[A-Za-z_$][\w$]*)\s*\("
+            for match in re.finditer(pattern, source):
+                call = match.group("call")
+                qualified = f"{library}{separator}{call}"
+                if call in schema.allowed_calls or qualified in schema.allowed_calls:
+                    continue
+                unknown.append(
+                    {
+                        "library": library,
+                        "call": call,
+                        "line": source.count("\n", 0, match.start()) + 1,
+                        "allowed_calls": sorted(schema.allowed_calls),
+                        "context": schema.context,
+                        "repair": schema.unknown_api_repair,
+                    }
+                )
+    return unknown
+
+
+def _unknown_api_finding(unknown_api_calls: list[dict], language: str) -> EngineFinding:
+    calls = [f"{item['library']}.{item['call']}" for item in unknown_api_calls]
+    repairs = [item["repair"] for item in unknown_api_calls if item["repair"]]
+    return EngineFinding(
+        engine=HazardsEngine.name,
+        severity="High",
+        summary="Unknown registered-library API usage",
+        details=(
+            f"Generated {language} source calls APIs that are not present in the "
+            "reviewed library schema."
+        ),
+        metrics={
+            "unknown_api_calls": calls,
+            "library_context": {
+                item["library"]: item["context"]
+                for item in unknown_api_calls
+                if item["context"]
+            },
+            "allowed_calls": {
+                item["library"]: item["allowed_calls"]
+                for item in unknown_api_calls
+            },
+        },
+        diagnostic=EngineDiagnostic(
+            violation="UNKNOWN_API",
+            threshold="reviewed library schema",
+            actual=", ".join(calls),
+            location=", ".join(f"line {item['line']}" for item in unknown_api_calls),
+            recommended_refactor=repairs[0]
+            if repairs
+            else "Use only APIs listed in the reviewed library schema.",
+        ),
+    )
 
 
 def _risk_findings(
@@ -285,47 +391,6 @@ class HazardsEngine(BaseEngine):
                     )
                 )
 
-            unknown_api_calls = _unknown_api_calls(
-                source,
-                self.library_registry,
-                imports=imports,
-                language=language,
-            )
-            if unknown_api_calls:
-                calls = [f"{item['library']}.{item['call']}" for item in unknown_api_calls]
-                repairs = [item["repair"] for item in unknown_api_calls if item["repair"]]
-                findings.append(
-                    EngineFinding(
-                        engine=self.name,
-                        severity="High",
-                        summary="Unknown registered-library API usage",
-                        details="Generated Python source calls APIs that are not present in the registered library schema.",
-                        metrics={
-                            "unknown_api_calls": calls,
-                            "library_context": {
-                                item["library"]: item["context"]
-                                for item in unknown_api_calls
-                                if item["context"]
-                            },
-                            "allowed_calls": {
-                                item["library"]: item["allowed_calls"]
-                                for item in unknown_api_calls
-                            },
-                        },
-                        diagnostic=EngineDiagnostic(
-                            violation="UNKNOWN_API",
-                            threshold="registered library schema",
-                            actual=", ".join(calls),
-                            location=", ".join(
-                                f"line {item['line']}" for item in unknown_api_calls
-                            ),
-                            recommended_refactor=repairs[0]
-                            if repairs
-                            else "Use only APIs listed in the registered library schema.",
-                        ),
-                    )
-                )
-
             if container_mutations:
                 findings.append(
                     EngineFinding(
@@ -362,6 +427,15 @@ class HazardsEngine(BaseEngine):
                         ),
                     )
                 )
+
+        unknown_api_calls = _unknown_api_calls(
+            source,
+            self.library_registry,
+            imports=imports,
+            language=language,
+        )
+        if unknown_api_calls:
+            findings.append(_unknown_api_finding(unknown_api_calls, language))
 
         findings.extend(_risk_findings(language, source, imports, self.name))
 
