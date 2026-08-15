@@ -1,0 +1,1851 @@
+{
+  "commands": {
+    "baseline": "python3 scripts/run_formal_repair_benchmark_agent.py --mode baseline --model qwen2.5-coder:1.5b",
+    "shielded": "python3 scripts/run_formal_repair_benchmark_agent.py --mode guided --model qwen2.5-coder:1.5b"
+  },
+  "experiment": "repeated-paired-coding-agent-benchmark",
+  "provenance": {
+    "captured_at_utc": "2026-08-15T19:32:32.314747+00:00",
+    "environment": {
+      "os": "macOS-26.5.1-arm64-arm-64bit",
+      "python": "3.11.9",
+      "python_implementation": "CPython"
+    },
+    "repository": {
+      "commit": "3ab99a38ce8addc39e285476b528c090f816459d",
+      "dirty": true
+    },
+    "settings": {
+      "runs": 3
+    },
+    "task_corpus": {
+      "path": "data/formal_repair_benchmark_tasks.json",
+      "sha256": "3f928d079b01b38af09dd9c720918dca440fdf4f1079db063a31e216a7cc053c"
+    }
+  },
+  "run_count": 3,
+  "runs": [
+    {
+      "baseline_successes": 8,
+      "baseline_tokens": 1858,
+      "median_task_token_delta": -15.0,
+      "results": [
+        {
+          "baseline": {
+            "completion_tokens": 71,
+            "duration_seconds": 7.859847874846309,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "clamp_value(-1, 0, 0) (which returns -1)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 209,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 280
+          },
+          "shielded": {
+            "completion_tokens": 71,
+            "duration_seconds": 6.2394560421817005,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "clamp_value(-1, 0, 0) (which returns -1)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 231,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 302
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair clamp_value so its stated lower/upper postcondition holds for every valid input.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-clamp-value"
+          },
+          "token_delta": -22
+        },
+        {
+          "baseline": {
+            "completion_tokens": 26,
+            "duration_seconds": 3.2144522089511156,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "identity(1) (which returns 0)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 188,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 214
+          },
+          "shielded": {
+            "completion_tokens": 26,
+            "duration_seconds": 3.3148545001167804,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "identity(1) (which returns 0)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 203,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 229
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair identity so its postcondition returns the input unchanged.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-identity"
+          },
+          "token_delta": -15
+        },
+        {
+          "baseline": {
+            "completion_tokens": 36,
+            "duration_seconds": 3.757664583157748,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "nonnegative(-1) (which returns -1)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 189,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 225
+          },
+          "shielded": {
+            "completion_tokens": 36,
+            "duration_seconds": 3.7448827079497278,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "nonnegative(-1) (which returns -1)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 205,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 241
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair nonnegative so it always returns a non-negative integer.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-nonnegative"
+          },
+          "token_delta": -16
+        },
+        {
+          "baseline": {
+            "completion_tokens": 43,
+            "duration_seconds": 4.62031170912087,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "absolute(-1) (which returns -1)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 189,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 232
+          },
+          "shielded": {
+            "completion_tokens": 29,
+            "duration_seconds": 3.346970000071451,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "absolute(-1) (which returns -1)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 204,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 233
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair absolute so it returns the absolute value for every integer input.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-absolute"
+          },
+          "token_delta": -1
+        },
+        {
+          "baseline": {
+            "completion_tokens": 32,
+            "duration_seconds": 3.919457499869168,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "double(1) (which returns 1)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 190,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 222
+          },
+          "shielded": {
+            "completion_tokens": 32,
+            "duration_seconds": 3.5039775408804417,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "double(1) (which returns 1)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 205,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 237
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair double so its result is exactly twice its input for every integer.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-double"
+          },
+          "token_delta": -15
+        },
+        {
+          "baseline": {
+            "completion_tokens": 29,
+            "duration_seconds": 3.739216750022024,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "successor(0) (which returns 0)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 187,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 216
+          },
+          "shielded": {
+            "completion_tokens": 29,
+            "duration_seconds": 3.9594387079123408,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "successor(0) (which returns 0)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 202,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 231
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair successor so its result is strictly greater than its input for every integer.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-successor"
+          },
+          "token_delta": -15
+        },
+        {
+          "baseline": {
+            "completion_tokens": 37,
+            "duration_seconds": 3.7646407920401543,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "maximum(-1, 0) (which returns -1)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 195,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 232
+          },
+          "shielded": {
+            "completion_tokens": 37,
+            "duration_seconds": 3.8877028331626207,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "maximum(-1, 0) (which returns -1)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 213,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 250
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair maximum so its result is at least both integer inputs.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-maximum"
+          },
+          "token_delta": -18
+        },
+        {
+          "baseline": {
+            "completion_tokens": 41,
+            "duration_seconds": 4.353648625081405,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "is_even(1) (which returns True)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 196,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 237
+          },
+          "shielded": {
+            "completion_tokens": 41,
+            "duration_seconds": 4.050290249986574,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "is_even(1) (which returns True)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 211,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 252
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair is_even so it returns whether its integer input is even.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-is-even"
+          },
+          "token_delta": -15
+        }
+      ],
+      "schema_version": 2,
+      "shielded_successes": 8,
+      "shielded_tokens": 1975,
+      "task_count": 8,
+      "token_delta": -117,
+      "token_reduction_ratio": -0.06297093649085038
+    },
+    {
+      "baseline_successes": 8,
+      "baseline_tokens": 1844,
+      "median_task_token_delta": -15.0,
+      "results": [
+        {
+          "baseline": {
+            "completion_tokens": 71,
+            "duration_seconds": 5.889731459086761,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "clamp_value(-1, 0, 0) (which returns -1)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 209,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 280
+          },
+          "shielded": {
+            "completion_tokens": 71,
+            "duration_seconds": 5.152073625009507,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "clamp_value(-1, 0, 0) (which returns -1)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 231,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 302
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair clamp_value so its stated lower/upper postcondition holds for every valid input.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-clamp-value"
+          },
+          "token_delta": -22
+        },
+        {
+          "baseline": {
+            "completion_tokens": 26,
+            "duration_seconds": 2.899124291026965,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "identity(1) (which returns 0)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 188,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 214
+          },
+          "shielded": {
+            "completion_tokens": 26,
+            "duration_seconds": 2.6134274578653276,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "identity(1) (which returns 0)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 203,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 229
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair identity so its postcondition returns the input unchanged.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-identity"
+          },
+          "token_delta": -15
+        },
+        {
+          "baseline": {
+            "completion_tokens": 36,
+            "duration_seconds": 3.3599624999333173,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "nonnegative(-1) (which returns -1)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 189,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 225
+          },
+          "shielded": {
+            "completion_tokens": 45,
+            "duration_seconds": 4.543034709058702,
+            "error": "CrossHair found a contract or assertion issue: nonnegative(-1)",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "nonnegative(-1) (which returns -1)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [
+                "nonnegative(-1)"
+              ],
+              "final_issues": [
+                "CrossHair found a contract or assertion issue"
+              ],
+              "final_verifier_output": [
+                "/private/var/folders/fr/zgwhhqkx1k953vglp24mbbkh0000gn/T/agent_harness_crosshair_j1v4rr5i/candidate.py:4: error: ValueError: Input must be non-negative when calling nonnegative(-1)"
+              ],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 205,
+            "retries": 1,
+            "success": false,
+            "tool_calls": 1,
+            "total_tokens": 250
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair nonnegative so it always returns a non-negative integer.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-nonnegative"
+          },
+          "token_delta": -25
+        },
+        {
+          "baseline": {
+            "completion_tokens": 29,
+            "duration_seconds": 2.790892458986491,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "absolute(-1) (which returns -1)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 189,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 218
+          },
+          "shielded": {
+            "completion_tokens": 29,
+            "duration_seconds": 2.765260959044099,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "absolute(-1) (which returns -1)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 204,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 233
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair absolute so it returns the absolute value for every integer input.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-absolute"
+          },
+          "token_delta": -15
+        },
+        {
+          "baseline": {
+            "completion_tokens": 32,
+            "duration_seconds": 3.427132540848106,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "double(1) (which returns 1)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 190,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 222
+          },
+          "shielded": {
+            "completion_tokens": 32,
+            "duration_seconds": 3.1655630830209702,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "double(1) (which returns 1)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 205,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 237
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair double so its result is exactly twice its input for every integer.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-double"
+          },
+          "token_delta": -15
+        },
+        {
+          "baseline": {
+            "completion_tokens": 29,
+            "duration_seconds": 2.627162750111893,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "successor(0) (which returns 0)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 187,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 216
+          },
+          "shielded": {
+            "completion_tokens": 29,
+            "duration_seconds": 3.2506459581200033,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "successor(0) (which returns 0)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 202,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 231
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair successor so its result is strictly greater than its input for every integer.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-successor"
+          },
+          "token_delta": -15
+        },
+        {
+          "baseline": {
+            "completion_tokens": 37,
+            "duration_seconds": 3.7243260419927537,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "maximum(-1, 0) (which returns -1)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 195,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 232
+          },
+          "shielded": {
+            "completion_tokens": 37,
+            "duration_seconds": 3.3186300420202315,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "maximum(-1, 0) (which returns -1)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 213,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 250
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair maximum so its result is at least both integer inputs.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-maximum"
+          },
+          "token_delta": -18
+        },
+        {
+          "baseline": {
+            "completion_tokens": 41,
+            "duration_seconds": 3.7932181670330465,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "is_even(1) (which returns True)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 196,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 237
+          },
+          "shielded": {
+            "completion_tokens": 41,
+            "duration_seconds": 3.6036534579470754,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "is_even(1) (which returns True)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 211,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 252
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair is_even so it returns whether its integer input is even.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-is-even"
+          },
+          "token_delta": -15
+        }
+      ],
+      "schema_version": 2,
+      "shielded_successes": 7,
+      "shielded_tokens": 1984,
+      "task_count": 8,
+      "token_delta": -140,
+      "token_reduction_ratio": -0.07592190889370933
+    },
+    {
+      "baseline_successes": 8,
+      "baseline_tokens": 1858,
+      "median_task_token_delta": -15.0,
+      "results": [
+        {
+          "baseline": {
+            "completion_tokens": 71,
+            "duration_seconds": 5.602816374972463,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "clamp_value(-1, 0, 0) (which returns -1)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 209,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 280
+          },
+          "shielded": {
+            "completion_tokens": 71,
+            "duration_seconds": 5.723395416978747,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "clamp_value(-1, 0, 0) (which returns -1)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 231,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 302
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair clamp_value so its stated lower/upper postcondition holds for every valid input.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-clamp-value"
+          },
+          "token_delta": -22
+        },
+        {
+          "baseline": {
+            "completion_tokens": 26,
+            "duration_seconds": 2.5286076669581234,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "identity(1) (which returns 0)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 188,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 214
+          },
+          "shielded": {
+            "completion_tokens": 26,
+            "duration_seconds": 2.668475625105202,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "identity(1) (which returns 0)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 203,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 229
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair identity so its postcondition returns the input unchanged.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-identity"
+          },
+          "token_delta": -15
+        },
+        {
+          "baseline": {
+            "completion_tokens": 36,
+            "duration_seconds": 3.19131370796822,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "nonnegative(-1) (which returns -1)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 189,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 225
+          },
+          "shielded": {
+            "completion_tokens": 36,
+            "duration_seconds": 2.9813430418726057,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "nonnegative(-1) (which returns -1)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 205,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 241
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair nonnegative so it always returns a non-negative integer.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-nonnegative"
+          },
+          "token_delta": -16
+        },
+        {
+          "baseline": {
+            "completion_tokens": 43,
+            "duration_seconds": 3.9614860001020133,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "absolute(-1) (which returns -1)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 189,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 232
+          },
+          "shielded": {
+            "completion_tokens": 29,
+            "duration_seconds": 3.3075167080387473,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "absolute(-1) (which returns -1)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 204,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 233
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair absolute so it returns the absolute value for every integer input.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-absolute"
+          },
+          "token_delta": -1
+        },
+        {
+          "baseline": {
+            "completion_tokens": 32,
+            "duration_seconds": 2.7345603331923485,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "double(1) (which returns 1)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 190,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 222
+          },
+          "shielded": {
+            "completion_tokens": 32,
+            "duration_seconds": 3.089541249908507,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "double(1) (which returns 1)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 205,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 237
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair double so its result is exactly twice its input for every integer.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-double"
+          },
+          "token_delta": -15
+        },
+        {
+          "baseline": {
+            "completion_tokens": 29,
+            "duration_seconds": 2.888423584168777,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "successor(0) (which returns 0)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 187,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 216
+          },
+          "shielded": {
+            "completion_tokens": 29,
+            "duration_seconds": 2.582430582959205,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "successor(0) (which returns 0)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 202,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 231
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair successor so its result is strictly greater than its input for every integer.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-successor"
+          },
+          "token_delta": -15
+        },
+        {
+          "baseline": {
+            "completion_tokens": 37,
+            "duration_seconds": 3.7551050421316177,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "maximum(-1, 0) (which returns -1)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 195,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 232
+          },
+          "shielded": {
+            "completion_tokens": 37,
+            "duration_seconds": 3.93647229205817,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "maximum(-1, 0) (which returns -1)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 213,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 250
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair maximum so its result is at least both integer inputs.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-maximum"
+          },
+          "token_delta": -18
+        },
+        {
+          "baseline": {
+            "completion_tokens": 41,
+            "duration_seconds": 3.8875429581385106,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "is_even(1) (which returns True)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 196,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 237
+          },
+          "shielded": {
+            "completion_tokens": 41,
+            "duration_seconds": 4.137851665960625,
+            "error": "",
+            "metadata": {
+              "context_window": 8192,
+              "counterexample": "is_even(1) (which returns True)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 211,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 252
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair is_even so it returns whether its integer input is even.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-is-even"
+          },
+          "token_delta": -15
+        }
+      ],
+      "schema_version": 2,
+      "shielded_successes": 8,
+      "shielded_tokens": 1975,
+      "task_count": 8,
+      "token_delta": -117,
+      "token_reduction_ratio": -0.06297093649085038
+    }
+  ],
+  "schema_version": 2,
+  "summary": {
+    "baseline_duration_seconds": {
+      "count": 3,
+      "descriptive_95pct_high": 35.1399798817124,
+      "descriptive_95pct_low": 26.3871173981144,
+      "max": 35.229240043088794,
+      "mean": 30.7635486399134,
+      "min": 28.511550209019333,
+      "stdev": 3.8674496258304187
+    },
+    "baseline_successes": {
+      "count": 3,
+      "descriptive_95pct_high": 8.0,
+      "descriptive_95pct_low": 8.0,
+      "max": 8,
+      "mean": 8,
+      "min": 8,
+      "stdev": 0.0
+    },
+    "baseline_tokens": {
+      "count": 3,
+      "descriptive_95pct_high": 1862.48,
+      "descriptive_95pct_low": 1844.1866666666665,
+      "max": 1858,
+      "mean": 1853.3333333333333,
+      "min": 1844,
+      "stdev": 8.082903768654761
+    },
+    "baseline_tool_calls": {
+      "count": 3,
+      "descriptive_95pct_high": 8.0,
+      "descriptive_95pct_low": 8.0,
+      "max": 8,
+      "mean": 8,
+      "min": 8,
+      "stdev": 0.0
+    },
+    "shielded_duration_seconds": {
+      "count": 3,
+      "descriptive_95pct_high": 31.999215054055146,
+      "descriptive_95pct_low": 27.25871058409776,
+      "max": 32.04757258226164,
+      "mean": 29.628962819076452,
+      "min": 28.412289292085916,
+      "stdev": 2.0945904580289714
+    },
+    "shielded_successes": {
+      "count": 3,
+      "descriptive_95pct_high": 8.32,
+      "descriptive_95pct_low": 7.013333333333334,
+      "max": 8,
+      "mean": 7.666666666666667,
+      "min": 7,
+      "stdev": 0.5773502691896257
+    },
+    "shielded_tokens": {
+      "count": 3,
+      "descriptive_95pct_high": 1983.88,
+      "descriptive_95pct_low": 1972.12,
+      "max": 1984,
+      "mean": 1978,
+      "min": 1975,
+      "stdev": 5.196152422706632
+    },
+    "shielded_tool_calls": {
+      "count": 3,
+      "descriptive_95pct_high": 8.0,
+      "descriptive_95pct_low": 8.0,
+      "max": 8,
+      "mean": 8,
+      "min": 8,
+      "stdev": 0.0
+    },
+    "token_delta": {
+      "count": 3,
+      "descriptive_95pct_high": -109.64,
+      "descriptive_95pct_low": -139.69333333333333,
+      "max": -117,
+      "mean": -124.66666666666667,
+      "min": -140,
+      "stdev": 13.279056191361393
+    },
+    "token_reduction_ratio": {
+      "count": 3,
+      "descriptive_95pct_high": -0.05882662532193551,
+      "descriptive_95pct_low": -0.0757492292616712,
+      "max": -0.06297093649085038,
+      "mean": -0.06728792729180336,
+      "min": -0.07592190889370933,
+      "stdev": 0.007477247403058026
+    }
+  },
+  "task_count": 8,
+  "variant_metadata": {
+    "baseline": [
+      {
+        "context_window": 8192,
+        "counterexample": "clamp_value(-1, 0, 0) (which returns -1)",
+        "counterexample_in_prompt": false,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "mode": "baseline",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      },
+      {
+        "context_window": 8192,
+        "counterexample": "identity(1) (which returns 0)",
+        "counterexample_in_prompt": false,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "mode": "baseline",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      },
+      {
+        "context_window": 8192,
+        "counterexample": "nonnegative(-1) (which returns -1)",
+        "counterexample_in_prompt": false,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "mode": "baseline",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      },
+      {
+        "context_window": 8192,
+        "counterexample": "absolute(-1) (which returns -1)",
+        "counterexample_in_prompt": false,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "mode": "baseline",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      },
+      {
+        "context_window": 8192,
+        "counterexample": "double(1) (which returns 1)",
+        "counterexample_in_prompt": false,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "mode": "baseline",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      },
+      {
+        "context_window": 8192,
+        "counterexample": "successor(0) (which returns 0)",
+        "counterexample_in_prompt": false,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "mode": "baseline",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      },
+      {
+        "context_window": 8192,
+        "counterexample": "maximum(-1, 0) (which returns -1)",
+        "counterexample_in_prompt": false,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "mode": "baseline",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      },
+      {
+        "context_window": 8192,
+        "counterexample": "is_even(1) (which returns True)",
+        "counterexample_in_prompt": false,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "mode": "baseline",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      }
+    ],
+    "shielded": [
+      {
+        "context_window": 8192,
+        "counterexample": "clamp_value(-1, 0, 0) (which returns -1)",
+        "counterexample_in_prompt": true,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "mode": "guided",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      },
+      {
+        "context_window": 8192,
+        "counterexample": "identity(1) (which returns 0)",
+        "counterexample_in_prompt": true,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "mode": "guided",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      },
+      {
+        "context_window": 8192,
+        "counterexample": "nonnegative(-1) (which returns -1)",
+        "counterexample_in_prompt": true,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "mode": "guided",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      },
+      {
+        "context_window": 8192,
+        "counterexample": "absolute(-1) (which returns -1)",
+        "counterexample_in_prompt": true,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "mode": "guided",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      },
+      {
+        "context_window": 8192,
+        "counterexample": "double(1) (which returns 1)",
+        "counterexample_in_prompt": true,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "mode": "guided",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      },
+      {
+        "context_window": 8192,
+        "counterexample": "successor(0) (which returns 0)",
+        "counterexample_in_prompt": true,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "mode": "guided",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      },
+      {
+        "context_window": 8192,
+        "counterexample": "maximum(-1, 0) (which returns -1)",
+        "counterexample_in_prompt": true,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "mode": "guided",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      },
+      {
+        "context_window": 8192,
+        "counterexample": "is_even(1) (which returns True)",
+        "counterexample_in_prompt": true,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "mode": "guided",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      },
+      {
+        "context_window": 8192,
+        "counterexample": "nonnegative(-1) (which returns -1)",
+        "counterexample_in_prompt": true,
+        "final_counterexamples": [
+          "nonnegative(-1)"
+        ],
+        "final_issues": [
+          "CrossHair found a contract or assertion issue"
+        ],
+        "final_verifier_output": [
+          "/private/var/folders/fr/zgwhhqkx1k953vglp24mbbkh0000gn/T/agent_harness_crosshair_j1v4rr5i/candidate.py:4: error: ValueError: Input must be non-negative when calling nonnegative(-1)"
+        ],
+        "mode": "guided",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      }
+    ]
+  }
+}

@@ -52,11 +52,12 @@ them as diagnostic evidence rather than a token-saving result.
 
 The CrossHair repair path is intentionally scoped to Python contracts. It does
 not establish a verification result for C, C++, Rust, or JavaScript. The
-frozen corpus contains four small postcondition failures (`clamp`, `identity`,
-`nonnegative`, and `absolute`); the A/B runner starts each variant from the
-same broken fixture. The guided prompt receives CrossHair's concrete failing
-call and the baseline omits only that line. Both variants receive the same
-code-only repair contract. Every failed outcome records the verifier's
+versioned corpus contains eight small, varied postcondition failures:
+clamping, identity, non-negativity, absolute value, doubling, successor,
+maximum, and an evenness predicate. The A/B runner starts each variant from
+the same broken fixture. The guided prompt receives CrossHair's concrete
+failing call and the baseline omits only that line. Both variants receive the
+same code-only repair contract. Every failed outcome records the verifier's
 concrete witness in the raw JSON and rendered report.
 
 ```bash
@@ -69,7 +70,19 @@ make research-report \
 This command intentionally performs local model calls. It writes every run,
 including failures, and must not be presented as an effectiveness result until
 the resulting raw JSON and dated report are committed. It is evidence from a
-small corpus, not a general multi-language verification claim.
+small, Python-only corpus with varied contract shapes, not a general
+multi-language verification claim.
+
+### Published 8-task observation (2026-08-15)
+
+The committed three-repeat study in
+[`results/formal-counterexample-repair-2026-08-15.md`](results/formal-counterexample-repair-2026-08-15.md)
+records a mean of 7.67/8 guided completions versus 8.00/8 for the baseline.
+The guided variant used 6.73% more mean model tokens (1,978.00 versus
+1,853.33). It was 1.13 seconds faster on average, but the corpus is too small
+to treat that as a performance claim. This is a retained negative result: the
+one guided failure is `formal-nonnegative`, and its CrossHair witness is
+preserved in the raw JSON.
 
 ## Cost-aware route evidence
 

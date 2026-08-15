@@ -48,6 +48,26 @@ def absolute(value: int) -> int:
     """post: _ == abs(value)"""
     return value
 '''.strip(),
+    "formal-double": '''
+def double(value: int) -> int:
+    """post: _ == value * 2"""
+    return value
+'''.strip(),
+    "formal-successor": '''
+def successor(value: int) -> int:
+    """post: _ > value"""
+    return value
+'''.strip(),
+    "formal-maximum": '''
+def maximum(left: int, right: int) -> int:
+    """post: _ >= left and _ >= right"""
+    return left
+'''.strip(),
+    "formal-is-even": '''
+def is_even(value: int) -> bool:
+    """post: _ == (value % 2 == 0)"""
+    return True
+'''.strip(),
 }
 
 

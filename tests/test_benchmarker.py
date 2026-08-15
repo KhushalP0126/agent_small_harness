@@ -49,6 +49,7 @@ from validation.policy import validate_findings
 from validation.types import ValidationResult, Violation
 from scripts.run_coding_capability import _behavior_spec, _build_prompt, _usage_summary, _worker_contribution
 from scripts.run_formal_repair_benchmark_agent import (
+    BROKEN_SOURCES,
     _baseline_prompt,
     _compact_verifier_detail,
     _formal_failure_text,
@@ -1179,6 +1180,12 @@ def analyze(matrix):
         control = _baseline_prompt(prompt)
         self.assertNotIn("Formal counterexample", control)
         self.assertIn("Repair hint: satisfy_contract", control)
+
+    def test_formal_benchmark_corpus_has_a_broken_source_for_every_task(self) -> None:
+        corpus = json.loads((ROOT / "data" / "formal_repair_benchmark_tasks.json").read_text())
+        task_ids = {task["task_id"] for task in corpus}
+        self.assertEqual(task_ids, set(BROKEN_SOURCES))
+        self.assertEqual(len(task_ids), 8)
 
     def test_formal_benchmark_failure_includes_crosshair_witness(self) -> None:
         result = FormalResult(
