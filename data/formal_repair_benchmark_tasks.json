@@ -10,5 +10,17 @@
     "category": "formal_repair",
     "prompt": "Repair identity so its postcondition returns the input unchanged.",
     "suggested_max_turns": 1
+  },
+  {
+    "task_id": "formal-nonnegative",
+    "category": "formal_repair",
+    "prompt": "Repair nonnegative so it always returns a non-negative integer.",
+    "suggested_max_turns": 1
+  },
+  {
+    "task_id": "formal-absolute",
+    "category": "formal_repair",
+    "prompt": "Repair absolute so it returns the absolute value for every integer input.",
+    "suggested_max_turns": 1
   }
 ]

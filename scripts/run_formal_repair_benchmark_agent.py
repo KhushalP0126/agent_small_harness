@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 import time
 from pathlib import Path
@@ -19,7 +20,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from backends.ollama_client import DEFAULT_OLLAMA_MODEL, OllamaGenerationConfig, OllamaModelSupplier
-from prompt.retry_builder import build_retry_prompt
+from prompt.retry_builder import build_small_worker_retry_prompt
 from validation.formal import FormalResult, validate_with_crosshair
 from validation.types import Violation
 
@@ -36,6 +37,16 @@ def clamp_value(value: int, lower: int, upper: int) -> int:
 def identity(value: int) -> int:
     """post: _ == value"""
     return 0
+'''.strip(),
+    "formal-nonnegative": '''
+def nonnegative(value: int) -> int:
+    """post: _ >= 0"""
+    return value
+'''.strip(),
+    "formal-absolute": '''
+def absolute(value: int) -> int:
+    """post: _ == abs(value)"""
+    return value
 '''.strip(),
 }
 
@@ -62,6 +73,29 @@ def _baseline_prompt(prompt: str) -> str:
     return "\n".join(
         line for line in prompt.splitlines() if not line.lstrip().startswith("Formal counterexample:")
     )
+
+
+def _formal_failure_text(result: FormalResult) -> str:
+    """Keep failure evidence visible in raw benchmark output and reports."""
+
+    rows: list[str] = []
+    for issue in result.issues:
+        detail = issue.counterexample or issue.details
+        detail = _compact_verifier_detail(detail)
+        rows.append(f"{issue.summary}: {detail}" if detail else issue.summary)
+    return "; ".join(rows) or "formal validation did not produce issue details"
+
+
+def _compact_verifier_detail(detail: str) -> str:
+    """Keep reports readable while retaining the complete verifier output in metadata."""
+
+    normalized = " ".join(detail.split())
+    if "Could not import your code:" in normalized:
+        exception = re.findall(r"\b(?:[A-Za-z_]+Error|Exception):\s*([^\n]+)", normalized)
+        if exception:
+            return f"generated candidate could not be imported: {exception[-1]}"
+        return "generated candidate could not be imported"
+    return normalized
 
 
 def _result(
@@ -103,7 +137,11 @@ def run_task(
         )
     if formal.is_compliant:
         return _result(False, started, error="fixture unexpectedly satisfies its contract")
-    prompt = build_retry_prompt(source, _formal_violations(formal))
+    # The compact worker prompt carries the same concrete witness but ends in
+    # an explicit code-only contract. The generic retry prompt is intended for
+    # a higher-capacity orchestrator and permits explanatory text, which makes
+    # a small local model's benchmark output needlessly ambiguous.
+    prompt = build_small_worker_retry_prompt(source, _formal_violations(formal))
     if mode == "baseline":
         prompt = _baseline_prompt(prompt)
     supplier = OllamaModelSupplier(model=model)
@@ -116,6 +154,7 @@ def run_task(
             started,
             prompt_tokens=int(usage.get("prompt_tokens", 0)),
             completion_tokens=int(usage.get("completion_tokens", 0)),
+            error="" if outcome.is_compliant and not outcome.skipped else _formal_failure_text(outcome),
             metadata={
                 "mode": mode,
                 "provider": "ollama",
@@ -128,6 +167,8 @@ def run_task(
                 "counterexample": formal.issues[0].counterexample if formal.issues else "",
                 "pricing_basis": usage.get("pricing_basis", "local_unpriced"),
                 "final_issues": [issue.summary for issue in outcome.issues],
+                "final_counterexamples": [issue.counterexample for issue in outcome.issues if issue.counterexample],
+                "final_verifier_output": [issue.details for issue in outcome.issues],
             },
         )
     except Exception as exc:  # noqa: BLE001 - return benchmark-shaped JSON on model failures

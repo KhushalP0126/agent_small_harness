@@ -1,15 +1,15 @@
 # Formal counterexample-guided repair A/B (Qwen 1.5B)
 
-> Generated: 2026-08-14 · Source schema: 2
+> Generated: 2026-08-15 · Source schema: 2
 
 ## Reproducibility
 
-- Commit: `7c8b653d479f08b33fb6802a5b8a670bb729bfd9`
+- Commit: `10fde3c5e254efe458c86d1f3e27dc3ddcdb3513`
 - Working tree dirty: `True`
 - OS: `macOS-26.5.1-arm64-arm-64bit`
 - Python: `3.11.9`
 - Corpus: `data/formal_repair_benchmark_tasks.json`
-- Corpus SHA-256: `a69409d1c882892b3f97b2d4378f8c05bd964041f84bcc68c516de7423dd7311`
+- Corpus SHA-256: `2435e72842b4ccb24742b140e650394726f659a786eca2d85d4190f117e94608`
 - Repetitions: `3`
 
 ## Configured variants
@@ -22,10 +22,10 @@
 
 | Measure | Baseline mean ± SD | Shielded mean ± SD | Difference |
 | --- | ---: | ---: | ---: |
-| Successful tasks | 1.00 ± 1.00 | 1.67 ± 0.58 | +0.67 |
-| Model tokens | 719.00 ± 41.58 | 782.33 ± 35.81 | +63.33 |
-| Tool calls | 2.00 ± 0.00 | 2.00 ± 0.00 | +0.00 |
-| Wall-clock seconds | 6.59 ± 2.31 | 8.09 ± 1.84 | +1.51 |
+| Successful tasks | 3.67 ± 0.58 | 4.00 ± 0.00 | +0.33 |
+| Model tokens | 949.33 ± 11.59 | 1003.67 ± 2.31 | +54.33 |
+| Tool calls | 4.00 ± 0.00 | 4.00 ± 0.00 | +0.00 |
+| Wall-clock seconds | 14.33 ± 2.29 | 13.41 ± 0.90 | -0.92 |
 
 ## Interpretation
 
@@ -33,10 +33,7 @@ The shielded loop used more mean model tokens in this recorded experiment; the r
 
 ## Failures retained
 
-- Run 1: `formal-clamp-value` (baseline) — unspecified failure
-- Run 1: `formal-clamp-value` (shielded) — unspecified failure
-- Run 2: `formal-clamp-value` (baseline) — unspecified failure
-- Run 2: `formal-identity` (baseline) — unspecified failure
+- Run 1: `formal-nonnegative` (baseline) — CrossHair found a contract or assertion issue: nonnegative(-1)
 
 ## Raw evidence
 

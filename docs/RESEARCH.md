@@ -35,9 +35,12 @@ them as diagnostic evidence rather than a token-saving result.
 
 The CrossHair repair path is intentionally scoped to Python contracts. It does
 not establish a verification result for C, C++, Rust, or JavaScript. The
-pre-registered A/B runner starts each variant from the same broken contract
-fixture; the guided prompt receives CrossHair's concrete failing call and the
-baseline omits only that line.
+frozen corpus contains four small postcondition failures (`clamp`, `identity`,
+`nonnegative`, and `absolute`); the A/B runner starts each variant from the
+same broken fixture. The guided prompt receives CrossHair's concrete failing
+call and the baseline omits only that line. Both variants receive the same
+code-only repair contract. Every failed outcome records the verifier's
+concrete witness in the raw JSON and rendered report.
 
 ```bash
 make research-formal-repair RESEARCH_RUNS=3 MODEL=qwen2.5-coder:1.5b
@@ -48,7 +51,8 @@ make research-report \
 
 This command intentionally performs local model calls. It writes every run,
 including failures, and must not be presented as an effectiveness result until
-the resulting raw JSON and dated report are committed.
+the resulting raw JSON and dated report are committed. It is evidence from a
+small corpus, not a general multi-language verification claim.
 
 ## Cost-aware route evidence
 

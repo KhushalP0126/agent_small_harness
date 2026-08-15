@@ -48,7 +48,11 @@ from validation.formal import (
 from validation.policy import validate_findings
 from validation.types import ValidationResult, Violation
 from scripts.run_coding_capability import _behavior_spec, _build_prompt, _usage_summary, _worker_contribution
-from scripts.run_formal_repair_benchmark_agent import _baseline_prompt
+from scripts.run_formal_repair_benchmark_agent import (
+    _baseline_prompt,
+    _compact_verifier_detail,
+    _formal_failure_text,
+)
 from scripts.review_run import render_review
 from scripts.run_formal_experiment import GOOD_SOURCE
 from scripts.run_plan_mode_ladder import _keep_first_break as keep_first_plan_break
@@ -1175,6 +1179,30 @@ def analyze(matrix):
         control = _baseline_prompt(prompt)
         self.assertNotIn("Formal counterexample", control)
         self.assertIn("Repair hint: satisfy_contract", control)
+
+    def test_formal_benchmark_failure_includes_crosshair_witness(self) -> None:
+        result = FormalResult(
+            is_compliant=False,
+            issues=[
+                FormalIssue(
+                    tool="crosshair",
+                    summary="CrossHair found a contract issue",
+                    details="full verifier output",
+                    counterexample="identity(-1) (which returns 0)",
+                )
+            ],
+        )
+        self.assertEqual(
+            _formal_failure_text(result),
+            "CrossHair found a contract issue: identity(-1) (which returns 0)",
+        )
+
+    def test_formal_benchmark_compacts_import_trace_for_report(self) -> None:
+        trace = "Could not import your code:\\nTraceback ...\\nNameError: name 'obj' is not defined"
+        self.assertEqual(
+            _compact_verifier_detail(trace),
+            "generated candidate could not be imported: name 'obj' is not defined",
+        )
 
     def test_ollama_supplier_extracts_fenced_python_code(self) -> None:
         class StubClient:
