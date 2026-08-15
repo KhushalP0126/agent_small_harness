@@ -36,6 +36,7 @@ from prompt.budget import budget_prompt
 from prompt.summarizer import DefaultPromptSummarizer
 from validation.import_graph import (
     analyze_import_graph,
+    declared_symbols_for_spec,
     validate_cross_file_contracts,
     validate_imported_symbols,
 )
@@ -1157,26 +1158,33 @@ def _normalize_symbol(text: str) -> str:
 
 def _validate_structured_spec_output(source: str, plan, contracts=None) -> list[dict]:
     issues: list[dict] = []
-    try:
-        tree = ast.parse(source)
-    except SyntaxError as exc:
-        return [
-            {
-                "kind": "spec_parse_error",
-                "summary": "Generated source does not parse for spec validation",
-                "details": str(exc),
-            }
-        ]
-    defined: set[str] = set()
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
-            defined.add(node.name)
-        elif isinstance(node, ast.Assign):
-            for target in node.targets:
-                if isinstance(target, ast.Name):
-                    defined.add(target.id)
-        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
-            defined.add(node.target.id)
+    language = str(getattr(plan, "language", "python")).strip().casefold()
+    if language == "python":
+        try:
+            tree = ast.parse(source)
+        except SyntaxError as exc:
+            return [
+                {
+                    "kind": "spec_parse_error",
+                    "summary": "Generated source does not parse for spec validation",
+                    "details": str(exc),
+                }
+            ]
+        defined: set[str] = set()
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                defined.add(node.name)
+            elif isinstance(node, ast.Assign):
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        defined.add(target.id)
+            elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+                defined.add(node.target.id)
+    else:
+        # Syntax and compilation are handled by language-specific engines.
+        # This gate only verifies that the structured spec's named surface is
+        # present without pretending every language is Python.
+        defined = declared_symbols_for_spec(source, language)
 
     for component in plan.components:
         symbol = _normalize_symbol(component)
@@ -1216,17 +1224,18 @@ def _validate_structured_spec_output(source: str, plan, contracts=None) -> list[
                 "details": ", ".join(missing),
             }
         )
-    for issue in validate_cross_file_contracts(file_map, contracts or []):
-        issues.append(
-            {
-                "kind": issue["kind"],
-                "summary": f"Contract export `{issue['symbol']}` is incompatible in `{issue['file']}`",
-                "details": ", ".join(
-                    f"{key}={value}" for key, value in issue.items() if key not in {"kind", "symbol", "file"}
-                )
-                or issue["kind"],
-            }
-        )
+    if language == "python":
+        for issue in validate_cross_file_contracts(file_map, contracts or []):
+            issues.append(
+                {
+                    "kind": issue["kind"],
+                    "summary": f"Contract export `{issue['symbol']}` is incompatible in `{issue['file']}`",
+                    "details": ", ".join(
+                        f"{key}={value}" for key, value in issue.items() if key not in {"kind", "symbol", "file"}
+                    )
+                    or issue["kind"],
+                }
+            )
     return issues
 
 
@@ -1245,9 +1254,17 @@ def _structured_spec_file_map(
             )
         if owned:
             return owned
-    files = [path for path in getattr(plan, "files", []) if str(path).endswith(".py")]
+    language = str(getattr(plan, "language", "python")).strip().casefold()
+    suffixes = {
+        "python": (".py",),
+        "c": (".c", ".h"),
+        "cpp": (".cpp", ".cc", ".cxx", ".hpp", ".hh", ".hxx"),
+        "rust": (".rs",),
+        "javascript": (".js", ".mjs", ".cjs", ".jsx"),
+    }.get(language, (".py",))
+    files = [path for path in getattr(plan, "files", []) if str(path).endswith(suffixes)]
     if not files:
-        return {"generated_source.py": source}
+        return {f"generated_source{suffixes[0]}": source}
     return {files[0]: source, **{path: "" for path in files[1:]}}
 
 

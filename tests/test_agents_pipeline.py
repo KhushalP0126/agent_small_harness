@@ -774,6 +774,52 @@ class ScalabilityAgentTests(unittest.TestCase):
             self.assertIn("loads", json_schema["allowed_calls"])
             self.assertEqual(json_schema["context"], "Existing json context.")
 
+    def test_approve_library_requires_explicit_review_for_documentation_only_proposal(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            proposal_path = root / "serde_json.json"
+            proposal_path.write_text(
+                json.dumps(
+                    {
+                        "library": "serde_json",
+                        "available": False,
+                        "language": "rust",
+                        "proposal": {
+                            "library": "serde_json",
+                            "language": "rust",
+                            "requires_human_approval": True,
+                            "allowed_calls": [],
+                            "documented_api_candidates": [
+                                {
+                                    "symbol": "from_str",
+                                    "source_url": "https://docs.rs/serde_json/latest/serde_json/fn.from_str.html",
+                                }
+                            ],
+                            "context": "Reviewed serde_json documentation.",
+                            "unknown_api_repair": "Use reviewed serde_json APIs.",
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+            registry_path = root / "library_registry.json"
+
+            with self.assertRaisesRegex(ValueError, "require explicit approval"):
+                merge_proposal(registry_path, proposal_path)
+
+            merge_proposal(
+                registry_path,
+                proposal_path,
+                allow_documentation_only=True,
+            )
+            registry = json.loads(registry_path.read_text(encoding="utf-8"))
+            schema = registry["libraries"]["rust"]["serde_json"]
+            self.assertEqual(schema["allowed_calls"], ["from_str"])
+            self.assertEqual(
+                schema["documented_api"][0]["source_url"],
+                "https://docs.rs/serde_json/latest/serde_json/fn.from_str.html",
+            )
+
 
 class HistorianLearningTests(unittest.TestCase):
     def _temp_history(self) -> Path:

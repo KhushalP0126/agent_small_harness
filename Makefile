@@ -284,7 +284,7 @@ discover-library:
 
 approve-library:
 	@test -n "$(LIB)" || (echo "Set LIB, e.g. make approve-library LIB=json" && exit 1)
-	$(PYTHON) scripts/approve_library.py "$(LIB)"
+	$(PYTHON) scripts/approve_library.py "$(LIB)" $(if $(APPROVE_DOCUMENTATION),--approve-documentation,)
 
 tool-agent:
 	@test -n "$(TASK)" || (echo "Set TASK, e.g. make tool-agent TASK='inspect rust_tui/src/main.rs'" && exit 1)

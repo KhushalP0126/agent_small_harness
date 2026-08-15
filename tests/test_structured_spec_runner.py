@@ -145,9 +145,63 @@ Build the implementation without assuming a programming language.
                 """
 ## App Spec
 
-- language: javascript
+- language: go
 """
             )
+
+    def test_structured_spec_accepts_rust_and_javascript(self) -> None:
+        rust_plan = PlanModeAgent().plan("## App Spec\n\n- language: rust\n")
+        javascript_plan = PlanModeAgent().plan("## App Spec\n\n- language: node\n")
+
+        self.assertEqual(rust_plan.language, "rust")
+        self.assertEqual(javascript_plan.language, "javascript")
+
+    def test_structured_spec_gate_accepts_rust_and_javascript_components(self) -> None:
+        rust_plan = PlanModeAgent().plan(
+            """
+## App Spec
+
+- language: rust
+
+## Required Components
+
+- `GameState`
+- `main()`
+
+## Entrypoint
+
+- `main()`
+"""
+        )
+        javascript_plan = PlanModeAgent().plan(
+            """
+## App Spec
+
+- language: javascript
+
+## Required Components
+
+- `render`
+- `main()`
+
+## Entrypoint
+
+- `main()`
+"""
+        )
+
+        self.assertEqual(
+            _validate_structured_spec_output(
+                "struct GameState;\nfn main() {}\n", rust_plan
+            ),
+            [],
+        )
+        self.assertEqual(
+            _validate_structured_spec_output(
+                "function render() {}\nfunction main() {}\n", javascript_plan
+            ),
+            [],
+        )
 
     def test_integration_prompt_uses_plan_language(self) -> None:
         prompt = _integration_prompt("plan", [], [], language="cpp")

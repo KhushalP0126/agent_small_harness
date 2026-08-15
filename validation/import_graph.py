@@ -430,3 +430,45 @@ def _defined_symbols_for_language(source: str, language: str) -> set[str]:
             symbols.update(item.strip().split(" as ", 1)[0].strip() for item in names.split(",") if item.strip())
         return symbols
     return set()
+
+
+def declared_symbols_for_spec(source: str, language: str) -> set[str]:
+    """Return top-level declarations for structured-spec completeness checks.
+
+    Import validation intentionally accepts only public exports for Rust and
+    JavaScript.  A single generated source file, however, may legitimately
+    contain private helpers and an unexported ``main``.  Keep those two
+    policies separate so accepting a structured spec never weakens the
+    cross-file import-symbol gate.
+    """
+
+    normalized = language.strip().lower()
+    if normalized == "python":
+        return _defined_symbols(source)
+    if normalized == "rust":
+        return set(
+            re.findall(
+                r"\b(?:pub\s+)?(?:async\s+)?(?:fn|struct|enum|trait|const|static|mod)\s+([A-Za-z_]\w*)",
+                source,
+            )
+        )
+    if normalized == "javascript":
+        symbols = set(
+            re.findall(
+                r"\b(?:export\s+)?(?:default\s+)?(?:async\s+)?(?:function|class|const|let|var)\s+([A-Za-z_$][\w$]*)",
+                source,
+            )
+        )
+        return symbols
+    if normalized in {"c", "cpp"}:
+        symbols = set(re.findall(r"\b(?:class|struct|enum|union|typedef)\s+([A-Za-z_]\w*)", source))
+        # A definition must have a body; prototypes are not sufficient to
+        # satisfy a required component in a generated application.
+        symbols.update(
+            re.findall(
+                r"(?m)^\s*(?:[A-Za-z_]\w*(?:\s*<[^>{};()]+>)?[\s:*&]+)+([A-Za-z_]\w*)\s*\([^;{}]*\)\s*(?:const\s*)?\{",
+                source,
+            )
+        )
+        return symbols
+    return set()

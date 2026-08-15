@@ -22,11 +22,15 @@ FUNCTION_NAME_RE = re.compile(
 )
 DEF_NAME_RE = re.compile(r"\bdef\s+(?P<name>[A-Za-z_][A-Za-z0-9_]*)\s*\(")
 CALL_NAME_RE = re.compile(r"\b(?P<name>[a-z_]+[a-z0-9_]*)\s*\(")
-SUPPORTED_STRUCTURED_LANGUAGES = frozenset({"python", "c", "cpp"})
+SUPPORTED_STRUCTURED_LANGUAGES = frozenset({"python", "c", "cpp", "rust", "javascript"})
 STRUCTURED_LANGUAGE_ALIASES = {
     "py": "python",
     "python3": "python",
     "c++": "cpp",
+    "rs": "rust",
+    "js": "javascript",
+    "node": "javascript",
+    "nodejs": "javascript",
 }
 
 
@@ -385,9 +389,10 @@ class PlanModeAgent(BaseAgent):
         classification: TaskClassification,
         structured_sections: dict[str, list[str]] | None = None,
     ) -> list[str]:
-        if classification.language != "python":
-            return []
-        libraries = list(classification.libraries)
+        # A structured spec is explicit user input.  Preserve its declared
+        # libraries for every supported language; actual API use is still
+        # limited to the language-specific trusted registry.
+        libraries = list(classification.libraries) if classification.language == "python" else []
         structured_sections = structured_sections or {}
         for field_name in ("library", "libraries", "allowed_libraries"):
             value = self._structured_meta_field(structured_sections, field_name)

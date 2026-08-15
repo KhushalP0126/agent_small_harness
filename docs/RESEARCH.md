@@ -10,6 +10,17 @@ write code?”:
 The answer must be supported by recorded runs. A passing unit test shows the
 mechanism works; it is not a model-quality claim.
 
+## Current multi-language scope
+
+Structured specifications accept Python, C, C++, Rust, and JavaScript. Rust
+and JavaScript use the existing parse, structural, compilation, and
+project-relative import checks; CrossHair counterexample repair remains a
+Python-only experiment. Non-Python libraries are documentation-first: run
+`make discover-library LIB=<name> DOC_ARGS='--language rust --doc-agent kernel'`,
+review the recorded HTTPS sources, then explicitly approve with
+`make approve-library LIB=<name> APPROVE_DOCUMENTATION=1`. Documentation is
+evidence for a reviewed allow-list entry, never automatic trust.
+
 ## Claims and non-claims
 
 The repository can currently support these claims:
