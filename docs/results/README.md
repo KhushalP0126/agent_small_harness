@@ -35,6 +35,11 @@ render a dated Markdown summary without hiding failed task rows.
   Baseline completed 10.00/11 while guided completed 9.33/11 and used 7.08%
   more mean tokens. All task-level failures, prompts, candidates, and
   CrossHair witnesses remain in the raw JSON.
+- `formal-counterexample-repair-general-directive-2026-08-16.md` —
+  three-repeat comparison of narrow repair guidance versus a single general
+  verifier-aligned directive on that same 11-task corpus. The general
+  directive averaged 6.67/11 versus 9.00/11 for narrow guidance, used 16.10%
+  more mean tokens, and was slower; it is retained as negative evidence.
 - `compute-shield-10-2026-08-04.md` — frozen 1.5B Compute Shield comparison.
 - `local-model-comparison-2026-08-11.md` — controlled Qwen 1.5B versus 3B
   comparison on the same frozen ten-task corpus. Both completed 10/10

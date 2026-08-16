@@ -149,6 +149,23 @@ string contract. This is evidence against treating the successful
 `nonnegative` directive as a general formal-repair improvement. The raw JSON
 retains every candidate, prompt, and CrossHair witness for follow-up analysis.
 
+### General-directive control
+
+To test whether a single verifier-aligned rule beats task-specific guidance,
+the same 11-task corpus was run three times with the narrow guided prompt as
+the control and one general directive as the comparison: accept the verifier's
+counterexample unless a source `pre:` condition excludes it, and satisfy the
+postcondition rather than reject the input. The result in
+[`results/formal-counterexample-repair-general-directive-2026-08-16.md`](results/formal-counterexample-repair-general-directive-2026-08-16.md)
+is unambiguously negative for this small model: narrow guidance averaged
+9.00/11 completions; the general directive averaged 6.67/11, used 455.33 more
+mean tokens (16.10% more), and was 7.39 seconds slower. The general wording
+also reintroduced the known negative-input rejection in `nonnegative` and
+produced rejection branches for evenness, doubling, ordering, and the loop
+fixture. The retained evidence therefore supports a narrower conclusion:
+prompt guidance is task-pattern-sensitive for Qwen 1.5B; a generic
+"respect the witness" instruction does not replace focused repair guidance.
+
 Future raw formal benchmark artifacts retain both the exact repair prompt and
 candidate source, so task-level outcomes can be audited without reconstruction.
 The unsuccessful clarification follow-up is preserved in
@@ -287,6 +304,7 @@ hashes—not keys, raw private prompts, or absolute local paths.
    the independent fixture corpus.
 3. Record the five controlled approval-reviewed session receipts.
 4. Expand the Python/CrossHair study beyond single-function contracts with a
-   repository or multi-function corpus; retain its Python-only scope.
+   repository or multi-function corpus; retain its Python-only scope. The
+   single-function general-directive control is complete and negative.
 5. Accumulate further real sessions only after the controlled receipt set is
    complete; do not elevate anecdotal success into a benchmark claim.

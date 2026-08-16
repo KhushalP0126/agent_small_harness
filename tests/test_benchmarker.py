@@ -53,6 +53,7 @@ from scripts.run_formal_repair_benchmark_agent import (
     _baseline_prompt,
     _compact_verifier_detail,
     _formal_failure_text,
+    _general_formal_prompt,
     run_task as run_formal_repair_task,
 )
 from scripts.review_run import render_review
@@ -1181,6 +1182,17 @@ def analyze(matrix):
         control = _baseline_prompt(prompt)
         self.assertNotIn("Formal counterexample", control)
         self.assertIn("Repair hint: satisfy_contract", control)
+
+    def test_general_formal_control_replaces_task_specific_directive(self) -> None:
+        prompt = (
+            "FIX DIRECTIVE:\n"
+            "The shown negative input is valid. Do NOT write `if value < 0: raise ...`.\n\n"
+            "FINAL RULES:\n- Return code."
+        )
+        controlled = _general_formal_prompt(prompt)
+        self.assertIn("Use the verifier's counterexample as a valid input", controlled)
+        self.assertNotIn("Do NOT write `if value < 0: raise ...`", controlled)
+        self.assertIn("FINAL RULES:", controlled)
 
     def test_formal_benchmark_corpus_has_a_broken_source_for_every_task(self) -> None:
         corpus = json.loads((ROOT / "data" / "formal_repair_benchmark_tasks.json").read_text())

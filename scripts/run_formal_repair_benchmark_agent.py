@@ -91,6 +91,13 @@ def prefix_sum(count: int) -> int:
 }
 
 
+GENERAL_FORMAL_DIRECTIVE = (
+    "Use the verifier's counterexample as a valid input unless the source declares a precondition "
+    "that excludes it. Make the returned value satisfy the postcondition for that exact input; "
+    "do not reject it, raise an exception, or add an early-exit branch that the source does not require."
+)
+
+
 def _formal_violations(result: FormalResult) -> list[Violation]:
     return [
         Violation(
@@ -112,6 +119,18 @@ def _baseline_prompt(prompt: str) -> str:
     """Pre-registered control: remove only the distinct witness line."""
     return "\n".join(
         line for line in prompt.splitlines() if not line.lstrip().startswith("Formal counterexample:")
+    )
+
+
+def _general_formal_prompt(prompt: str) -> str:
+    """Replace a task-pattern directive with one verifier-aligned control directive."""
+
+    return re.sub(
+        r"(FIX DIRECTIVE:\n).*?(\n\nFINAL RULES:)",
+        rf"\1{GENERAL_FORMAL_DIRECTIVE}\2",
+        prompt,
+        count=1,
+        flags=re.DOTALL,
     )
 
 
@@ -184,6 +203,8 @@ def run_task(
     prompt = build_small_worker_retry_prompt(source, _formal_violations(formal))
     if mode == "baseline":
         prompt = _baseline_prompt(prompt)
+    elif mode == "general":
+        prompt = _general_formal_prompt(prompt)
     supplier = OllamaModelSupplier(model=model)
     try:
         repaired = supplier.repair_draft(source, prompt)
@@ -203,7 +224,7 @@ def run_task(
                 "thinking_type": "not_applicable",
                 "reasoning_effort": "not_applicable",
                 "scope": "python-crosshair-only",
-                "counterexample_in_prompt": mode == "guided",
+                "counterexample_in_prompt": mode != "baseline",
                 "counterexample": formal.issues[0].counterexample if formal.issues else "",
                 "repair_prompt": prompt,
                 "candidate_source": repaired,
@@ -219,7 +240,7 @@ def run_task(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--mode", choices=("baseline", "guided"), required=True)
+    parser.add_argument("--mode", choices=("baseline", "guided", "general"), required=True)
     parser.add_argument("--model", default=DEFAULT_OLLAMA_MODEL)
     parser.add_argument("--timeout", type=float, default=3.0)
     args = parser.parse_args()
