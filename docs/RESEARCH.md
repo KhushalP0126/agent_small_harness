@@ -107,6 +107,22 @@ guided success-rate advantage, and still costs 16 additional model tokens per
 repair. It is a targeted prompt-engineering fix, not evidence that
 counterexample-guided repair helps generally.
 
+### Full-corpus narrow-directive follow-up
+
+The narrow directive was then returned to the original eight-task corpus in
+two independent, three-repeat paired batches. Both
+[`batch A`](results/formal-counterexample-repair-nonnegative-directive-2026-08-15.md)
+and
+[`batch B`](results/formal-counterexample-repair-nonnegative-directive-followup-2026-08-15.md)
+record 8.00/8 completions for baseline and guided variants in every
+repetition. The guided `formal-nonnegative` candidate used `return
+max(value, 0)` in all six runs, so the previously retained failure did not
+recur at corpus scale. Batch A used 126.33 more guided tokens on average
+(1,989.00 versus 1,862.67; 6.78% more); batch B used 121.67 more
+(1,989.00 versus 1,867.33; 6.52% more). This replicates removal of the known
+failure mode, but does not establish a general completion benefit or token
+saving for counterexample-guided repair.
+
 Future raw formal benchmark artifacts retain both the exact repair prompt and
 candidate source, so task-level outcomes can be audited without reconstruction.
 The unsuccessful clarification follow-up is preserved in
