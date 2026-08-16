@@ -15,6 +15,10 @@ render a dated Markdown summary without hiding failed task rows.
   counterexample-guided repair study over eight Python contracts. The guided
   variant completed 7.67/8 tasks versus 8.00/8 baseline, with 6.73% more mean
   model tokens; the raw JSON retains the one guided failure.
+- `formal-counterexample-repair-postcondition-semantics-2026-08-15.md` — a
+  separate, explicitly-labelled follow-up that clarified postcondition
+  semantics. It retained the same Qwen 1.5B `nonnegative` failure twice, so it
+  documents a rejected prompt intervention rather than a product claim.
 - `compute-shield-10-2026-08-04.md` — frozen 1.5B Compute Shield comparison.
 - `local-model-comparison-2026-08-11.md` — controlled Qwen 1.5B versus 3B
   comparison on the same frozen ten-task corpus. Both completed 10/10

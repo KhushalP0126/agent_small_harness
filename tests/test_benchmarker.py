@@ -53,6 +53,7 @@ from scripts.run_formal_repair_benchmark_agent import (
     _baseline_prompt,
     _compact_verifier_detail,
     _formal_failure_text,
+    run_task as run_formal_repair_task,
 )
 from scripts.review_run import render_review
 from scripts.run_formal_experiment import GOOD_SOURCE
@@ -1203,6 +1204,44 @@ def analyze(matrix):
             _formal_failure_text(result),
             "CrossHair found a contract issue: identity(-1) (which returns 0)",
         )
+
+    def test_formal_benchmark_retains_prompt_and_candidate_for_diagnosis(self) -> None:
+        if not is_crosshair_available():
+            self.skipTest("CrossHair is not installed")
+
+        class StubSupplier:
+            telemetry = [
+                {
+                    "prompt_tokens": 1,
+                    "completion_tokens": 1,
+                    "pricing_basis": "local_unpriced",
+                }
+            ]
+
+            def __init__(self, **_kwargs: object) -> None:
+                pass
+
+            def repair_draft(self, _source: str, _prompt: str) -> str:
+                return '''
+def nonnegative(value: int) -> int:
+    """post: _ >= 0"""
+    return max(value, 0)
+'''.strip()
+
+        task = {
+            "task_id": "formal-nonnegative",
+            "category": "formal_repair",
+            "prompt": "Repair nonnegative.",
+        }
+        with patch("scripts.run_formal_repair_benchmark_agent.OllamaModelSupplier", StubSupplier):
+            outcome = run_formal_repair_task(
+                task, mode="guided", model="qwen2.5-coder:1.5b", timeout_seconds=3.0
+            )
+
+        self.assertTrue(outcome["success"])
+        metadata = outcome["metadata"]
+        self.assertIn("Formal counterexample:", metadata["repair_prompt"])
+        self.assertIn("return max(value, 0)", metadata["candidate_source"])
 
     def test_formal_benchmark_compacts_import_trace_for_report(self) -> None:
         trace = "Could not import your code:\\nTraceback ...\\nNameError: name 'obj' is not defined"

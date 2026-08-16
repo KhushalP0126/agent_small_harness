@@ -185,6 +185,8 @@ def run_task(
                 "scope": "python-crosshair-only",
                 "counterexample_in_prompt": mode == "guided",
                 "counterexample": formal.issues[0].counterexample if formal.issues else "",
+                "repair_prompt": prompt,
+                "candidate_source": repaired,
                 "pricing_basis": usage.get("pricing_basis", "local_unpriced"),
                 "final_issues": [issue.summary for issue in outcome.issues],
                 "final_counterexamples": [issue.counterexample for issue in outcome.issues if issue.counterexample],

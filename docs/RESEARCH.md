@@ -84,6 +84,23 @@ to treat that as a performance claim. This is a retained negative result: the
 one guided failure is `formal-nonnegative`, and its CrossHair witness is
 preserved in the raw JSON.
 
+### Postcondition-semantics diagnosis
+
+The retained guided failure was traced to a concrete candidate that raised
+`ValueError` for the verifier's negative input. That candidate incorrectly
+treated `post: _ >= 0` as an input restriction even though the source declared
+no `pre:` condition. A separate three-repeat follow-up added an explicit rule
+that postconditions constrain returned values and that the input must not be
+rejected. It still produced the identical `ValueError` branch twice, reducing
+guided completion to 7.33/8 while baseline remained 8.00/8. The small-model
+failure is therefore task-pattern-specific rather than a missing prompt
+clarification; the prompt amendment is not retained as a product change.
+
+Future raw formal benchmark artifacts retain both the exact repair prompt and
+candidate source, so task-level outcomes can be audited without reconstruction.
+The separate follow-up is preserved in
+[`results/formal-counterexample-repair-postcondition-semantics-2026-08-15.md`](results/formal-counterexample-repair-postcondition-semantics-2026-08-15.md).
+
 ## Cost-aware route evidence
 
 API calls can report an estimated dollar cost; local Ollama calls are instead
