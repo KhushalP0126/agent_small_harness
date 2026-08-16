@@ -73,6 +73,16 @@ the resulting raw JSON and dated report are committed. It is evidence from a
 small, Python-only corpus with varied contract shapes, not a general
 multi-language verification claim.
 
+The original eight-task corpus is retained unchanged so published reports
+remain reproducible. A separately versioned diverse-corpus follow-up adds a
+two-argument ordering property, a string-normalization property, and a
+loop-based prefix-sum property. Run it independently rather than silently
+changing the original benchmark:
+
+```bash
+make research-formal-repair-diverse RESEARCH_RUNS=3 MODEL=qwen2.5-coder:1.5b
+```
+
 ### Published 8-task observation (2026-08-15)
 
 The committed three-repeat study in
@@ -122,6 +132,22 @@ recur at corpus scale. Batch A used 126.33 more guided tokens on average
 (1,989.00 versus 1,867.33; 6.52% more). This replicates removal of the known
 failure mode, but does not establish a general completion benefit or token
 saving for counterexample-guided repair.
+
+### Diverse-shape corpus follow-up
+
+The eight numeric-property fixtures are not sufficient to generalize from, so
+the separately versioned 11-task corpus adds a two-argument ordering property,
+a string-normalization property, and a loop-based prefix-sum property. Its
+three-repeat result is published in
+[`results/formal-counterexample-repair-diverse-2026-08-15.md`](results/formal-counterexample-repair-diverse-2026-08-15.md).
+Baseline completed 10.00/11 tasks and guided repair completed 9.33/11; guided
+repair used 186.33 more mean model tokens (2,817.00 versus 2,630.67; 7.08%
+more). The loop fixture passed in both variants. The retained failures are
+task-specific: baseline and guided both mishandled the ordering repair in some
+runs, while guided consistently used `lstrip()` rather than `strip()` for the
+string contract. This is evidence against treating the successful
+`nonnegative` directive as a general formal-repair improvement. The raw JSON
+retains every candidate, prompt, and CrossHair witness for follow-up analysis.
 
 Future raw formal benchmark artifacts retain both the exact repair prompt and
 candidate source, so task-level outcomes can be audited without reconstruction.
@@ -260,7 +286,7 @@ hashes—not keys, raw private prompts, or absolute local paths.
 2. Rerun the frozen Qwen 1.5B corpus, then run both Qwen 1.5B and DeepSeek on
    the independent fixture corpus.
 3. Record the five controlled approval-reviewed session receipts.
-4. Run and publish the Python/CrossHair counterexample-repair A/B study; keep
-   its Python-only scope explicit.
+4. Expand the Python/CrossHair study beyond single-function contracts with a
+   repository or multi-function corpus; retain its Python-only scope.
 5. Accumulate further real sessions only after the controlled receipt set is
    complete; do not elevate anecdotal success into a benchmark claim.

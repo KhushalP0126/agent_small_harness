@@ -68,6 +68,26 @@ def is_even(value: int) -> bool:
     """post: _ == (value % 2 == 0)"""
     return True
 '''.strip(),
+    "formal-order-pair": '''
+def ordered_pair(left: int, right: int) -> tuple[int, int]:
+    """post: _[0] <= _[1]"""
+    return (left, right)
+'''.strip(),
+    "formal-trim-text": '''
+def trim_text(text: str) -> str:
+    """post: _ == text.strip()"""
+    return text
+'''.strip(),
+    "formal-prefix-sum": '''
+def prefix_sum(count: int) -> int:
+    """pre: count >= 0
+    post: _ == count * (count + 1) // 2
+    """
+    total = 0
+    for value in range(count):
+        total += value
+    return total
+'''.strip(),
 }
 
 

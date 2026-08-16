@@ -1,0 +1,2853 @@
+{
+  "commands": {
+    "baseline": "python3 scripts/run_formal_repair_benchmark_agent.py --mode baseline --model qwen2.5-coder:1.5b",
+    "shielded": "python3 scripts/run_formal_repair_benchmark_agent.py --mode guided --model qwen2.5-coder:1.5b"
+  },
+  "experiment": "repeated-paired-coding-agent-benchmark",
+  "provenance": {
+    "captured_at_utc": "2026-08-16T03:35:28.712700+00:00",
+    "environment": {
+      "os": "macOS-26.5.1-arm64-arm-64bit",
+      "python": "3.11.9",
+      "python_implementation": "CPython"
+    },
+    "repository": {
+      "commit": "aab6054aa2c1d47330d73ef086933d100e4de965",
+      "dirty": true
+    },
+    "settings": {
+      "runs": 3
+    },
+    "task_corpus": {
+      "path": "data/formal_repair_diverse_benchmark_tasks.json",
+      "sha256": "2dc1305ba978fd0af2f5162273e33d34e5fc444e1a08e3504e549a65da04d689"
+    }
+  },
+  "run_count": 3,
+  "runs": [
+    {
+      "baseline_successes": 10,
+      "baseline_tokens": 2642,
+      "median_task_token_delta": -15,
+      "results": [
+        {
+          "baseline": {
+            "completion_tokens": 71,
+            "duration_seconds": 9.619771416066214,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def clamp_value(value: int, lower: int, upper: int) -> int:\n    \"\"\"pre: lower <= upper\n    post: _ >= lower and _ <= upper\n    \"\"\"\n    if value < lower:\n        return lower\n    elif value > upper:\n        return upper\n    else:\n        return value",
+              "context_window": 8192,
+              "counterexample": "clamp_value(-1, 0, 0) (which returns -1)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef clamp_value(value: int, lower: int, upper: int) -> int:\n    \"\"\"pre: lower <= upper\n    post: _ >= lower and _ <= upper\n    \"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 209,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 280
+          },
+          "shielded": {
+            "completion_tokens": 71,
+            "duration_seconds": 6.355768208857626,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def clamp_value(value: int, lower: int, upper: int) -> int:\n    \"\"\"pre: lower <= upper\n    post: _ >= lower and _ <= upper\n    \"\"\"\n    if value < lower:\n        return lower\n    elif value > upper:\n        return upper\n    else:\n        return value",
+              "context_window": 8192,
+              "counterexample": "clamp_value(-1, 0, 0) (which returns -1)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef clamp_value(value: int, lower: int, upper: int) -> int:\n    \"\"\"pre: lower <= upper\n    post: _ >= lower and _ <= upper\n    \"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: clamp_value(-1, 0, 0) (which returns -1)\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 231,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 302
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair clamp_value so its stated lower/upper postcondition holds for every valid input.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-clamp-value"
+          },
+          "token_delta": -22
+        },
+        {
+          "baseline": {
+            "completion_tokens": 26,
+            "duration_seconds": 3.397597375093028,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def identity(value: int) -> int:\n    \"\"\"post: _ == value\"\"\"\n    return value",
+              "context_window": 8192,
+              "counterexample": "identity(1) (which returns 0)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef identity(value: int) -> int:\n    \"\"\"post: _ == value\"\"\"\n    return 0\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 188,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 214
+          },
+          "shielded": {
+            "completion_tokens": 26,
+            "duration_seconds": 3.572588542010635,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def identity(value: int) -> int:\n    \"\"\"post: _ == value\"\"\"\n    return value",
+              "context_window": 8192,
+              "counterexample": "identity(1) (which returns 0)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef identity(value: int) -> int:\n    \"\"\"post: _ == value\"\"\"\n    return 0\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: identity(1) (which returns 0)\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 203,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 229
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair identity so its postcondition returns the input unchanged.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-identity"
+          },
+          "token_delta": -15
+        },
+        {
+          "baseline": {
+            "completion_tokens": 32,
+            "duration_seconds": 3.585317957913503,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def nonnegative(value: int) -> int:\n    \"\"\"post: _ >= 0\"\"\"\n    return max(value, 0)",
+              "context_window": 8192,
+              "counterexample": "nonnegative(-1) (which returns -1)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef nonnegative(value: int) -> int:\n    \"\"\"post: _ >= 0\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nThe shown negative input is valid. Do NOT write `if value < 0: raise ...`; return a non-negative value instead, for example `return max(value, 0)`.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 207,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 239
+          },
+          "shielded": {
+            "completion_tokens": 32,
+            "duration_seconds": 3.7448530830442905,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def nonnegative(value: int) -> int:\n    \"\"\"post: _ >= 0\"\"\"\n    return max(value, 0)",
+              "context_window": 8192,
+              "counterexample": "nonnegative(-1) (which returns -1)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef nonnegative(value: int) -> int:\n    \"\"\"post: _ >= 0\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: nonnegative(-1) (which returns -1)\n\nFIX DIRECTIVE:\nThe shown negative input is valid. Do NOT write `if value < 0: raise ...`; return a non-negative value instead, for example `return max(value, 0)`.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 223,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 255
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair nonnegative so it always returns a non-negative integer.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-nonnegative"
+          },
+          "token_delta": -16
+        },
+        {
+          "baseline": {
+            "completion_tokens": 43,
+            "duration_seconds": 4.744661042001098,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def absolute(value: int) -> int:\n    \"\"\"post: _ == abs(value)\"\"\"\n    if value < 0:\n        return -value\n    else:\n        return value",
+              "context_window": 8192,
+              "counterexample": "absolute(-1) (which returns -1)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef absolute(value: int) -> int:\n    \"\"\"post: _ == abs(value)\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 189,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 232
+          },
+          "shielded": {
+            "completion_tokens": 29,
+            "duration_seconds": 3.2674603750929236,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def absolute(value: int) -> int:\n    \"\"\"post: _ == abs(value)\"\"\"\n    return abs(value)",
+              "context_window": 8192,
+              "counterexample": "absolute(-1) (which returns -1)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef absolute(value: int) -> int:\n    \"\"\"post: _ == abs(value)\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: absolute(-1) (which returns -1)\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 204,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 233
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair absolute so it returns the absolute value for every integer input.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-absolute"
+          },
+          "token_delta": -1
+        },
+        {
+          "baseline": {
+            "completion_tokens": 32,
+            "duration_seconds": 3.851074708160013,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def double(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2",
+              "context_window": 8192,
+              "counterexample": "double(1) (which returns 1)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef double(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 190,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 222
+          },
+          "shielded": {
+            "completion_tokens": 32,
+            "duration_seconds": 3.5079571248497814,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def double(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2",
+              "context_window": 8192,
+              "counterexample": "double(1) (which returns 1)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef double(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: double(1) (which returns 1)\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 205,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 237
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair double so its result is exactly twice its input for every integer.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-double"
+          },
+          "token_delta": -15
+        },
+        {
+          "baseline": {
+            "completion_tokens": 29,
+            "duration_seconds": 3.403796707978472,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def successor(value: int) -> int:\n    \"\"\"post: _ > value\"\"\"\n    return value + 1",
+              "context_window": 8192,
+              "counterexample": "successor(0) (which returns 0)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef successor(value: int) -> int:\n    \"\"\"post: _ > value\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 187,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 216
+          },
+          "shielded": {
+            "completion_tokens": 29,
+            "duration_seconds": 3.615480916807428,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def successor(value: int) -> int:\n    \"\"\"post: _ > value\"\"\"\n    return value + 1",
+              "context_window": 8192,
+              "counterexample": "successor(0) (which returns 0)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef successor(value: int) -> int:\n    \"\"\"post: _ > value\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: successor(0) (which returns 0)\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 202,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 231
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair successor so its result is strictly greater than its input for every integer.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-successor"
+          },
+          "token_delta": -15
+        },
+        {
+          "baseline": {
+            "completion_tokens": 37,
+            "duration_seconds": 4.29599858308211,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return max(left, right)",
+              "context_window": 8192,
+              "counterexample": "maximum(-1, 0) (which returns -1)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return left\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 195,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 232
+          },
+          "shielded": {
+            "completion_tokens": 37,
+            "duration_seconds": 4.309893291909248,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return max(left, right)",
+              "context_window": 8192,
+              "counterexample": "maximum(-1, 0) (which returns -1)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return left\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: maximum(-1, 0) (which returns -1)\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 213,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 250
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair maximum so its result is at least both integer inputs.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-maximum"
+          },
+          "token_delta": -18
+        },
+        {
+          "baseline": {
+            "completion_tokens": 41,
+            "duration_seconds": 4.426028665853664,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def is_even(value: int) -> bool:\n    \"\"\"post: _ == (value % 2 == 0)\"\"\"\n    return value % 2 == 0",
+              "context_window": 8192,
+              "counterexample": "is_even(1) (which returns True)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef is_even(value: int) -> bool:\n    \"\"\"post: _ == (value % 2 == 0)\"\"\"\n    return True\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 196,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 237
+          },
+          "shielded": {
+            "completion_tokens": 41,
+            "duration_seconds": 4.253911332925782,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def is_even(value: int) -> bool:\n    \"\"\"post: _ == (value % 2 == 0)\"\"\"\n    return value % 2 == 0",
+              "context_window": 8192,
+              "counterexample": "is_even(1) (which returns True)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef is_even(value: int) -> bool:\n    \"\"\"post: _ == (value % 2 == 0)\"\"\"\n    return True\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: is_even(1) (which returns True)\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 211,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 252
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair is_even so it returns whether its integer input is even.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-is-even"
+          },
+          "token_delta": -15
+        },
+        {
+          "baseline": {
+            "completion_tokens": 63,
+            "duration_seconds": 5.853330583078787,
+            "error": "CrossHair found a contract or assertion issue: ordered_pair(1, 0)",
+            "metadata": {
+              "candidate_source": "def ordered_pair(left: int, right: int) -> tuple[int, int]:\n    \"\"\"post: _[0] <= _[1]\"\"\"\n    if left > right:\n        raise ValueError(\"left must be less than or equal to right\")\n    return (left, right)",
+              "context_window": 8192,
+              "counterexample": "ordered_pair(1, 0) (which returns (1, 0))",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [
+                "ordered_pair(1, 0)"
+              ],
+              "final_issues": [
+                "CrossHair found a contract or assertion issue"
+              ],
+              "final_verifier_output": [
+                "/private/var/folders/fr/zgwhhqkx1k953vglp24mbbkh0000gn/T/agent_harness_crosshair_3rjomdx_/candidate.py:4: error: ValueError: left must be less than or equal to right when calling ordered_pair(1, 0)"
+              ],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef ordered_pair(left: int, right: int) -> tuple[int, int]:\n    \"\"\"post: _[0] <= _[1]\"\"\"\n    return (left, right)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 204,
+            "retries": 1,
+            "success": false,
+            "tool_calls": 1,
+            "total_tokens": 267
+          },
+          "shielded": {
+            "completion_tokens": 43,
+            "duration_seconds": 4.472320250002667,
+            "error": "CrossHair found a contract or assertion issue: ordered_pair(1, 0) (which returns (1, 0))",
+            "metadata": {
+              "candidate_source": "def ordered_pair(left: int, right: int) -> tuple[int, int]:\n    \"\"\"post: _[0] <= _[1]\"\"\"\n    return (left, right)",
+              "context_window": 8192,
+              "counterexample": "ordered_pair(1, 0) (which returns (1, 0))",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [
+                "ordered_pair(1, 0) (which returns (1, 0))"
+              ],
+              "final_issues": [
+                "CrossHair found a contract or assertion issue"
+              ],
+              "final_verifier_output": [
+                "/private/var/folders/fr/zgwhhqkx1k953vglp24mbbkh0000gn/T/agent_harness_crosshair_bt5es9u1/candidate.py:2: error: false when calling ordered_pair(1, 0) (which returns (1, 0))"
+              ],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef ordered_pair(left: int, right: int) -> tuple[int, int]:\n    \"\"\"post: _[0] <= _[1]\"\"\"\n    return (left, right)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: ordered_pair(1, 0) (which returns (1, 0))\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 226,
+            "retries": 1,
+            "success": false,
+            "tool_calls": 1,
+            "total_tokens": 269
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair ordered_pair so its returned pair is ordered from smaller to larger.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-order-pair"
+          },
+          "token_delta": -2
+        },
+        {
+          "baseline": {
+            "completion_tokens": 30,
+            "duration_seconds": 7.66090749995783,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def trim_text(text: str) -> str:\n    \"\"\"post: _ == text.strip()\"\"\"\n    return text.strip()",
+              "context_window": 8192,
+              "counterexample": "trim_text('\\x00\\u2000') (which returns '\\x00\\u2000')",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef trim_text(text: str) -> str:\n    \"\"\"post: _ == text.strip()\"\"\"\n    return text\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 190,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 220
+          },
+          "shielded": {
+            "completion_tokens": 31,
+            "duration_seconds": 5.7972668330185115,
+            "error": "CrossHair found a contract or assertion issue: trim_text('\\x00\\t') (which returns '\\x00\\t')",
+            "metadata": {
+              "candidate_source": "def trim_text(text: str) -> str:\n    \"\"\"post: _ == text.strip()\"\"\"\n    return text.lstrip()",
+              "context_window": 8192,
+              "counterexample": "trim_text('\\x00\\u2000') (which returns '\\x00\\u2000')",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [
+                "trim_text('\\x00\\t') (which returns '\\x00\\t')"
+              ],
+              "final_issues": [
+                "CrossHair found a contract or assertion issue"
+              ],
+              "final_verifier_output": [
+                "/private/var/folders/fr/zgwhhqkx1k953vglp24mbbkh0000gn/T/agent_harness_crosshair_jy2pu3v9/candidate.py:2: error: false when calling trim_text('\\x00\\t') (which returns '\\x00\\t')"
+              ],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef trim_text(text: str) -> str:\n    \"\"\"post: _ == text.strip()\"\"\"\n    return text\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: trim_text('\\x00\\u2000') (which returns '\\x00\\u2000')\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 220,
+            "retries": 1,
+            "success": false,
+            "tool_calls": 1,
+            "total_tokens": 251
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair trim_text so it returns its input without surrounding whitespace.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-trim-text"
+          },
+          "token_delta": -31
+        },
+        {
+          "baseline": {
+            "completion_tokens": 57,
+            "duration_seconds": 6.843888457864523,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def prefix_sum(count: int) -> int:\n    \"\"\"pre: count >= 0\n    post: _ == count * (count + 1) // 2\n    \"\"\"\n    return count * (count + 1) // 2",
+              "context_window": 8192,
+              "counterexample": "prefix_sum(1) (which returns 0)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef prefix_sum(count: int) -> int:\n    \"\"\"pre: count >= 0\n    post: _ == count * (count + 1) // 2\n    \"\"\"\n    total = 0\n    for value in range(count):\n        total += value\n    return total\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 226,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 283
+          },
+          "shielded": {
+            "completion_tokens": 57,
+            "duration_seconds": 6.996116292197257,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def prefix_sum(count: int) -> int:\n    \"\"\"pre: count >= 0\n    post: _ == count * (count + 1) // 2\n    \"\"\"\n    return count * (count + 1) // 2",
+              "context_window": 8192,
+              "counterexample": "prefix_sum(1) (which returns 0)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef prefix_sum(count: int) -> int:\n    \"\"\"pre: count >= 0\n    post: _ == count * (count + 1) // 2\n    \"\"\"\n    total = 0\n    for value in range(count):\n        total += value\n    return total\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: prefix_sum(1) (which returns 0)\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 242,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 299
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair prefix_sum so its loop sums every integer from zero through count.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-prefix-sum"
+          },
+          "token_delta": -16
+        }
+      ],
+      "schema_version": 2,
+      "shielded_successes": 9,
+      "shielded_tokens": 2808,
+      "task_count": 11,
+      "token_delta": -166,
+      "token_reduction_ratio": -0.06283118849356548
+    },
+    {
+      "baseline_successes": 10,
+      "baseline_tokens": 2622,
+      "median_task_token_delta": -16,
+      "results": [
+        {
+          "baseline": {
+            "completion_tokens": 71,
+            "duration_seconds": 6.421284457901493,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def clamp_value(value: int, lower: int, upper: int) -> int:\n    \"\"\"pre: lower <= upper\n    post: _ >= lower and _ <= upper\n    \"\"\"\n    if value < lower:\n        return lower\n    elif value > upper:\n        return upper\n    else:\n        return value",
+              "context_window": 8192,
+              "counterexample": "clamp_value(-1, 0, 0) (which returns -1)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef clamp_value(value: int, lower: int, upper: int) -> int:\n    \"\"\"pre: lower <= upper\n    post: _ >= lower and _ <= upper\n    \"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 209,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 280
+          },
+          "shielded": {
+            "completion_tokens": 71,
+            "duration_seconds": 6.126156999962404,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def clamp_value(value: int, lower: int, upper: int) -> int:\n    \"\"\"pre: lower <= upper\n    post: _ >= lower and _ <= upper\n    \"\"\"\n    if value < lower:\n        return lower\n    elif value > upper:\n        return upper\n    else:\n        return value",
+              "context_window": 8192,
+              "counterexample": "clamp_value(-1, 0, 0) (which returns -1)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef clamp_value(value: int, lower: int, upper: int) -> int:\n    \"\"\"pre: lower <= upper\n    post: _ >= lower and _ <= upper\n    \"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: clamp_value(-1, 0, 0) (which returns -1)\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 231,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 302
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair clamp_value so its stated lower/upper postcondition holds for every valid input.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-clamp-value"
+          },
+          "token_delta": -22
+        },
+        {
+          "baseline": {
+            "completion_tokens": 26,
+            "duration_seconds": 3.145797458011657,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def identity(value: int) -> int:\n    \"\"\"post: _ == value\"\"\"\n    return value",
+              "context_window": 8192,
+              "counterexample": "identity(1) (which returns 0)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef identity(value: int) -> int:\n    \"\"\"post: _ == value\"\"\"\n    return 0\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 188,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 214
+          },
+          "shielded": {
+            "completion_tokens": 26,
+            "duration_seconds": 2.7705521248281,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def identity(value: int) -> int:\n    \"\"\"post: _ == value\"\"\"\n    return value",
+              "context_window": 8192,
+              "counterexample": "identity(1) (which returns 0)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef identity(value: int) -> int:\n    \"\"\"post: _ == value\"\"\"\n    return 0\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: identity(1) (which returns 0)\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 203,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 229
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair identity so its postcondition returns the input unchanged.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-identity"
+          },
+          "token_delta": -15
+        },
+        {
+          "baseline": {
+            "completion_tokens": 32,
+            "duration_seconds": 2.964477833127603,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def nonnegative(value: int) -> int:\n    \"\"\"post: _ >= 0\"\"\"\n    return max(value, 0)",
+              "context_window": 8192,
+              "counterexample": "nonnegative(-1) (which returns -1)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef nonnegative(value: int) -> int:\n    \"\"\"post: _ >= 0\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nThe shown negative input is valid. Do NOT write `if value < 0: raise ...`; return a non-negative value instead, for example `return max(value, 0)`.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 207,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 239
+          },
+          "shielded": {
+            "completion_tokens": 32,
+            "duration_seconds": 3.134378916118294,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def nonnegative(value: int) -> int:\n    \"\"\"post: _ >= 0\"\"\"\n    return max(value, 0)",
+              "context_window": 8192,
+              "counterexample": "nonnegative(-1) (which returns -1)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef nonnegative(value: int) -> int:\n    \"\"\"post: _ >= 0\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: nonnegative(-1) (which returns -1)\n\nFIX DIRECTIVE:\nThe shown negative input is valid. Do NOT write `if value < 0: raise ...`; return a non-negative value instead, for example `return max(value, 0)`.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 223,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 255
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair nonnegative so it always returns a non-negative integer.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-nonnegative"
+          },
+          "token_delta": -16
+        },
+        {
+          "baseline": {
+            "completion_tokens": 43,
+            "duration_seconds": 3.702836708864197,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def absolute(value: int) -> int:\n    \"\"\"post: _ == abs(value)\"\"\"\n    if value < 0:\n        return -value\n    else:\n        return value",
+              "context_window": 8192,
+              "counterexample": "absolute(-1) (which returns -1)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef absolute(value: int) -> int:\n    \"\"\"post: _ == abs(value)\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 189,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 232
+          },
+          "shielded": {
+            "completion_tokens": 43,
+            "duration_seconds": 3.6583805000409484,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def absolute(value: int) -> int:\n    \"\"\"post: _ == abs(value)\"\"\"\n    if value < 0:\n        return -value\n    else:\n        return value",
+              "context_window": 8192,
+              "counterexample": "absolute(-1) (which returns -1)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef absolute(value: int) -> int:\n    \"\"\"post: _ == abs(value)\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: absolute(-1) (which returns -1)\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 204,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 247
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair absolute so it returns the absolute value for every integer input.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-absolute"
+          },
+          "token_delta": -15
+        },
+        {
+          "baseline": {
+            "completion_tokens": 32,
+            "duration_seconds": 3.1428588330745697,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def double(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2",
+              "context_window": 8192,
+              "counterexample": "double(1) (which returns 1)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef double(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 190,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 222
+          },
+          "shielded": {
+            "completion_tokens": 32,
+            "duration_seconds": 3.351638917112723,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def double(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2",
+              "context_window": 8192,
+              "counterexample": "double(1) (which returns 1)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef double(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: double(1) (which returns 1)\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 205,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 237
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair double so its result is exactly twice its input for every integer.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-double"
+          },
+          "token_delta": -15
+        },
+        {
+          "baseline": {
+            "completion_tokens": 29,
+            "duration_seconds": 2.8548523751087487,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def successor(value: int) -> int:\n    \"\"\"post: _ > value\"\"\"\n    return value + 1",
+              "context_window": 8192,
+              "counterexample": "successor(0) (which returns 0)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef successor(value: int) -> int:\n    \"\"\"post: _ > value\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 187,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 216
+          },
+          "shielded": {
+            "completion_tokens": 29,
+            "duration_seconds": 2.9157936670817435,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def successor(value: int) -> int:\n    \"\"\"post: _ > value\"\"\"\n    return value + 1",
+              "context_window": 8192,
+              "counterexample": "successor(0) (which returns 0)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef successor(value: int) -> int:\n    \"\"\"post: _ > value\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: successor(0) (which returns 0)\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 202,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 231
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair successor so its result is strictly greater than its input for every integer.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-successor"
+          },
+          "token_delta": -15
+        },
+        {
+          "baseline": {
+            "completion_tokens": 37,
+            "duration_seconds": 3.426821250002831,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return max(left, right)",
+              "context_window": 8192,
+              "counterexample": "maximum(-1, 0) (which returns -1)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return left\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 195,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 232
+          },
+          "shielded": {
+            "completion_tokens": 37,
+            "duration_seconds": 3.2622291250154376,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return max(left, right)",
+              "context_window": 8192,
+              "counterexample": "maximum(-1, 0) (which returns -1)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return left\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: maximum(-1, 0) (which returns -1)\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 213,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 250
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair maximum so its result is at least both integer inputs.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-maximum"
+          },
+          "token_delta": -18
+        },
+        {
+          "baseline": {
+            "completion_tokens": 41,
+            "duration_seconds": 3.6130662919022143,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def is_even(value: int) -> bool:\n    \"\"\"post: _ == (value % 2 == 0)\"\"\"\n    return value % 2 == 0",
+              "context_window": 8192,
+              "counterexample": "is_even(1) (which returns True)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef is_even(value: int) -> bool:\n    \"\"\"post: _ == (value % 2 == 0)\"\"\"\n    return True\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 196,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 237
+          },
+          "shielded": {
+            "completion_tokens": 41,
+            "duration_seconds": 3.755224874941632,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def is_even(value: int) -> bool:\n    \"\"\"post: _ == (value % 2 == 0)\"\"\"\n    return value % 2 == 0",
+              "context_window": 8192,
+              "counterexample": "is_even(1) (which returns True)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef is_even(value: int) -> bool:\n    \"\"\"post: _ == (value % 2 == 0)\"\"\"\n    return True\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: is_even(1) (which returns True)\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 211,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 252
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair is_even so it returns whether its integer input is even.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-is-even"
+          },
+          "token_delta": -15
+        },
+        {
+          "baseline": {
+            "completion_tokens": 43,
+            "duration_seconds": 4.011994000058621,
+            "error": "CrossHair found a contract or assertion issue: ordered_pair(1, 0) (which returns (1, 0))",
+            "metadata": {
+              "candidate_source": "def ordered_pair(left: int, right: int) -> tuple[int, int]:\n    \"\"\"post: _[0] <= _[1]\"\"\"\n    return (left, right)",
+              "context_window": 8192,
+              "counterexample": "ordered_pair(1, 0) (which returns (1, 0))",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [
+                "ordered_pair(1, 0) (which returns (1, 0))"
+              ],
+              "final_issues": [
+                "CrossHair found a contract or assertion issue"
+              ],
+              "final_verifier_output": [
+                "/private/var/folders/fr/zgwhhqkx1k953vglp24mbbkh0000gn/T/agent_harness_crosshair__5ulrppk/candidate.py:2: error: false when calling ordered_pair(1, 0) (which returns (1, 0))"
+              ],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef ordered_pair(left: int, right: int) -> tuple[int, int]:\n    \"\"\"post: _[0] <= _[1]\"\"\"\n    return (left, right)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 204,
+            "retries": 1,
+            "success": false,
+            "tool_calls": 1,
+            "total_tokens": 247
+          },
+          "shielded": {
+            "completion_tokens": 43,
+            "duration_seconds": 5.038725541206077,
+            "error": "CrossHair found a contract or assertion issue: ordered_pair(1, 0) (which returns (1, 0))",
+            "metadata": {
+              "candidate_source": "def ordered_pair(left: int, right: int) -> tuple[int, int]:\n    \"\"\"post: _[0] <= _[1]\"\"\"\n    return (left, right)",
+              "context_window": 8192,
+              "counterexample": "ordered_pair(1, 0) (which returns (1, 0))",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [
+                "ordered_pair(1, 0) (which returns (1, 0))"
+              ],
+              "final_issues": [
+                "CrossHair found a contract or assertion issue"
+              ],
+              "final_verifier_output": [
+                "/private/var/folders/fr/zgwhhqkx1k953vglp24mbbkh0000gn/T/agent_harness_crosshair_z8fhd9j0/candidate.py:2: error: false when calling ordered_pair(1, 0) (which returns (1, 0))"
+              ],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef ordered_pair(left: int, right: int) -> tuple[int, int]:\n    \"\"\"post: _[0] <= _[1]\"\"\"\n    return (left, right)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: ordered_pair(1, 0) (which returns (1, 0))\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 226,
+            "retries": 1,
+            "success": false,
+            "tool_calls": 1,
+            "total_tokens": 269
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair ordered_pair so its returned pair is ordered from smaller to larger.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-order-pair"
+          },
+          "token_delta": -22
+        },
+        {
+          "baseline": {
+            "completion_tokens": 30,
+            "duration_seconds": 6.439937375020236,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def trim_text(text: str) -> str:\n    \"\"\"post: _ == text.strip()\"\"\"\n    return text.strip()",
+              "context_window": 8192,
+              "counterexample": "trim_text('\\x00\\u2000') (which returns '\\x00\\u2000')",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef trim_text(text: str) -> str:\n    \"\"\"post: _ == text.strip()\"\"\"\n    return text\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 190,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 220
+          },
+          "shielded": {
+            "completion_tokens": 31,
+            "duration_seconds": 3.7894864580594003,
+            "error": "CrossHair found a contract or assertion issue: trim_text('\\x00\\t') (which returns '\\x00\\t')",
+            "metadata": {
+              "candidate_source": "def trim_text(text: str) -> str:\n    \"\"\"post: _ == text.strip()\"\"\"\n    return text.lstrip()",
+              "context_window": 8192,
+              "counterexample": "trim_text('\\x00\\u2000') (which returns '\\x00\\u2000')",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [
+                "trim_text('\\x00\\t') (which returns '\\x00\\t')"
+              ],
+              "final_issues": [
+                "CrossHair found a contract or assertion issue"
+              ],
+              "final_verifier_output": [
+                "/private/var/folders/fr/zgwhhqkx1k953vglp24mbbkh0000gn/T/agent_harness_crosshair_uyg7pgqp/candidate.py:2: error: false when calling trim_text('\\x00\\t') (which returns '\\x00\\t')"
+              ],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef trim_text(text: str) -> str:\n    \"\"\"post: _ == text.strip()\"\"\"\n    return text\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: trim_text('\\x00\\u2000') (which returns '\\x00\\u2000')\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 220,
+            "retries": 1,
+            "success": false,
+            "tool_calls": 1,
+            "total_tokens": 251
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair trim_text so it returns its input without surrounding whitespace.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-trim-text"
+          },
+          "token_delta": -31
+        },
+        {
+          "baseline": {
+            "completion_tokens": 57,
+            "duration_seconds": 4.876610417151824,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def prefix_sum(count: int) -> int:\n    \"\"\"pre: count >= 0\n    post: _ == count * (count + 1) // 2\n    \"\"\"\n    return count * (count + 1) // 2",
+              "context_window": 8192,
+              "counterexample": "prefix_sum(1) (which returns 0)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef prefix_sum(count: int) -> int:\n    \"\"\"pre: count >= 0\n    post: _ == count * (count + 1) // 2\n    \"\"\"\n    total = 0\n    for value in range(count):\n        total += value\n    return total\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 226,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 283
+          },
+          "shielded": {
+            "completion_tokens": 57,
+            "duration_seconds": 5.470590416109189,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def prefix_sum(count: int) -> int:\n    \"\"\"pre: count >= 0\n    post: _ == count * (count + 1) // 2\n    \"\"\"\n    return count * (count + 1) // 2",
+              "context_window": 8192,
+              "counterexample": "prefix_sum(1) (which returns 0)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef prefix_sum(count: int) -> int:\n    \"\"\"pre: count >= 0\n    post: _ == count * (count + 1) // 2\n    \"\"\"\n    total = 0\n    for value in range(count):\n        total += value\n    return total\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: prefix_sum(1) (which returns 0)\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 242,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 299
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair prefix_sum so its loop sums every integer from zero through count.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-prefix-sum"
+          },
+          "token_delta": -16
+        }
+      ],
+      "schema_version": 2,
+      "shielded_successes": 9,
+      "shielded_tokens": 2822,
+      "task_count": 11,
+      "token_delta": -200,
+      "token_reduction_ratio": -0.07627765064836003
+    },
+    {
+      "baseline_successes": 10,
+      "baseline_tokens": 2628,
+      "median_task_token_delta": -15,
+      "results": [
+        {
+          "baseline": {
+            "completion_tokens": 71,
+            "duration_seconds": 5.395873707951978,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def clamp_value(value: int, lower: int, upper: int) -> int:\n    \"\"\"pre: lower <= upper\n    post: _ >= lower and _ <= upper\n    \"\"\"\n    if value < lower:\n        return lower\n    elif value > upper:\n        return upper\n    else:\n        return value",
+              "context_window": 8192,
+              "counterexample": "clamp_value(-1, 0, 0) (which returns -1)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef clamp_value(value: int, lower: int, upper: int) -> int:\n    \"\"\"pre: lower <= upper\n    post: _ >= lower and _ <= upper\n    \"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 209,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 280
+          },
+          "shielded": {
+            "completion_tokens": 71,
+            "duration_seconds": 5.804209333844483,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def clamp_value(value: int, lower: int, upper: int) -> int:\n    \"\"\"pre: lower <= upper\n    post: _ >= lower and _ <= upper\n    \"\"\"\n    if value < lower:\n        return lower\n    elif value > upper:\n        return upper\n    else:\n        return value",
+              "context_window": 8192,
+              "counterexample": "clamp_value(-1, 0, 0) (which returns -1)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef clamp_value(value: int, lower: int, upper: int) -> int:\n    \"\"\"pre: lower <= upper\n    post: _ >= lower and _ <= upper\n    \"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: clamp_value(-1, 0, 0) (which returns -1)\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 231,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 302
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair clamp_value so its stated lower/upper postcondition holds for every valid input.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-clamp-value"
+          },
+          "token_delta": -22
+        },
+        {
+          "baseline": {
+            "completion_tokens": 26,
+            "duration_seconds": 2.893929542042315,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def identity(value: int) -> int:\n    \"\"\"post: _ == value\"\"\"\n    return value",
+              "context_window": 8192,
+              "counterexample": "identity(1) (which returns 0)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef identity(value: int) -> int:\n    \"\"\"post: _ == value\"\"\"\n    return 0\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 188,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 214
+          },
+          "shielded": {
+            "completion_tokens": 26,
+            "duration_seconds": 3.434061875101179,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def identity(value: int) -> int:\n    \"\"\"post: _ == value\"\"\"\n    return value",
+              "context_window": 8192,
+              "counterexample": "identity(1) (which returns 0)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef identity(value: int) -> int:\n    \"\"\"post: _ == value\"\"\"\n    return 0\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: identity(1) (which returns 0)\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 203,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 229
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair identity so its postcondition returns the input unchanged.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-identity"
+          },
+          "token_delta": -15
+        },
+        {
+          "baseline": {
+            "completion_tokens": 32,
+            "duration_seconds": 3.165756791830063,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def nonnegative(value: int) -> int:\n    \"\"\"post: _ >= 0\"\"\"\n    return max(value, 0)",
+              "context_window": 8192,
+              "counterexample": "nonnegative(-1) (which returns -1)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef nonnegative(value: int) -> int:\n    \"\"\"post: _ >= 0\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nThe shown negative input is valid. Do NOT write `if value < 0: raise ...`; return a non-negative value instead, for example `return max(value, 0)`.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 207,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 239
+          },
+          "shielded": {
+            "completion_tokens": 32,
+            "duration_seconds": 2.9110363330692053,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def nonnegative(value: int) -> int:\n    \"\"\"post: _ >= 0\"\"\"\n    return max(value, 0)",
+              "context_window": 8192,
+              "counterexample": "nonnegative(-1) (which returns -1)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef nonnegative(value: int) -> int:\n    \"\"\"post: _ >= 0\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: nonnegative(-1) (which returns -1)\n\nFIX DIRECTIVE:\nThe shown negative input is valid. Do NOT write `if value < 0: raise ...`; return a non-negative value instead, for example `return max(value, 0)`.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 223,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 255
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair nonnegative so it always returns a non-negative integer.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-nonnegative"
+          },
+          "token_delta": -16
+        },
+        {
+          "baseline": {
+            "completion_tokens": 29,
+            "duration_seconds": 3.066516667138785,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def absolute(value: int) -> int:\n    \"\"\"post: _ == abs(value)\"\"\"\n    return abs(value)",
+              "context_window": 8192,
+              "counterexample": "absolute(-1) (which returns -1)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef absolute(value: int) -> int:\n    \"\"\"post: _ == abs(value)\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 189,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 218
+          },
+          "shielded": {
+            "completion_tokens": 29,
+            "duration_seconds": 2.9721984998323023,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def absolute(value: int) -> int:\n    \"\"\"post: _ == abs(value)\"\"\"\n    return abs(value)",
+              "context_window": 8192,
+              "counterexample": "absolute(-1) (which returns -1)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef absolute(value: int) -> int:\n    \"\"\"post: _ == abs(value)\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: absolute(-1) (which returns -1)\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 204,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 233
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair absolute so it returns the absolute value for every integer input.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-absolute"
+          },
+          "token_delta": -15
+        },
+        {
+          "baseline": {
+            "completion_tokens": 32,
+            "duration_seconds": 2.9995225418824703,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def double(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2",
+              "context_window": 8192,
+              "counterexample": "double(1) (which returns 1)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef double(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 190,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 222
+          },
+          "shielded": {
+            "completion_tokens": 32,
+            "duration_seconds": 3.186343041015789,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def double(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2",
+              "context_window": 8192,
+              "counterexample": "double(1) (which returns 1)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef double(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: double(1) (which returns 1)\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 205,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 237
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair double so its result is exactly twice its input for every integer.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-double"
+          },
+          "token_delta": -15
+        },
+        {
+          "baseline": {
+            "completion_tokens": 29,
+            "duration_seconds": 3.3549592499621212,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def successor(value: int) -> int:\n    \"\"\"post: _ > value\"\"\"\n    return value + 1",
+              "context_window": 8192,
+              "counterexample": "successor(0) (which returns 0)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef successor(value: int) -> int:\n    \"\"\"post: _ > value\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 187,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 216
+          },
+          "shielded": {
+            "completion_tokens": 29,
+            "duration_seconds": 3.3335508750751615,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def successor(value: int) -> int:\n    \"\"\"post: _ > value\"\"\"\n    return value + 1",
+              "context_window": 8192,
+              "counterexample": "successor(0) (which returns 0)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef successor(value: int) -> int:\n    \"\"\"post: _ > value\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: successor(0) (which returns 0)\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 202,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 231
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair successor so its result is strictly greater than its input for every integer.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-successor"
+          },
+          "token_delta": -15
+        },
+        {
+          "baseline": {
+            "completion_tokens": 37,
+            "duration_seconds": 3.3926284580957144,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return max(left, right)",
+              "context_window": 8192,
+              "counterexample": "maximum(-1, 0) (which returns -1)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return left\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 195,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 232
+          },
+          "shielded": {
+            "completion_tokens": 37,
+            "duration_seconds": 3.4619072498753667,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return max(left, right)",
+              "context_window": 8192,
+              "counterexample": "maximum(-1, 0) (which returns -1)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return left\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: maximum(-1, 0) (which returns -1)\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 213,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 250
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair maximum so its result is at least both integer inputs.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-maximum"
+          },
+          "token_delta": -18
+        },
+        {
+          "baseline": {
+            "completion_tokens": 41,
+            "duration_seconds": 4.1771289999596775,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def is_even(value: int) -> bool:\n    \"\"\"post: _ == (value % 2 == 0)\"\"\"\n    return value % 2 == 0",
+              "context_window": 8192,
+              "counterexample": "is_even(1) (which returns True)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef is_even(value: int) -> bool:\n    \"\"\"post: _ == (value % 2 == 0)\"\"\"\n    return True\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 196,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 237
+          },
+          "shielded": {
+            "completion_tokens": 41,
+            "duration_seconds": 3.634105334058404,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def is_even(value: int) -> bool:\n    \"\"\"post: _ == (value % 2 == 0)\"\"\"\n    return value % 2 == 0",
+              "context_window": 8192,
+              "counterexample": "is_even(1) (which returns True)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef is_even(value: int) -> bool:\n    \"\"\"post: _ == (value % 2 == 0)\"\"\"\n    return True\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: is_even(1) (which returns True)\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 211,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 252
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair is_even so it returns whether its integer input is even.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-is-even"
+          },
+          "token_delta": -15
+        },
+        {
+          "baseline": {
+            "completion_tokens": 63,
+            "duration_seconds": 5.16209404100664,
+            "error": "CrossHair found a contract or assertion issue: ordered_pair(1, 0)",
+            "metadata": {
+              "candidate_source": "def ordered_pair(left: int, right: int) -> tuple[int, int]:\n    \"\"\"post: _[0] <= _[1]\"\"\"\n    if left > right:\n        raise ValueError(\"left must be less than or equal to right\")\n    return (left, right)",
+              "context_window": 8192,
+              "counterexample": "ordered_pair(1, 0) (which returns (1, 0))",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [
+                "ordered_pair(1, 0)"
+              ],
+              "final_issues": [
+                "CrossHair found a contract or assertion issue"
+              ],
+              "final_verifier_output": [
+                "/private/var/folders/fr/zgwhhqkx1k953vglp24mbbkh0000gn/T/agent_harness_crosshair_hlp3t3nd/candidate.py:4: error: ValueError: left must be less than or equal to right when calling ordered_pair(1, 0)"
+              ],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef ordered_pair(left: int, right: int) -> tuple[int, int]:\n    \"\"\"post: _[0] <= _[1]\"\"\"\n    return (left, right)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 204,
+            "retries": 1,
+            "success": false,
+            "tool_calls": 1,
+            "total_tokens": 267
+          },
+          "shielded": {
+            "completion_tokens": 56,
+            "duration_seconds": 4.611186083871871,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def ordered_pair(left: int, right: int) -> tuple[int, int]:\n    \"\"\"post: _[0] <= _[1]\"\"\"\n    if left > right:\n        return (right, left)\n    return (left, right)",
+              "context_window": 8192,
+              "counterexample": "ordered_pair(1, 0) (which returns (1, 0))",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef ordered_pair(left: int, right: int) -> tuple[int, int]:\n    \"\"\"post: _[0] <= _[1]\"\"\"\n    return (left, right)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: ordered_pair(1, 0) (which returns (1, 0))\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 226,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 282
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair ordered_pair so its returned pair is ordered from smaller to larger.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-order-pair"
+          },
+          "token_delta": -15
+        },
+        {
+          "baseline": {
+            "completion_tokens": 30,
+            "duration_seconds": 6.547302166931331,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def trim_text(text: str) -> str:\n    \"\"\"post: _ == text.strip()\"\"\"\n    return text.strip()",
+              "context_window": 8192,
+              "counterexample": "trim_text('\\x00\\u2000') (which returns '\\x00\\u2000')",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef trim_text(text: str) -> str:\n    \"\"\"post: _ == text.strip()\"\"\"\n    return text\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 190,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 220
+          },
+          "shielded": {
+            "completion_tokens": 31,
+            "duration_seconds": 3.490583334118128,
+            "error": "CrossHair found a contract or assertion issue: trim_text('\\x00\\t') (which returns '\\x00\\t')",
+            "metadata": {
+              "candidate_source": "def trim_text(text: str) -> str:\n    \"\"\"post: _ == text.strip()\"\"\"\n    return text.lstrip()",
+              "context_window": 8192,
+              "counterexample": "trim_text('\\x00\\u2000') (which returns '\\x00\\u2000')",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [
+                "trim_text('\\x00\\t') (which returns '\\x00\\t')"
+              ],
+              "final_issues": [
+                "CrossHair found a contract or assertion issue"
+              ],
+              "final_verifier_output": [
+                "/private/var/folders/fr/zgwhhqkx1k953vglp24mbbkh0000gn/T/agent_harness_crosshair_1jqj35kw/candidate.py:2: error: false when calling trim_text('\\x00\\t') (which returns '\\x00\\t')"
+              ],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef trim_text(text: str) -> str:\n    \"\"\"post: _ == text.strip()\"\"\"\n    return text\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: trim_text('\\x00\\u2000') (which returns '\\x00\\u2000')\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 220,
+            "retries": 1,
+            "success": false,
+            "tool_calls": 1,
+            "total_tokens": 251
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair trim_text so it returns its input without surrounding whitespace.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-trim-text"
+          },
+          "token_delta": -31
+        },
+        {
+          "baseline": {
+            "completion_tokens": 57,
+            "duration_seconds": 5.043669708073139,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def prefix_sum(count: int) -> int:\n    \"\"\"pre: count >= 0\n    post: _ == count * (count + 1) // 2\n    \"\"\"\n    return count * (count + 1) // 2",
+              "context_window": 8192,
+              "counterexample": "prefix_sum(1) (which returns 0)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef prefix_sum(count: int) -> int:\n    \"\"\"pre: count >= 0\n    post: _ == count * (count + 1) // 2\n    \"\"\"\n    total = 0\n    for value in range(count):\n        total += value\n    return total\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 226,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 283
+          },
+          "shielded": {
+            "completion_tokens": 57,
+            "duration_seconds": 4.934832875151187,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def prefix_sum(count: int) -> int:\n    \"\"\"pre: count >= 0\n    post: _ == count * (count + 1) // 2\n    \"\"\"\n    return count * (count + 1) // 2",
+              "context_window": 8192,
+              "counterexample": "prefix_sum(1) (which returns 0)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef prefix_sum(count: int) -> int:\n    \"\"\"pre: count >= 0\n    post: _ == count * (count + 1) // 2\n    \"\"\"\n    total = 0\n    for value in range(count):\n        total += value\n    return total\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: prefix_sum(1) (which returns 0)\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 242,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 299
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair prefix_sum so its loop sums every integer from zero through count.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-prefix-sum"
+          },
+          "token_delta": -16
+        }
+      ],
+      "schema_version": 2,
+      "shielded_successes": 10,
+      "shielded_tokens": 2821,
+      "task_count": 11,
+      "token_delta": -193,
+      "token_reduction_ratio": -0.07343987823439878
+    }
+  ],
+  "schema_version": 2,
+  "summary": {
+    "baseline_duration_seconds": {
+      "count": 3,
+      "descriptive_95pct_high": 57.518811552508225,
+      "descriptive_95pct_low": 40.80271636225676,
+      "max": 57.68237299704924,
+      "mean": 49.16076395738249,
+      "min": 44.600537000223994,
+      "stdev": 7.386001574916654
+    },
+    "baseline_successes": {
+      "count": 3,
+      "descriptive_95pct_high": 10.0,
+      "descriptive_95pct_low": 10.0,
+      "max": 10,
+      "mean": 10,
+      "min": 10,
+      "stdev": 0.0
+    },
+    "baseline_tokens": {
+      "count": 3,
+      "descriptive_95pct_high": 2642.2805740386257,
+      "descriptive_95pct_low": 2619.0527592947074,
+      "max": 2642,
+      "mean": 2630.6666666666665,
+      "min": 2622,
+      "stdev": 10.263202878893768
+    },
+    "baseline_tool_calls": {
+      "count": 3,
+      "descriptive_95pct_high": 11.0,
+      "descriptive_95pct_low": 11.0,
+      "max": 11,
+      "mean": 11,
+      "min": 11,
+      "stdev": 0.0
+    },
+    "shielded_duration_seconds": {
+      "count": 3,
+      "descriptive_95pct_high": 49.86948909651803,
+      "descriptive_95pct_low": 40.091036654285425,
+      "max": 49.89361625071615,
+      "mean": 44.98026287540173,
+      "min": 41.77401483501308,
+      "stdev": 4.320606237077254
+    },
+    "shielded_successes": {
+      "count": 3,
+      "descriptive_95pct_high": 9.986666666666668,
+      "descriptive_95pct_low": 8.68,
+      "max": 10,
+      "mean": 9.333333333333334,
+      "min": 9,
+      "stdev": 0.5773502691896257
+    },
+    "shielded_tokens": {
+      "count": 3,
+      "descriptive_95pct_high": 2825.8381295155327,
+      "descriptive_95pct_low": 2808.1618704844673,
+      "max": 2822,
+      "mean": 2817,
+      "min": 2808,
+      "stdev": 7.810249675906654
+    },
+    "shielded_tool_calls": {
+      "count": 3,
+      "descriptive_95pct_high": 11.0,
+      "descriptive_95pct_low": 11.0,
+      "max": 11,
+      "mean": 11,
+      "min": 11,
+      "stdev": 0.0
+    },
+    "token_delta": {
+      "count": 3,
+      "descriptive_95pct_high": -166.0168725741908,
+      "descriptive_95pct_low": -206.64979409247587,
+      "max": -166,
+      "mean": -186.33333333333334,
+      "min": -200,
+      "stdev": 17.95364401266031
+    },
+    "token_reduction_ratio": {
+      "count": 3,
+      "descriptive_95pct_high": -0.06282919600850635,
+      "descriptive_95pct_low": -0.07886994890904318,
+      "max": -0.06283118849356548,
+      "mean": -0.07084957245877477,
+      "min": -0.07627765064836003,
+      "stdev": 0.007087601789639703
+    }
+  },
+  "task_count": 11,
+  "variant_metadata": {
+    "baseline": [
+      {
+        "candidate_source": "def clamp_value(value: int, lower: int, upper: int) -> int:\n    \"\"\"pre: lower <= upper\n    post: _ >= lower and _ <= upper\n    \"\"\"\n    if value < lower:\n        return lower\n    elif value > upper:\n        return upper\n    else:\n        return value",
+        "context_window": 8192,
+        "counterexample": "clamp_value(-1, 0, 0) (which returns -1)",
+        "counterexample_in_prompt": false,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "mode": "baseline",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef clamp_value(value: int, lower: int, upper: int) -> int:\n    \"\"\"pre: lower <= upper\n    post: _ >= lower and _ <= upper\n    \"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      },
+      {
+        "candidate_source": "def identity(value: int) -> int:\n    \"\"\"post: _ == value\"\"\"\n    return value",
+        "context_window": 8192,
+        "counterexample": "identity(1) (which returns 0)",
+        "counterexample_in_prompt": false,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "mode": "baseline",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef identity(value: int) -> int:\n    \"\"\"post: _ == value\"\"\"\n    return 0\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      },
+      {
+        "candidate_source": "def nonnegative(value: int) -> int:\n    \"\"\"post: _ >= 0\"\"\"\n    return max(value, 0)",
+        "context_window": 8192,
+        "counterexample": "nonnegative(-1) (which returns -1)",
+        "counterexample_in_prompt": false,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "mode": "baseline",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef nonnegative(value: int) -> int:\n    \"\"\"post: _ >= 0\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nThe shown negative input is valid. Do NOT write `if value < 0: raise ...`; return a non-negative value instead, for example `return max(value, 0)`.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      },
+      {
+        "candidate_source": "def absolute(value: int) -> int:\n    \"\"\"post: _ == abs(value)\"\"\"\n    if value < 0:\n        return -value\n    else:\n        return value",
+        "context_window": 8192,
+        "counterexample": "absolute(-1) (which returns -1)",
+        "counterexample_in_prompt": false,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "mode": "baseline",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef absolute(value: int) -> int:\n    \"\"\"post: _ == abs(value)\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      },
+      {
+        "candidate_source": "def double(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2",
+        "context_window": 8192,
+        "counterexample": "double(1) (which returns 1)",
+        "counterexample_in_prompt": false,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "mode": "baseline",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef double(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      },
+      {
+        "candidate_source": "def successor(value: int) -> int:\n    \"\"\"post: _ > value\"\"\"\n    return value + 1",
+        "context_window": 8192,
+        "counterexample": "successor(0) (which returns 0)",
+        "counterexample_in_prompt": false,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "mode": "baseline",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef successor(value: int) -> int:\n    \"\"\"post: _ > value\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      },
+      {
+        "candidate_source": "def maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return max(left, right)",
+        "context_window": 8192,
+        "counterexample": "maximum(-1, 0) (which returns -1)",
+        "counterexample_in_prompt": false,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "mode": "baseline",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return left\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      },
+      {
+        "candidate_source": "def is_even(value: int) -> bool:\n    \"\"\"post: _ == (value % 2 == 0)\"\"\"\n    return value % 2 == 0",
+        "context_window": 8192,
+        "counterexample": "is_even(1) (which returns True)",
+        "counterexample_in_prompt": false,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "mode": "baseline",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef is_even(value: int) -> bool:\n    \"\"\"post: _ == (value % 2 == 0)\"\"\"\n    return True\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      },
+      {
+        "candidate_source": "def ordered_pair(left: int, right: int) -> tuple[int, int]:\n    \"\"\"post: _[0] <= _[1]\"\"\"\n    if left > right:\n        raise ValueError(\"left must be less than or equal to right\")\n    return (left, right)",
+        "context_window": 8192,
+        "counterexample": "ordered_pair(1, 0) (which returns (1, 0))",
+        "counterexample_in_prompt": false,
+        "final_counterexamples": [
+          "ordered_pair(1, 0)"
+        ],
+        "final_issues": [
+          "CrossHair found a contract or assertion issue"
+        ],
+        "final_verifier_output": [
+          "/private/var/folders/fr/zgwhhqkx1k953vglp24mbbkh0000gn/T/agent_harness_crosshair_3rjomdx_/candidate.py:4: error: ValueError: left must be less than or equal to right when calling ordered_pair(1, 0)"
+        ],
+        "mode": "baseline",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef ordered_pair(left: int, right: int) -> tuple[int, int]:\n    \"\"\"post: _[0] <= _[1]\"\"\"\n    return (left, right)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      },
+      {
+        "candidate_source": "def trim_text(text: str) -> str:\n    \"\"\"post: _ == text.strip()\"\"\"\n    return text.strip()",
+        "context_window": 8192,
+        "counterexample": "trim_text('\\x00\\u2000') (which returns '\\x00\\u2000')",
+        "counterexample_in_prompt": false,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "mode": "baseline",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef trim_text(text: str) -> str:\n    \"\"\"post: _ == text.strip()\"\"\"\n    return text\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      },
+      {
+        "candidate_source": "def prefix_sum(count: int) -> int:\n    \"\"\"pre: count >= 0\n    post: _ == count * (count + 1) // 2\n    \"\"\"\n    return count * (count + 1) // 2",
+        "context_window": 8192,
+        "counterexample": "prefix_sum(1) (which returns 0)",
+        "counterexample_in_prompt": false,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "mode": "baseline",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef prefix_sum(count: int) -> int:\n    \"\"\"pre: count >= 0\n    post: _ == count * (count + 1) // 2\n    \"\"\"\n    total = 0\n    for value in range(count):\n        total += value\n    return total\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      },
+      {
+        "candidate_source": "def ordered_pair(left: int, right: int) -> tuple[int, int]:\n    \"\"\"post: _[0] <= _[1]\"\"\"\n    return (left, right)",
+        "context_window": 8192,
+        "counterexample": "ordered_pair(1, 0) (which returns (1, 0))",
+        "counterexample_in_prompt": false,
+        "final_counterexamples": [
+          "ordered_pair(1, 0) (which returns (1, 0))"
+        ],
+        "final_issues": [
+          "CrossHair found a contract or assertion issue"
+        ],
+        "final_verifier_output": [
+          "/private/var/folders/fr/zgwhhqkx1k953vglp24mbbkh0000gn/T/agent_harness_crosshair__5ulrppk/candidate.py:2: error: false when calling ordered_pair(1, 0) (which returns (1, 0))"
+        ],
+        "mode": "baseline",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef ordered_pair(left: int, right: int) -> tuple[int, int]:\n    \"\"\"post: _[0] <= _[1]\"\"\"\n    return (left, right)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      },
+      {
+        "candidate_source": "def absolute(value: int) -> int:\n    \"\"\"post: _ == abs(value)\"\"\"\n    return abs(value)",
+        "context_window": 8192,
+        "counterexample": "absolute(-1) (which returns -1)",
+        "counterexample_in_prompt": false,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "mode": "baseline",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef absolute(value: int) -> int:\n    \"\"\"post: _ == abs(value)\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      },
+      {
+        "candidate_source": "def ordered_pair(left: int, right: int) -> tuple[int, int]:\n    \"\"\"post: _[0] <= _[1]\"\"\"\n    if left > right:\n        raise ValueError(\"left must be less than or equal to right\")\n    return (left, right)",
+        "context_window": 8192,
+        "counterexample": "ordered_pair(1, 0) (which returns (1, 0))",
+        "counterexample_in_prompt": false,
+        "final_counterexamples": [
+          "ordered_pair(1, 0)"
+        ],
+        "final_issues": [
+          "CrossHair found a contract or assertion issue"
+        ],
+        "final_verifier_output": [
+          "/private/var/folders/fr/zgwhhqkx1k953vglp24mbbkh0000gn/T/agent_harness_crosshair_hlp3t3nd/candidate.py:4: error: ValueError: left must be less than or equal to right when calling ordered_pair(1, 0)"
+        ],
+        "mode": "baseline",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef ordered_pair(left: int, right: int) -> tuple[int, int]:\n    \"\"\"post: _[0] <= _[1]\"\"\"\n    return (left, right)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      }
+    ],
+    "shielded": [
+      {
+        "candidate_source": "def clamp_value(value: int, lower: int, upper: int) -> int:\n    \"\"\"pre: lower <= upper\n    post: _ >= lower and _ <= upper\n    \"\"\"\n    if value < lower:\n        return lower\n    elif value > upper:\n        return upper\n    else:\n        return value",
+        "context_window": 8192,
+        "counterexample": "clamp_value(-1, 0, 0) (which returns -1)",
+        "counterexample_in_prompt": true,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "mode": "guided",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef clamp_value(value: int, lower: int, upper: int) -> int:\n    \"\"\"pre: lower <= upper\n    post: _ >= lower and _ <= upper\n    \"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: clamp_value(-1, 0, 0) (which returns -1)\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      },
+      {
+        "candidate_source": "def identity(value: int) -> int:\n    \"\"\"post: _ == value\"\"\"\n    return value",
+        "context_window": 8192,
+        "counterexample": "identity(1) (which returns 0)",
+        "counterexample_in_prompt": true,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "mode": "guided",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef identity(value: int) -> int:\n    \"\"\"post: _ == value\"\"\"\n    return 0\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: identity(1) (which returns 0)\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      },
+      {
+        "candidate_source": "def nonnegative(value: int) -> int:\n    \"\"\"post: _ >= 0\"\"\"\n    return max(value, 0)",
+        "context_window": 8192,
+        "counterexample": "nonnegative(-1) (which returns -1)",
+        "counterexample_in_prompt": true,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "mode": "guided",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef nonnegative(value: int) -> int:\n    \"\"\"post: _ >= 0\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: nonnegative(-1) (which returns -1)\n\nFIX DIRECTIVE:\nThe shown negative input is valid. Do NOT write `if value < 0: raise ...`; return a non-negative value instead, for example `return max(value, 0)`.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      },
+      {
+        "candidate_source": "def absolute(value: int) -> int:\n    \"\"\"post: _ == abs(value)\"\"\"\n    return abs(value)",
+        "context_window": 8192,
+        "counterexample": "absolute(-1) (which returns -1)",
+        "counterexample_in_prompt": true,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "mode": "guided",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef absolute(value: int) -> int:\n    \"\"\"post: _ == abs(value)\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: absolute(-1) (which returns -1)\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      },
+      {
+        "candidate_source": "def double(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2",
+        "context_window": 8192,
+        "counterexample": "double(1) (which returns 1)",
+        "counterexample_in_prompt": true,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "mode": "guided",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef double(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: double(1) (which returns 1)\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      },
+      {
+        "candidate_source": "def successor(value: int) -> int:\n    \"\"\"post: _ > value\"\"\"\n    return value + 1",
+        "context_window": 8192,
+        "counterexample": "successor(0) (which returns 0)",
+        "counterexample_in_prompt": true,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "mode": "guided",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef successor(value: int) -> int:\n    \"\"\"post: _ > value\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: successor(0) (which returns 0)\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      },
+      {
+        "candidate_source": "def maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return max(left, right)",
+        "context_window": 8192,
+        "counterexample": "maximum(-1, 0) (which returns -1)",
+        "counterexample_in_prompt": true,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "mode": "guided",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return left\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: maximum(-1, 0) (which returns -1)\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      },
+      {
+        "candidate_source": "def is_even(value: int) -> bool:\n    \"\"\"post: _ == (value % 2 == 0)\"\"\"\n    return value % 2 == 0",
+        "context_window": 8192,
+        "counterexample": "is_even(1) (which returns True)",
+        "counterexample_in_prompt": true,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "mode": "guided",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef is_even(value: int) -> bool:\n    \"\"\"post: _ == (value % 2 == 0)\"\"\"\n    return True\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: is_even(1) (which returns True)\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      },
+      {
+        "candidate_source": "def ordered_pair(left: int, right: int) -> tuple[int, int]:\n    \"\"\"post: _[0] <= _[1]\"\"\"\n    return (left, right)",
+        "context_window": 8192,
+        "counterexample": "ordered_pair(1, 0) (which returns (1, 0))",
+        "counterexample_in_prompt": true,
+        "final_counterexamples": [
+          "ordered_pair(1, 0) (which returns (1, 0))"
+        ],
+        "final_issues": [
+          "CrossHair found a contract or assertion issue"
+        ],
+        "final_verifier_output": [
+          "/private/var/folders/fr/zgwhhqkx1k953vglp24mbbkh0000gn/T/agent_harness_crosshair_bt5es9u1/candidate.py:2: error: false when calling ordered_pair(1, 0) (which returns (1, 0))"
+        ],
+        "mode": "guided",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef ordered_pair(left: int, right: int) -> tuple[int, int]:\n    \"\"\"post: _[0] <= _[1]\"\"\"\n    return (left, right)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: ordered_pair(1, 0) (which returns (1, 0))\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      },
+      {
+        "candidate_source": "def trim_text(text: str) -> str:\n    \"\"\"post: _ == text.strip()\"\"\"\n    return text.lstrip()",
+        "context_window": 8192,
+        "counterexample": "trim_text('\\x00\\u2000') (which returns '\\x00\\u2000')",
+        "counterexample_in_prompt": true,
+        "final_counterexamples": [
+          "trim_text('\\x00\\t') (which returns '\\x00\\t')"
+        ],
+        "final_issues": [
+          "CrossHair found a contract or assertion issue"
+        ],
+        "final_verifier_output": [
+          "/private/var/folders/fr/zgwhhqkx1k953vglp24mbbkh0000gn/T/agent_harness_crosshair_jy2pu3v9/candidate.py:2: error: false when calling trim_text('\\x00\\t') (which returns '\\x00\\t')"
+        ],
+        "mode": "guided",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef trim_text(text: str) -> str:\n    \"\"\"post: _ == text.strip()\"\"\"\n    return text\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: trim_text('\\x00\\u2000') (which returns '\\x00\\u2000')\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      },
+      {
+        "candidate_source": "def prefix_sum(count: int) -> int:\n    \"\"\"pre: count >= 0\n    post: _ == count * (count + 1) // 2\n    \"\"\"\n    return count * (count + 1) // 2",
+        "context_window": 8192,
+        "counterexample": "prefix_sum(1) (which returns 0)",
+        "counterexample_in_prompt": true,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "mode": "guided",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef prefix_sum(count: int) -> int:\n    \"\"\"pre: count >= 0\n    post: _ == count * (count + 1) // 2\n    \"\"\"\n    total = 0\n    for value in range(count):\n        total += value\n    return total\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: prefix_sum(1) (which returns 0)\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      },
+      {
+        "candidate_source": "def absolute(value: int) -> int:\n    \"\"\"post: _ == abs(value)\"\"\"\n    if value < 0:\n        return -value\n    else:\n        return value",
+        "context_window": 8192,
+        "counterexample": "absolute(-1) (which returns -1)",
+        "counterexample_in_prompt": true,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "mode": "guided",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef absolute(value: int) -> int:\n    \"\"\"post: _ == abs(value)\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: absolute(-1) (which returns -1)\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      },
+      {
+        "candidate_source": "def ordered_pair(left: int, right: int) -> tuple[int, int]:\n    \"\"\"post: _[0] <= _[1]\"\"\"\n    return (left, right)",
+        "context_window": 8192,
+        "counterexample": "ordered_pair(1, 0) (which returns (1, 0))",
+        "counterexample_in_prompt": true,
+        "final_counterexamples": [
+          "ordered_pair(1, 0) (which returns (1, 0))"
+        ],
+        "final_issues": [
+          "CrossHair found a contract or assertion issue"
+        ],
+        "final_verifier_output": [
+          "/private/var/folders/fr/zgwhhqkx1k953vglp24mbbkh0000gn/T/agent_harness_crosshair_z8fhd9j0/candidate.py:2: error: false when calling ordered_pair(1, 0) (which returns (1, 0))"
+        ],
+        "mode": "guided",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef ordered_pair(left: int, right: int) -> tuple[int, int]:\n    \"\"\"post: _[0] <= _[1]\"\"\"\n    return (left, right)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: ordered_pair(1, 0) (which returns (1, 0))\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      },
+      {
+        "candidate_source": "def trim_text(text: str) -> str:\n    \"\"\"post: _ == text.strip()\"\"\"\n    return text.lstrip()",
+        "context_window": 8192,
+        "counterexample": "trim_text('\\x00\\u2000') (which returns '\\x00\\u2000')",
+        "counterexample_in_prompt": true,
+        "final_counterexamples": [
+          "trim_text('\\x00\\t') (which returns '\\x00\\t')"
+        ],
+        "final_issues": [
+          "CrossHair found a contract or assertion issue"
+        ],
+        "final_verifier_output": [
+          "/private/var/folders/fr/zgwhhqkx1k953vglp24mbbkh0000gn/T/agent_harness_crosshair_uyg7pgqp/candidate.py:2: error: false when calling trim_text('\\x00\\t') (which returns '\\x00\\t')"
+        ],
+        "mode": "guided",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef trim_text(text: str) -> str:\n    \"\"\"post: _ == text.strip()\"\"\"\n    return text\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: trim_text('\\x00\\u2000') (which returns '\\x00\\u2000')\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      },
+      {
+        "candidate_source": "def ordered_pair(left: int, right: int) -> tuple[int, int]:\n    \"\"\"post: _[0] <= _[1]\"\"\"\n    if left > right:\n        return (right, left)\n    return (left, right)",
+        "context_window": 8192,
+        "counterexample": "ordered_pair(1, 0) (which returns (1, 0))",
+        "counterexample_in_prompt": true,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "mode": "guided",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef ordered_pair(left: int, right: int) -> tuple[int, int]:\n    \"\"\"post: _[0] <= _[1]\"\"\"\n    return (left, right)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: ordered_pair(1, 0) (which returns (1, 0))\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      },
+      {
+        "candidate_source": "def trim_text(text: str) -> str:\n    \"\"\"post: _ == text.strip()\"\"\"\n    return text.lstrip()",
+        "context_window": 8192,
+        "counterexample": "trim_text('\\x00\\u2000') (which returns '\\x00\\u2000')",
+        "counterexample_in_prompt": true,
+        "final_counterexamples": [
+          "trim_text('\\x00\\t') (which returns '\\x00\\t')"
+        ],
+        "final_issues": [
+          "CrossHair found a contract or assertion issue"
+        ],
+        "final_verifier_output": [
+          "/private/var/folders/fr/zgwhhqkx1k953vglp24mbbkh0000gn/T/agent_harness_crosshair_1jqj35kw/candidate.py:2: error: false when calling trim_text('\\x00\\t') (which returns '\\x00\\t')"
+        ],
+        "mode": "guided",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef trim_text(text: str) -> str:\n    \"\"\"post: _ == text.strip()\"\"\"\n    return text\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: trim_text('\\x00\\u2000') (which returns '\\x00\\u2000')\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      }
+    ]
+  }
+}

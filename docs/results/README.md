@@ -30,6 +30,11 @@ render a dated Markdown summary without hiding failed task rows.
   repetition; the guided path used 6.78% and 6.52% more mean tokens,
   respectively. This confirms removal of the known failure rather than a
   general counterexample-guided advantage.
+- `formal-counterexample-repair-diverse-2026-08-15.md` — three-repeat,
+  11-task follow-up that adds ordering, text-normalization, and loop fixtures.
+  Baseline completed 10.00/11 while guided completed 9.33/11 and used 7.08%
+  more mean tokens. All task-level failures, prompts, candidates, and
+  CrossHair witnesses remain in the raw JSON.
 - `compute-shield-10-2026-08-04.md` — frozen 1.5B Compute Shield comparison.
 - `local-model-comparison-2026-08-11.md` — controlled Qwen 1.5B versus 3B
   comparison on the same frozen ten-task corpus. Both completed 10/10

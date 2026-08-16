@@ -1185,8 +1185,14 @@ def analyze(matrix):
     def test_formal_benchmark_corpus_has_a_broken_source_for_every_task(self) -> None:
         corpus = json.loads((ROOT / "data" / "formal_repair_benchmark_tasks.json").read_text())
         task_ids = {task["task_id"] for task in corpus}
-        self.assertEqual(task_ids, set(BROKEN_SOURCES))
+        self.assertTrue(task_ids.issubset(BROKEN_SOURCES))
         self.assertEqual(len(task_ids), 8)
+
+    def test_diverse_formal_benchmark_corpus_retains_all_fixture_sources(self) -> None:
+        corpus = json.loads((ROOT / "data" / "formal_repair_diverse_benchmark_tasks.json").read_text())
+        task_ids = {task["task_id"] for task in corpus}
+        self.assertEqual(task_ids, set(BROKEN_SOURCES))
+        self.assertEqual(len(task_ids), 11)
 
     def test_formal_benchmark_failure_includes_crosshair_witness(self) -> None:
         result = FormalResult(

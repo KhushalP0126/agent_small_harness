@@ -1,0 +1,68 @@
+[
+  {
+    "task_id": "formal-clamp-value",
+    "category": "formal_repair",
+    "prompt": "Repair clamp_value so its stated lower/upper postcondition holds for every valid input.",
+    "suggested_max_turns": 1
+  },
+  {
+    "task_id": "formal-identity",
+    "category": "formal_repair",
+    "prompt": "Repair identity so its postcondition returns the input unchanged.",
+    "suggested_max_turns": 1
+  },
+  {
+    "task_id": "formal-nonnegative",
+    "category": "formal_repair",
+    "prompt": "Repair nonnegative so it always returns a non-negative integer.",
+    "suggested_max_turns": 1
+  },
+  {
+    "task_id": "formal-absolute",
+    "category": "formal_repair",
+    "prompt": "Repair absolute so it returns the absolute value for every integer input.",
+    "suggested_max_turns": 1
+  },
+  {
+    "task_id": "formal-double",
+    "category": "formal_repair",
+    "prompt": "Repair double so its result is exactly twice its input for every integer.",
+    "suggested_max_turns": 1
+  },
+  {
+    "task_id": "formal-successor",
+    "category": "formal_repair",
+    "prompt": "Repair successor so its result is strictly greater than its input for every integer.",
+    "suggested_max_turns": 1
+  },
+  {
+    "task_id": "formal-maximum",
+    "category": "formal_repair",
+    "prompt": "Repair maximum so its result is at least both integer inputs.",
+    "suggested_max_turns": 1
+  },
+  {
+    "task_id": "formal-is-even",
+    "category": "formal_repair",
+    "prompt": "Repair is_even so it returns whether its integer input is even.",
+    "suggested_max_turns": 1
+  },
+  {
+    "task_id": "formal-order-pair",
+    "category": "formal_repair",
+    "prompt": "Repair ordered_pair so its returned pair is ordered from smaller to larger.",
+    "suggested_max_turns": 1
+  },
+  {
+    "task_id": "formal-trim-text",
+    "category": "formal_repair",
+    "prompt": "Repair trim_text so it returns its input without surrounding whitespace.",
+    "suggested_max_turns": 1
+  },
+  {
+    "task_id": "formal-prefix-sum",
+    "category": "formal_repair",
+    "prompt": "Repair prefix_sum so its loop sums every integer from zero through count.",
+    "suggested_max_turns": 1
+  }
+]
