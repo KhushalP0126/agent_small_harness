@@ -100,6 +100,11 @@ def _low_noise_directive_for_source(violation: Violation | None, source: str) ->
     semantic_hints = _semantic_repair_hints([violation], source=source)
     if semantic_hints:
         return semantic_hints[0]
+    if violation.kind == "formal_counterexample" and "post: _ >= 0" in source:
+        return (
+            "The shown negative input is valid. Do NOT write `if value < 0: raise ...`; "
+            "return a non-negative value instead, for example `return max(value, 0)`."
+        )
     return _low_noise_directive(violation)
 
 

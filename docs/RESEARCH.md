@@ -94,11 +94,22 @@ that postconditions constrain returned values and that the input must not be
 rejected. It still produced the identical `ValueError` branch twice, reducing
 guided completion to 7.33/8 while baseline remained 8.00/8. The small-model
 failure is therefore task-pattern-specific rather than a missing prompt
-clarification; the prompt amendment is not retained as a product change.
+clarification by itself.
+
+The retained fix is intentionally narrower: for a formal `post: _ >= 0`
+source, the small-worker prompt names the bad branch (`if value < 0: raise`)
+and gives the valid transformation (`return max(value, 0)`). The separate
+six-repeat paired diagnosis in
+[`results/formal-nonnegative-directive-2026-08-15.md`](results/formal-nonnegative-directive-2026-08-15.md)
+records 6/6 guided and 6/6 baseline completions; every guided candidate used
+the intended clamp. This removes the observed regression but does not show a
+guided success-rate advantage, and still costs 16 additional model tokens per
+repair. It is a targeted prompt-engineering fix, not evidence that
+counterexample-guided repair helps generally.
 
 Future raw formal benchmark artifacts retain both the exact repair prompt and
 candidate source, so task-level outcomes can be audited without reconstruction.
-The separate follow-up is preserved in
+The unsuccessful clarification follow-up is preserved in
 [`results/formal-counterexample-repair-postcondition-semantics-2026-08-15.md`](results/formal-counterexample-repair-postcondition-semantics-2026-08-15.md).
 
 ## Cost-aware route evidence

@@ -1,0 +1,619 @@
+{
+  "commands": {
+    "baseline": "python3 scripts/run_formal_repair_benchmark_agent.py --mode baseline --model qwen2.5-coder:1.5b",
+    "shielded": "python3 scripts/run_formal_repair_benchmark_agent.py --mode guided --model qwen2.5-coder:1.5b"
+  },
+  "experiment": "repeated-paired-coding-agent-benchmark",
+  "provenance": {
+    "captured_at_utc": "2026-08-16T00:59:26.038099+00:00",
+    "environment": {
+      "os": "macOS-26.5.1-arm64-arm-64bit",
+      "python": "3.11.9",
+      "python_implementation": "CPython"
+    },
+    "repository": {
+      "commit": "2f83fbd30067df242907b802ace206f7eb54a047",
+      "dirty": true
+    },
+    "settings": {
+      "runs": 6
+    },
+    "task_corpus": {
+      "path": "data/formal_nonnegative_benchmark_tasks.json",
+      "sha256": "f9ddba21171dc6a1a15b9aaf921fbe68a9a4b6fe4a12f75d09d852c53ccc4e2b"
+    }
+  },
+  "run_count": 6,
+  "runs": [
+    {
+      "baseline_successes": 1,
+      "baseline_tokens": 239,
+      "median_task_token_delta": -16,
+      "results": [
+        {
+          "baseline": {
+            "completion_tokens": 32,
+            "duration_seconds": 9.186722458107397,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def nonnegative(value: int) -> int:\n    \"\"\"post: _ >= 0\"\"\"\n    return max(value, 0)",
+              "context_window": 8192,
+              "counterexample": "nonnegative(-1) (which returns -1)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef nonnegative(value: int) -> int:\n    \"\"\"post: _ >= 0\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nThe shown negative input is valid. Do NOT write `if value < 0: raise ...`; return a non-negative value instead, for example `return max(value, 0)`.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 207,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 239
+          },
+          "shielded": {
+            "completion_tokens": 32,
+            "duration_seconds": 4.494322582846507,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def nonnegative(value: int) -> int:\n    \"\"\"post: _ >= 0\"\"\"\n    return max(value, 0)",
+              "context_window": 8192,
+              "counterexample": "nonnegative(-1) (which returns -1)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef nonnegative(value: int) -> int:\n    \"\"\"post: _ >= 0\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: nonnegative(-1) (which returns -1)\n\nFIX DIRECTIVE:\nThe shown negative input is valid. Do NOT write `if value < 0: raise ...`; return a non-negative value instead, for example `return max(value, 0)`.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 223,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 255
+          },
+          "task": {
+            "category": "formal_repair_diagnosis",
+            "prompt": "Repair nonnegative so it always returns a non-negative integer.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-nonnegative"
+          },
+          "token_delta": -16
+        }
+      ],
+      "schema_version": 2,
+      "shielded_successes": 1,
+      "shielded_tokens": 255,
+      "task_count": 1,
+      "token_delta": -16,
+      "token_reduction_ratio": -0.06694560669456066
+    },
+    {
+      "baseline_successes": 1,
+      "baseline_tokens": 239,
+      "median_task_token_delta": -16,
+      "results": [
+        {
+          "baseline": {
+            "completion_tokens": 32,
+            "duration_seconds": 3.1486031250096858,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def nonnegative(value: int) -> int:\n    \"\"\"post: _ >= 0\"\"\"\n    return max(value, 0)",
+              "context_window": 8192,
+              "counterexample": "nonnegative(-1) (which returns -1)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef nonnegative(value: int) -> int:\n    \"\"\"post: _ >= 0\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nThe shown negative input is valid. Do NOT write `if value < 0: raise ...`; return a non-negative value instead, for example `return max(value, 0)`.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 207,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 239
+          },
+          "shielded": {
+            "completion_tokens": 32,
+            "duration_seconds": 3.3308964159805328,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def nonnegative(value: int) -> int:\n    \"\"\"post: _ >= 0\"\"\"\n    return max(value, 0)",
+              "context_window": 8192,
+              "counterexample": "nonnegative(-1) (which returns -1)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef nonnegative(value: int) -> int:\n    \"\"\"post: _ >= 0\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: nonnegative(-1) (which returns -1)\n\nFIX DIRECTIVE:\nThe shown negative input is valid. Do NOT write `if value < 0: raise ...`; return a non-negative value instead, for example `return max(value, 0)`.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 223,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 255
+          },
+          "task": {
+            "category": "formal_repair_diagnosis",
+            "prompt": "Repair nonnegative so it always returns a non-negative integer.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-nonnegative"
+          },
+          "token_delta": -16
+        }
+      ],
+      "schema_version": 2,
+      "shielded_successes": 1,
+      "shielded_tokens": 255,
+      "task_count": 1,
+      "token_delta": -16,
+      "token_reduction_ratio": -0.06694560669456066
+    },
+    {
+      "baseline_successes": 1,
+      "baseline_tokens": 239,
+      "median_task_token_delta": -16,
+      "results": [
+        {
+          "baseline": {
+            "completion_tokens": 32,
+            "duration_seconds": 3.847952875075862,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def nonnegative(value: int) -> int:\n    \"\"\"post: _ >= 0\"\"\"\n    return max(value, 0)",
+              "context_window": 8192,
+              "counterexample": "nonnegative(-1) (which returns -1)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef nonnegative(value: int) -> int:\n    \"\"\"post: _ >= 0\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nThe shown negative input is valid. Do NOT write `if value < 0: raise ...`; return a non-negative value instead, for example `return max(value, 0)`.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 207,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 239
+          },
+          "shielded": {
+            "completion_tokens": 32,
+            "duration_seconds": 3.147189792012796,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def nonnegative(value: int) -> int:\n    \"\"\"post: _ >= 0\"\"\"\n    return max(value, 0)",
+              "context_window": 8192,
+              "counterexample": "nonnegative(-1) (which returns -1)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef nonnegative(value: int) -> int:\n    \"\"\"post: _ >= 0\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: nonnegative(-1) (which returns -1)\n\nFIX DIRECTIVE:\nThe shown negative input is valid. Do NOT write `if value < 0: raise ...`; return a non-negative value instead, for example `return max(value, 0)`.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 223,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 255
+          },
+          "task": {
+            "category": "formal_repair_diagnosis",
+            "prompt": "Repair nonnegative so it always returns a non-negative integer.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-nonnegative"
+          },
+          "token_delta": -16
+        }
+      ],
+      "schema_version": 2,
+      "shielded_successes": 1,
+      "shielded_tokens": 255,
+      "task_count": 1,
+      "token_delta": -16,
+      "token_reduction_ratio": -0.06694560669456066
+    },
+    {
+      "baseline_successes": 1,
+      "baseline_tokens": 239,
+      "median_task_token_delta": -16,
+      "results": [
+        {
+          "baseline": {
+            "completion_tokens": 32,
+            "duration_seconds": 3.113097333814949,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def nonnegative(value: int) -> int:\n    \"\"\"post: _ >= 0\"\"\"\n    return max(value, 0)",
+              "context_window": 8192,
+              "counterexample": "nonnegative(-1) (which returns -1)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef nonnegative(value: int) -> int:\n    \"\"\"post: _ >= 0\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nThe shown negative input is valid. Do NOT write `if value < 0: raise ...`; return a non-negative value instead, for example `return max(value, 0)`.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 207,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 239
+          },
+          "shielded": {
+            "completion_tokens": 32,
+            "duration_seconds": 3.3683042090851814,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def nonnegative(value: int) -> int:\n    \"\"\"post: _ >= 0\"\"\"\n    return max(value, 0)",
+              "context_window": 8192,
+              "counterexample": "nonnegative(-1) (which returns -1)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef nonnegative(value: int) -> int:\n    \"\"\"post: _ >= 0\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: nonnegative(-1) (which returns -1)\n\nFIX DIRECTIVE:\nThe shown negative input is valid. Do NOT write `if value < 0: raise ...`; return a non-negative value instead, for example `return max(value, 0)`.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 223,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 255
+          },
+          "task": {
+            "category": "formal_repair_diagnosis",
+            "prompt": "Repair nonnegative so it always returns a non-negative integer.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-nonnegative"
+          },
+          "token_delta": -16
+        }
+      ],
+      "schema_version": 2,
+      "shielded_successes": 1,
+      "shielded_tokens": 255,
+      "task_count": 1,
+      "token_delta": -16,
+      "token_reduction_ratio": -0.06694560669456066
+    },
+    {
+      "baseline_successes": 1,
+      "baseline_tokens": 239,
+      "median_task_token_delta": -16,
+      "results": [
+        {
+          "baseline": {
+            "completion_tokens": 32,
+            "duration_seconds": 3.1406125840730965,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def nonnegative(value: int) -> int:\n    \"\"\"post: _ >= 0\"\"\"\n    return max(value, 0)",
+              "context_window": 8192,
+              "counterexample": "nonnegative(-1) (which returns -1)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef nonnegative(value: int) -> int:\n    \"\"\"post: _ >= 0\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nThe shown negative input is valid. Do NOT write `if value < 0: raise ...`; return a non-negative value instead, for example `return max(value, 0)`.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 207,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 239
+          },
+          "shielded": {
+            "completion_tokens": 32,
+            "duration_seconds": 2.9202951670158654,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def nonnegative(value: int) -> int:\n    \"\"\"post: _ >= 0\"\"\"\n    return max(value, 0)",
+              "context_window": 8192,
+              "counterexample": "nonnegative(-1) (which returns -1)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef nonnegative(value: int) -> int:\n    \"\"\"post: _ >= 0\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: nonnegative(-1) (which returns -1)\n\nFIX DIRECTIVE:\nThe shown negative input is valid. Do NOT write `if value < 0: raise ...`; return a non-negative value instead, for example `return max(value, 0)`.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 223,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 255
+          },
+          "task": {
+            "category": "formal_repair_diagnosis",
+            "prompt": "Repair nonnegative so it always returns a non-negative integer.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-nonnegative"
+          },
+          "token_delta": -16
+        }
+      ],
+      "schema_version": 2,
+      "shielded_successes": 1,
+      "shielded_tokens": 255,
+      "task_count": 1,
+      "token_delta": -16,
+      "token_reduction_ratio": -0.06694560669456066
+    },
+    {
+      "baseline_successes": 1,
+      "baseline_tokens": 239,
+      "median_task_token_delta": -16,
+      "results": [
+        {
+          "baseline": {
+            "completion_tokens": 32,
+            "duration_seconds": 2.978097500046715,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def nonnegative(value: int) -> int:\n    \"\"\"post: _ >= 0\"\"\"\n    return max(value, 0)",
+              "context_window": 8192,
+              "counterexample": "nonnegative(-1) (which returns -1)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "baseline",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef nonnegative(value: int) -> int:\n    \"\"\"post: _ >= 0\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nThe shown negative input is valid. Do NOT write `if value < 0: raise ...`; return a non-negative value instead, for example `return max(value, 0)`.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 207,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 239
+          },
+          "shielded": {
+            "completion_tokens": 32,
+            "duration_seconds": 2.9503944169264287,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def nonnegative(value: int) -> int:\n    \"\"\"post: _ >= 0\"\"\"\n    return max(value, 0)",
+              "context_window": 8192,
+              "counterexample": "nonnegative(-1) (which returns -1)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "mode": "guided",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef nonnegative(value: int) -> int:\n    \"\"\"post: _ >= 0\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: nonnegative(-1) (which returns -1)\n\nFIX DIRECTIVE:\nThe shown negative input is valid. Do NOT write `if value < 0: raise ...`; return a non-negative value instead, for example `return max(value, 0)`.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable"
+            },
+            "prompt_tokens": 223,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 255
+          },
+          "task": {
+            "category": "formal_repair_diagnosis",
+            "prompt": "Repair nonnegative so it always returns a non-negative integer.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-nonnegative"
+          },
+          "token_delta": -16
+        }
+      ],
+      "schema_version": 2,
+      "shielded_successes": 1,
+      "shielded_tokens": 255,
+      "task_count": 1,
+      "token_delta": -16,
+      "token_reduction_ratio": -0.06694560669456066
+    }
+  ],
+  "schema_version": 2,
+  "summary": {
+    "baseline_duration_seconds": {
+      "count": 6,
+      "descriptive_95pct_high": 6.1921125064279305,
+      "descriptive_95pct_low": 2.279582785614638,
+      "max": 9.186722458107397,
+      "mean": 4.235847646021284,
+      "min": 2.978097500046715,
+      "stdev": 2.444821790680227
+    },
+    "baseline_successes": {
+      "count": 6,
+      "descriptive_95pct_high": 1.0,
+      "descriptive_95pct_low": 1.0,
+      "max": 1,
+      "mean": 1,
+      "min": 1,
+      "stdev": 0.0
+    },
+    "baseline_tokens": {
+      "count": 6,
+      "descriptive_95pct_high": 239.0,
+      "descriptive_95pct_low": 239.0,
+      "max": 239,
+      "mean": 239,
+      "min": 239,
+      "stdev": 0.0
+    },
+    "baseline_tool_calls": {
+      "count": 6,
+      "descriptive_95pct_high": 1.0,
+      "descriptive_95pct_low": 1.0,
+      "max": 1,
+      "mean": 1,
+      "min": 1,
+      "stdev": 0.0
+    },
+    "shielded_duration_seconds": {
+      "count": 6,
+      "descriptive_95pct_high": 3.834257018737275,
+      "descriptive_95pct_low": 2.9028771758851626,
+      "max": 4.494322582846507,
+      "mean": 3.3685670973112187,
+      "min": 2.9202951670158654,
+      "stdev": 0.581991166250321
+    },
+    "shielded_successes": {
+      "count": 6,
+      "descriptive_95pct_high": 1.0,
+      "descriptive_95pct_low": 1.0,
+      "max": 1,
+      "mean": 1,
+      "min": 1,
+      "stdev": 0.0
+    },
+    "shielded_tokens": {
+      "count": 6,
+      "descriptive_95pct_high": 255.0,
+      "descriptive_95pct_low": 255.0,
+      "max": 255,
+      "mean": 255,
+      "min": 255,
+      "stdev": 0.0
+    },
+    "shielded_tool_calls": {
+      "count": 6,
+      "descriptive_95pct_high": 1.0,
+      "descriptive_95pct_low": 1.0,
+      "max": 1,
+      "mean": 1,
+      "min": 1,
+      "stdev": 0.0
+    },
+    "token_delta": {
+      "count": 6,
+      "descriptive_95pct_high": -16.0,
+      "descriptive_95pct_low": -16.0,
+      "max": -16,
+      "mean": -16,
+      "min": -16,
+      "stdev": 0.0
+    },
+    "token_reduction_ratio": {
+      "count": 6,
+      "descriptive_95pct_high": -0.06694560669456066,
+      "descriptive_95pct_low": -0.06694560669456066,
+      "max": -0.06694560669456066,
+      "mean": -0.06694560669456066,
+      "min": -0.06694560669456066,
+      "stdev": 0.0
+    }
+  },
+  "task_count": 1,
+  "variant_metadata": {
+    "baseline": [
+      {
+        "candidate_source": "def nonnegative(value: int) -> int:\n    \"\"\"post: _ >= 0\"\"\"\n    return max(value, 0)",
+        "context_window": 8192,
+        "counterexample": "nonnegative(-1) (which returns -1)",
+        "counterexample_in_prompt": false,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "mode": "baseline",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef nonnegative(value: int) -> int:\n    \"\"\"post: _ >= 0\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nThe shown negative input is valid. Do NOT write `if value < 0: raise ...`; return a non-negative value instead, for example `return max(value, 0)`.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      }
+    ],
+    "shielded": [
+      {
+        "candidate_source": "def nonnegative(value: int) -> int:\n    \"\"\"post: _ >= 0\"\"\"\n    return max(value, 0)",
+        "context_window": 8192,
+        "counterexample": "nonnegative(-1) (which returns -1)",
+        "counterexample_in_prompt": true,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "mode": "guided",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef nonnegative(value: int) -> int:\n    \"\"\"post: _ >= 0\"\"\"\n    return value\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: nonnegative(-1) (which returns -1)\n\nFIX DIRECTIVE:\nThe shown negative input is valid. Do NOT write `if value < 0: raise ...`; return a non-negative value instead, for example `return max(value, 0)`.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable"
+      }
+    ]
+  }
+}

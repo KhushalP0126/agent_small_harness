@@ -1243,6 +1243,26 @@ def nonnegative(value: int) -> int:
         self.assertIn("Formal counterexample:", metadata["repair_prompt"])
         self.assertIn("return max(value, 0)", metadata["candidate_source"])
 
+    def test_small_worker_prompt_targets_nonnegative_postcondition_without_rejecting_input(self) -> None:
+        violation = Violation(
+            engine="formal-crosshair",
+            kind="formal_counterexample",
+            severity="error",
+            summary="Postcondition can fail",
+            rationale="CrossHair found a failing input.",
+            current_value="contract or assertion violation",
+            allowed_value="all checkable contracts and assertions hold",
+            evidence={"issue": {"counterexample": "nonnegative(-1) (which returns -1)"}},
+        )
+        prompt = build_small_worker_retry_prompt(BROKEN_SOURCES["formal-nonnegative"], [violation])
+        self.assertIn("Do NOT write `if value < 0: raise ...`", prompt)
+        self.assertIn("return max(value, 0)", prompt)
+
+        identity_prompt = build_small_worker_retry_prompt(
+            BROKEN_SOURCES["formal-identity"], [violation]
+        )
+        self.assertNotIn("Do NOT write `if value < 0: raise ...`", identity_prompt)
+
     def test_formal_benchmark_compacts_import_trace_for_report(self) -> None:
         trace = "Could not import your code:\\nTraceback ...\\nNameError: name 'obj' is not defined"
         self.assertEqual(

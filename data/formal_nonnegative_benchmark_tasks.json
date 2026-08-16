@@ -1,0 +1,8 @@
+[
+  {
+    "task_id": "formal-nonnegative",
+    "category": "formal_repair_diagnosis",
+    "prompt": "Repair nonnegative so it always returns a non-negative integer.",
+    "suggested_max_turns": 1
+  }
+]

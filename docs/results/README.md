@@ -19,6 +19,10 @@ render a dated Markdown summary without hiding failed task rows.
   separate, explicitly-labelled follow-up that clarified postcondition
   semantics. It retained the same Qwen 1.5B `nonnegative` failure twice, so it
   documents a rejected prompt intervention rather than a product claim.
+- `formal-nonnegative-directive-2026-08-15.md` — six-repeat, one-task paired
+  diagnosis of the targeted nonnegative directive. Both variants completed
+  6/6; the directive removes the observed regression but uses 16 additional
+  guided tokens and does not establish a general success-rate gain.
 - `compute-shield-10-2026-08-04.md` — frozen 1.5B Compute Shield comparison.
 - `local-model-comparison-2026-08-11.md` — controlled Qwen 1.5B versus 3B
   comparison on the same frozen ten-task corpus. Both completed 10/10

@@ -27,6 +27,9 @@ RESEARCH_FIXTURE_DEEPSEEK_OUTPUT ?= docs/results/raw/fixture-deepseek-repeated.j
 RESEARCH_FIXTURE_QWEN_OUTPUT ?= docs/results/raw/fixture-qwen-1.5b-repeated.json
 FORMAL_REPAIR_TASKS ?= data/formal_repair_benchmark_tasks.json
 FORMAL_REPAIR_OUTPUT ?= docs/results/raw/formal-counterexample-repair-$(shell date +%F).json
+FORMAL_NONNEGATIVE_TASKS ?= data/formal_nonnegative_benchmark_tasks.json
+FORMAL_NONNEGATIVE_OUTPUT ?= docs/results/raw/formal-nonnegative-directive-$(shell date +%F).json
+FORMAL_NONNEGATIVE_RUNS ?= 6
 REPORT_INPUT ?= $(RESEARCH_OUTPUT)
 REPORT_OUTPUT ?= docs/results/repeated-agent-benchmark-$(shell date +%F).md
 REPORT_TITLE ?= Repeated paired coding-agent benchmark
@@ -44,7 +47,7 @@ IMAGE ?= agent-small-harness:local
 ARTIFACT_ARGS = $(if $(filter 1 true yes,$(SAVE_ARTIFACTS)),--save-artifacts --artifact-root "$(ARTIFACT_ROOT)",)
 DOC_ARGS = --doc-agent "$(DOC_AGENT)" $(if $(DOC_MODEL),--doc-model "$(DOC_MODEL)",) $(if $(DOC_OUTPUT),--doc-output "$(DOC_OUTPUT)",)
 
-.PHONY: help bootstrap setup install install-formal install-kernel env-path init-env api-dev tui rust-tui tui_rust start test-rust check research-check research-agent-benchmark research-fixture-deepseek research-fixture-qwen research-formal-repair routing-report research-report research-model-comparison record-live-session research-compute-shield docker-build sandbox-run agent-benchmark test test-engine-expansion compute-shield test-claude-fixes test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-fixture resume-coding-capability test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-worker-limit-architect resume-worker-limit test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-python-ladder-stateful test-python-ladder-stateful-architect test-plan-mode-ladder test-raw-vs-harness test-raw-vs-harness-architect test-raw-vs-harness-repeated test-raw-vs-harness-ablation test-formal-experiment formal-counterexample-smoke structured-spec structured-spec-plan resume-structured-spec repo-map review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library tool-agent ollama-smoke inference-smoke live-repair day1 clean-history clean-cache clean-generated
+.PHONY: help bootstrap setup install install-formal install-kernel env-path init-env api-dev tui rust-tui tui_rust start test-rust check research-check research-agent-benchmark research-fixture-deepseek research-fixture-qwen research-formal-repair research-formal-nonnegative routing-report research-report research-model-comparison record-live-session research-compute-shield docker-build sandbox-run agent-benchmark test test-engine-expansion compute-shield test-claude-fixes test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-fixture resume-coding-capability test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-worker-limit-architect resume-worker-limit test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-python-ladder-stateful test-python-ladder-stateful-architect test-plan-mode-ladder test-raw-vs-harness test-raw-vs-harness-architect test-raw-vs-harness-repeated test-raw-vs-harness-ablation test-formal-experiment formal-counterexample-smoke structured-spec structured-spec-plan resume-structured-spec repo-map review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library tool-agent ollama-smoke inference-smoke live-repair day1 clean-history clean-cache clean-generated
 
 help:
 	@printf "agent-coder_structure\n\n"
@@ -66,6 +69,7 @@ help:
 	@printf "  make test-rust                   Run Rust protocol, UI-state, and renderer tests\n"
 	@printf "  make formal-counterexample-smoke Verify CrossHair counterexamples reach the repair surface\n"
 	@printf "  make research-formal-repair       Run the pre-registered Python/CrossHair A/B repair study\n"
+	@printf "  make research-formal-nonnegative  Diagnose the nonnegative postcondition repair path\n"
 	@printf "  make routing-report               Show if real multi-route history supports routing claims\n"
 	@printf "  make docker-build                Build the isolated execution image\n"
 	@printf "  make sandbox-run SOURCE=... LANGUAGE=python  Run source without network\n"
@@ -242,6 +246,9 @@ formal-counterexample-smoke:
 
 research-formal-repair:
 	$(PYTHON) scripts/run_repeated_agent_benchmark.py --tasks "$(FORMAL_REPAIR_TASKS)" --baseline-command "$(PYTHON) scripts/run_formal_repair_benchmark_agent.py --mode baseline --model $(MODEL)" --shielded-command "$(PYTHON) scripts/run_formal_repair_benchmark_agent.py --mode guided --model $(MODEL)" --runs "$(RESEARCH_RUNS)" --output "$(FORMAL_REPAIR_OUTPUT)"
+
+research-formal-nonnegative:
+	$(PYTHON) scripts/run_repeated_agent_benchmark.py --tasks "$(FORMAL_NONNEGATIVE_TASKS)" --baseline-command "$(PYTHON) scripts/run_formal_repair_benchmark_agent.py --mode baseline --model $(MODEL)" --shielded-command "$(PYTHON) scripts/run_formal_repair_benchmark_agent.py --mode guided --model $(MODEL)" --runs "$(FORMAL_NONNEGATIVE_RUNS)" --output "$(FORMAL_NONNEGATIVE_OUTPUT)"
 
 routing-report:
 	$(PYTHON) scripts/report_routing_stats.py --runs "$(RUNS_PATH)"
