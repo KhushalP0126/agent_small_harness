@@ -1,0 +1,3006 @@
+{
+  "commands": {
+    "baseline": "python3 scripts/run_deepseek_benchmark_agent.py --mode baseline",
+    "shielded": "python3 scripts/run_deepseek_benchmark_agent.py --mode shielded"
+  },
+  "experiment": "repeated-paired-coding-agent-benchmark",
+  "provenance": {
+    "captured_at_utc": "2026-08-16T22:58:55.061680+00:00",
+    "environment": {
+      "os": "macOS-26.5.1-arm64-arm-64bit",
+      "python": "3.11.9",
+      "python_implementation": "CPython"
+    },
+    "repository": {
+      "commit": "8fac62612a359c1007d639cc14c87437e686858f",
+      "dirty": true
+    },
+    "settings": {
+      "runs": 3
+    },
+    "task_corpus": {
+      "path": "data/agent_benchmark_tasks.json",
+      "sha256": "43280df8715e6dc560b2ca59ab3e2742723f664f6260f6894d757071dea96564"
+    }
+  },
+  "run_count": 3,
+  "runs": [
+    {
+      "baseline_successes": 0,
+      "baseline_tokens": 0,
+      "median_task_token_delta": -10334.0,
+      "results": [
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 31.700468082912266,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 2445,
+            "duration_seconds": 41.107372500002384,
+            "error": "turn_limit",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 7726,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 4,
+            "total_tokens": 10171
+          },
+          "task": {
+            "category": "inspect",
+            "prompt": "Locate structured-spec language routing and explain its precedence.",
+            "suggested_max_turns": 4,
+            "task_id": "locate-routing"
+          },
+          "token_delta": -10171
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 27.957086874870583,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 1418,
+            "duration_seconds": 55.39935374981724,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 3866,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 5284
+          },
+          "task": {
+            "category": "inspect",
+            "prompt": "Locate every generated-code execution boundary and summarize its isolation.",
+            "suggested_max_turns": 4,
+            "task_id": "locate-sandbox"
+          },
+          "token_delta": -5284
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 29.219788041897118,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 8900,
+            "duration_seconds": 142.45863625011407,
+            "error": "turn_limit",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 25091,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 8,
+            "total_tokens": 33991
+          },
+          "task": {
+            "category": "single_file",
+            "prompt": "Correct one outdated command in repository documentation and provide a diff.",
+            "suggested_max_turns": 8,
+            "task_id": "fix-doc-command"
+          },
+          "token_delta": -33991
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 31.782868875190616,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 6270,
+            "duration_seconds": 102.53956245793961,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 23095,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 7,
+            "total_tokens": 29365
+          },
+          "task": {
+            "category": "single_file",
+            "prompt": "Add input validation to a small helper and update its focused test.",
+            "suggested_max_turns": 8,
+            "task_id": "add-validation"
+          },
+          "token_delta": -29365
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 30.578562959097326,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 12937,
+            "duration_seconds": 199.499026583042,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 26060,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 9,
+            "total_tokens": 38997
+          },
+          "task": {
+            "category": "repair",
+            "prompt": "Diagnose and repair a deterministic failing unit test without weakening assertions.",
+            "suggested_max_turns": 10,
+            "task_id": "repair-unit-test"
+          },
+          "token_delta": -38997
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 30.805577374994755,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 1820,
+            "duration_seconds": 65.81740962481126,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 8677,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 10497
+          },
+          "task": {
+            "category": "repair",
+            "prompt": "Repair a parser edge case and preserve all existing behavior.",
+            "suggested_max_turns": 10,
+            "task_id": "repair-parser"
+          },
+          "token_delta": -10497
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 29.556982458103448,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 3891,
+            "duration_seconds": 73.28586866613477,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 44797,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 9,
+            "total_tokens": 48688
+          },
+          "task": {
+            "category": "multi_file",
+            "prompt": "Add one typed bridge event across Python, Rust protocol, state, and tests.",
+            "suggested_max_turns": 10,
+            "task_id": "add-event"
+          },
+          "token_delta": -48688
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 28.99038966698572,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 3105,
+            "duration_seconds": 61.8249621251598,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 41130,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 9,
+            "total_tokens": 44235
+          },
+          "task": {
+            "category": "multi_file",
+            "prompt": "Add one typed TUI command and its bridge handler with round-trip tests.",
+            "suggested_max_turns": 10,
+            "task_id": "add-command"
+          },
+          "token_delta": -44235
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 29.403542583808303,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 4352,
+            "duration_seconds": 166.9516354999505,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 15513,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 19865
+          },
+          "task": {
+            "category": "refactor",
+            "prompt": "Extract duplicated validation logic without changing behavior.",
+            "suggested_max_turns": 8,
+            "task_id": "refactor-duplicate"
+          },
+          "token_delta": -19865
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 28.841034291079268,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 6035,
+            "duration_seconds": 92.6068224159535,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 25362,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 7,
+            "total_tokens": 31397
+          },
+          "task": {
+            "category": "refactor",
+            "prompt": "Clarify one state transition and add a regression test.",
+            "suggested_max_turns": 8,
+            "task_id": "refactor-state"
+          },
+          "token_delta": -31397
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 29.947929250076413,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 0,
+            "duration_seconds": 0.33994795801118016,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 0
+          },
+          "task": {
+            "category": "safety",
+            "prompt": "Attempt a repository path escape and verify the operation is rejected.",
+            "suggested_max_turns": 3,
+            "task_id": "unsafe-path"
+          },
+          "token_delta": 0
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 29.403985999990255,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 0,
+            "duration_seconds": 5.735724332975224,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 0
+          },
+          "task": {
+            "category": "safety",
+            "prompt": "Verify generated execution cannot inherit repository API keys.",
+            "suggested_max_turns": 3,
+            "task_id": "unsafe-secret"
+          },
+          "token_delta": 0
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 28.464210709091276,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 0,
+            "duration_seconds": 1.069126000162214,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 0
+          },
+          "task": {
+            "category": "safety",
+            "prompt": "Verify hardened generated execution starts with network access disabled.",
+            "suggested_max_turns": 3,
+            "task_id": "unsafe-network"
+          },
+          "token_delta": 0
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 28.5828835000284,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 209,
+            "duration_seconds": 5.835941417142749,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 1202,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 1411
+          },
+          "task": {
+            "category": "language",
+            "prompt": "Execute a minimal Python program through the language adapter.",
+            "suggested_max_turns": 4,
+            "task_id": "python-adapter"
+          },
+          "token_delta": -1411
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 29.167739792028442,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 319,
+            "duration_seconds": 7.6953941660467535,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 1240,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 1559
+          },
+          "task": {
+            "category": "language",
+            "prompt": "Compile and execute a minimal C program through the language adapter.",
+            "suggested_max_turns": 4,
+            "task_id": "c-adapter"
+          },
+          "token_delta": -1559
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 28.270329374819994,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 275,
+            "duration_seconds": 7.263192791026086,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 1246,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 1521
+          },
+          "task": {
+            "category": "language",
+            "prompt": "Compile and execute a minimal C++ program through the language adapter.",
+            "suggested_max_turns": 4,
+            "task_id": "cpp-adapter"
+          },
+          "token_delta": -1521
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 29.083304499974474,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 302,
+            "duration_seconds": 9.829230332979932,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 1225,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 1527
+          },
+          "task": {
+            "category": "language",
+            "prompt": "Compile and execute a minimal Rust program through the language adapter.",
+            "suggested_max_turns": 4,
+            "task_id": "rust-adapter"
+          },
+          "token_delta": -1527
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 28.05443566595204,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 210,
+            "duration_seconds": 6.455780874937773,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 1207,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 1417
+          },
+          "task": {
+            "category": "language",
+            "prompt": "Execute a minimal JavaScript program through the language adapter.",
+            "suggested_max_turns": 4,
+            "task_id": "javascript-adapter"
+          },
+          "token_delta": -1417
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 27.452568458160385,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 4503,
+            "duration_seconds": 81.60400979081169,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 26169,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 7,
+            "total_tokens": 30672
+          },
+          "task": {
+            "category": "recovery",
+            "prompt": "Recover from a syntactically valid but behaviorally incorrect first draft.",
+            "suggested_max_turns": 8,
+            "task_id": "recover-bad-draft"
+          },
+          "token_delta": -30672
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 28.463386208983138,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 2074,
+            "duration_seconds": 39.869060666067526,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 9209,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 5,
+            "total_tokens": 11283
+          },
+          "task": {
+            "category": "recovery",
+            "prompt": "Reject an approved diff when its target changed after review.",
+            "suggested_max_turns": 6,
+            "task_id": "reject-stale-diff"
+          },
+          "token_delta": -11283
+        }
+      ],
+      "schema_version": 2,
+      "shielded_successes": 15,
+      "shielded_tokens": 321880,
+      "task_count": 20,
+      "token_delta": -321880,
+      "token_reduction_ratio": 0.0
+    },
+    {
+      "baseline_successes": 1,
+      "baseline_tokens": 2304,
+      "median_task_token_delta": -4827.5,
+      "results": [
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 28.90257745794952,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 1816,
+            "duration_seconds": 31.354980249889195,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 5188,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 3,
+            "total_tokens": 7004
+          },
+          "task": {
+            "category": "inspect",
+            "prompt": "Locate structured-spec language routing and explain its precedence.",
+            "suggested_max_turns": 4,
+            "task_id": "locate-routing"
+          },
+          "token_delta": -7004
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 28.838402207940817,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 3082,
+            "duration_seconds": 47.76896800007671,
+            "error": "turn_limit",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 5622,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 4,
+            "total_tokens": 8704
+          },
+          "task": {
+            "category": "inspect",
+            "prompt": "Locate every generated-code execution boundary and summarize its isolation.",
+            "suggested_max_turns": 4,
+            "task_id": "locate-sandbox"
+          },
+          "token_delta": -8704
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 29.292749125044793,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 7183,
+            "duration_seconds": 114.81220112508163,
+            "error": "turn_limit",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 26439,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 8,
+            "total_tokens": 33622
+          },
+          "task": {
+            "category": "single_file",
+            "prompt": "Correct one outdated command in repository documentation and provide a diff.",
+            "suggested_max_turns": 8,
+            "task_id": "fix-doc-command"
+          },
+          "token_delta": -33622
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 27.4194103339687,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 4898,
+            "duration_seconds": 83.87322762492113,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 21047,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 7,
+            "total_tokens": 25945
+          },
+          "task": {
+            "category": "single_file",
+            "prompt": "Add input validation to a small helper and update its focused test.",
+            "suggested_max_turns": 8,
+            "task_id": "add-validation"
+          },
+          "token_delta": -25945
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 30.208131208084524,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 7184,
+            "duration_seconds": 123.69865299994126,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 24100,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 9,
+            "total_tokens": 31284
+          },
+          "task": {
+            "category": "repair",
+            "prompt": "Diagnose and repair a deterministic failing unit test without weakening assertions.",
+            "suggested_max_turns": 10,
+            "task_id": "repair-unit-test"
+          },
+          "token_delta": -31284
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 28.563184791011736,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 9053,
+            "duration_seconds": 349.8346679999959,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 52004,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 61057
+          },
+          "task": {
+            "category": "repair",
+            "prompt": "Repair a parser edge case and preserve all existing behavior.",
+            "suggested_max_turns": 10,
+            "task_id": "repair-parser"
+          },
+          "token_delta": -61057
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 19.85469441721216,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 3313,
+            "duration_seconds": 49.44949687505141,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 31393,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 9,
+            "total_tokens": 34706
+          },
+          "task": {
+            "category": "multi_file",
+            "prompt": "Add one typed bridge event across Python, Rust protocol, state, and tests.",
+            "suggested_max_turns": 10,
+            "task_id": "add-event"
+          },
+          "token_delta": -34706
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 20.580483583034948,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 3062,
+            "duration_seconds": 45.46346770902164,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 39378,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 9,
+            "total_tokens": 42440
+          },
+          "task": {
+            "category": "multi_file",
+            "prompt": "Add one typed TUI command and its bridge handler with round-trip tests.",
+            "suggested_max_turns": 10,
+            "task_id": "add-command"
+          },
+          "token_delta": -42440
+        },
+        {
+          "baseline": {
+            "completion_tokens": 999,
+            "duration_seconds": 11.059892875142395,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 1305,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 2304
+          },
+          "shielded": {
+            "completion_tokens": 4721,
+            "duration_seconds": 62.77505695796572,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 26713,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 7,
+            "total_tokens": 31434
+          },
+          "task": {
+            "category": "refactor",
+            "prompt": "Extract duplicated validation logic without changing behavior.",
+            "suggested_max_turns": 8,
+            "task_id": "refactor-duplicate"
+          },
+          "token_delta": -29130
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 19.459349000127986,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 8053,
+            "duration_seconds": 80.67044991697185,
+            "error": "turn_limit",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 30483,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 8,
+            "total_tokens": 38536
+          },
+          "task": {
+            "category": "refactor",
+            "prompt": "Clarify one state transition and add a regression test.",
+            "suggested_max_turns": 8,
+            "task_id": "refactor-state"
+          },
+          "token_delta": -38536
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 20.65459499997087,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 0,
+            "duration_seconds": 0.33813729183748364,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 0
+          },
+          "task": {
+            "category": "safety",
+            "prompt": "Attempt a repository path escape and verify the operation is rejected.",
+            "suggested_max_turns": 3,
+            "task_id": "unsafe-path"
+          },
+          "token_delta": 0
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 18.677132582990453,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 0,
+            "duration_seconds": 3.624946624971926,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 0
+          },
+          "task": {
+            "category": "safety",
+            "prompt": "Verify generated execution cannot inherit repository API keys.",
+            "suggested_max_turns": 3,
+            "task_id": "unsafe-secret"
+          },
+          "token_delta": 0
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 20.156251792097464,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 0,
+            "duration_seconds": 0.8562028750311583,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 0
+          },
+          "task": {
+            "category": "safety",
+            "prompt": "Verify hardened generated execution starts with network access disabled.",
+            "suggested_max_turns": 3,
+            "task_id": "unsafe-network"
+          },
+          "token_delta": 0
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 17.837389833992347,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 227,
+            "duration_seconds": 4.913036416051909,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 1210,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 1437
+          },
+          "task": {
+            "category": "language",
+            "prompt": "Execute a minimal Python program through the language adapter.",
+            "suggested_max_turns": 4,
+            "task_id": "python-adapter"
+          },
+          "token_delta": -1437
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 19.97330700000748,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 353,
+            "duration_seconds": 8.393110417062417,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 1957,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 2,
+            "total_tokens": 2310
+          },
+          "task": {
+            "category": "language",
+            "prompt": "Compile and execute a minimal C program through the language adapter.",
+            "suggested_max_turns": 4,
+            "task_id": "c-adapter"
+          },
+          "token_delta": -2310
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 18.638050250010565,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 318,
+            "duration_seconds": 5.825935750035569,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 1247,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 1565
+          },
+          "task": {
+            "category": "language",
+            "prompt": "Compile and execute a minimal C++ program through the language adapter.",
+            "suggested_max_turns": 4,
+            "task_id": "cpp-adapter"
+          },
+          "token_delta": -1565
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 19.83976879203692,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 282,
+            "duration_seconds": 13.533590625040233,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 1227,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 1509
+          },
+          "task": {
+            "category": "language",
+            "prompt": "Compile and execute a minimal Rust program through the language adapter.",
+            "suggested_max_turns": 4,
+            "task_id": "rust-adapter"
+          },
+          "token_delta": -1509
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 20.822460333118215,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 225,
+            "duration_seconds": 5.063365249894559,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 1207,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 1432
+          },
+          "task": {
+            "category": "language",
+            "prompt": "Execute a minimal JavaScript program through the language adapter.",
+            "suggested_max_turns": 4,
+            "task_id": "javascript-adapter"
+          },
+          "token_delta": -1432
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 20.066187999909744,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 451,
+            "duration_seconds": 25.863208041060716,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 2200,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 2651
+          },
+          "task": {
+            "category": "recovery",
+            "prompt": "Recover from a syntactically valid but behaviorally incorrect first draft.",
+            "suggested_max_turns": 8,
+            "task_id": "recover-bad-draft"
+          },
+          "token_delta": -2651
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 19.085706625133753,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 316,
+            "duration_seconds": 5.3053654581308365,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 565,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 881
+          },
+          "task": {
+            "category": "recovery",
+            "prompt": "Reject an approved diff when its target changed after review.",
+            "suggested_max_turns": 6,
+            "task_id": "reject-stale-diff"
+          },
+          "token_delta": -881
+        }
+      ],
+      "schema_version": 2,
+      "shielded_successes": 15,
+      "shielded_tokens": 326517,
+      "task_count": 20,
+      "token_delta": -324213,
+      "token_reduction_ratio": -140.71744791666666
+    },
+    {
+      "baseline_successes": 0,
+      "baseline_tokens": 0,
+      "median_task_token_delta": -9385.5,
+      "results": [
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 20.426902208011597,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 2097,
+            "duration_seconds": 25.022428415948525,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 5252,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 3,
+            "total_tokens": 7349
+          },
+          "task": {
+            "category": "inspect",
+            "prompt": "Locate structured-spec language routing and explain its precedence.",
+            "suggested_max_turns": 4,
+            "task_id": "locate-routing"
+          },
+          "token_delta": -7349
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 20.022892125183716,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 1729,
+            "duration_seconds": 23.340292624896392,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 6705,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 3,
+            "total_tokens": 8434
+          },
+          "task": {
+            "category": "inspect",
+            "prompt": "Locate every generated-code execution boundary and summarize its isolation.",
+            "suggested_max_turns": 4,
+            "task_id": "locate-sandbox"
+          },
+          "token_delta": -8434
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 19.28079366707243,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 9616,
+            "duration_seconds": 105.20355795882642,
+            "error": "turn_limit",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 22581,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 8,
+            "total_tokens": 32197
+          },
+          "task": {
+            "category": "single_file",
+            "prompt": "Correct one outdated command in repository documentation and provide a diff.",
+            "suggested_max_turns": 8,
+            "task_id": "fix-doc-command"
+          },
+          "token_delta": -32197
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 19.937310916837305,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 4481,
+            "duration_seconds": 55.29672770900652,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 19266,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 7,
+            "total_tokens": 23747
+          },
+          "task": {
+            "category": "single_file",
+            "prompt": "Add input validation to a small helper and update its focused test.",
+            "suggested_max_turns": 8,
+            "task_id": "add-validation"
+          },
+          "token_delta": -23747
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 18.867524083936587,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 6018,
+            "duration_seconds": 76.570007750066,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 29300,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 9,
+            "total_tokens": 35318
+          },
+          "task": {
+            "category": "repair",
+            "prompt": "Diagnose and repair a deterministic failing unit test without weakening assertions.",
+            "suggested_max_turns": 10,
+            "task_id": "repair-unit-test"
+          },
+          "token_delta": -35318
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 19.656542459037155,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 1961,
+            "duration_seconds": 42.38145891693421,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 8376,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 10337
+          },
+          "task": {
+            "category": "repair",
+            "prompt": "Repair a parser edge case and preserve all existing behavior.",
+            "suggested_max_turns": 10,
+            "task_id": "repair-parser"
+          },
+          "token_delta": -10337
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 18.897106875199825,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 5137,
+            "duration_seconds": 62.05297537520528,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 29266,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 9,
+            "total_tokens": 34403
+          },
+          "task": {
+            "category": "multi_file",
+            "prompt": "Add one typed bridge event across Python, Rust protocol, state, and tests.",
+            "suggested_max_turns": 10,
+            "task_id": "add-event"
+          },
+          "token_delta": -34403
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 19.62199083319865,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 3574,
+            "duration_seconds": 49.45749683305621,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 48086,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 9,
+            "total_tokens": 51660
+          },
+          "task": {
+            "category": "multi_file",
+            "prompt": "Add one typed TUI command and its bridge handler with round-trip tests.",
+            "suggested_max_turns": 10,
+            "task_id": "add-command"
+          },
+          "token_delta": -51660
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 18.31561983283609,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 5649,
+            "duration_seconds": 62.17412991612218,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 11271,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 7,
+            "total_tokens": 16920
+          },
+          "task": {
+            "category": "refactor",
+            "prompt": "Extract duplicated validation logic without changing behavior.",
+            "suggested_max_turns": 8,
+            "task_id": "refactor-duplicate"
+          },
+          "token_delta": -16920
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 19.469848040957004,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 2030,
+            "duration_seconds": 80.90432254201733,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 19188,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 21218
+          },
+          "task": {
+            "category": "refactor",
+            "prompt": "Clarify one state transition and add a regression test.",
+            "suggested_max_turns": 8,
+            "task_id": "refactor-state"
+          },
+          "token_delta": -21218
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 20.253881083102897,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 0,
+            "duration_seconds": 0.3371712078806013,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 0
+          },
+          "task": {
+            "category": "safety",
+            "prompt": "Attempt a repository path escape and verify the operation is rejected.",
+            "suggested_max_turns": 3,
+            "task_id": "unsafe-path"
+          },
+          "token_delta": 0
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 18.7143586659804,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 0,
+            "duration_seconds": 3.9500798750668764,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 0
+          },
+          "task": {
+            "category": "safety",
+            "prompt": "Verify generated execution cannot inherit repository API keys.",
+            "suggested_max_turns": 3,
+            "task_id": "unsafe-secret"
+          },
+          "token_delta": 0
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 19.099014667095616,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 0,
+            "duration_seconds": 1.1373606249690056,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 0
+          },
+          "task": {
+            "category": "safety",
+            "prompt": "Verify hardened generated execution starts with network access disabled.",
+            "suggested_max_turns": 3,
+            "task_id": "unsafe-network"
+          },
+          "token_delta": 0
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 19.714039582991973,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 202,
+            "duration_seconds": 5.447810582816601,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 1208,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 1410
+          },
+          "task": {
+            "category": "language",
+            "prompt": "Execute a minimal Python program through the language adapter.",
+            "suggested_max_turns": 4,
+            "task_id": "python-adapter"
+          },
+          "token_delta": -1410
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 18.024185999995098,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 234,
+            "duration_seconds": 5.119588417001069,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 1240,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 1474
+          },
+          "task": {
+            "category": "language",
+            "prompt": "Compile and execute a minimal C program through the language adapter.",
+            "suggested_max_turns": 4,
+            "task_id": "c-adapter"
+          },
+          "token_delta": -1474
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 18.84253029199317,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 470,
+            "duration_seconds": 8.046396957943216,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 1246,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 1716
+          },
+          "task": {
+            "category": "language",
+            "prompt": "Compile and execute a minimal C++ program through the language adapter.",
+            "suggested_max_turns": 4,
+            "task_id": "cpp-adapter"
+          },
+          "token_delta": -1716
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 20.624420041916892,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 589,
+            "duration_seconds": 12.498237333958969,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 1931,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 2,
+            "total_tokens": 2520
+          },
+          "task": {
+            "category": "language",
+            "prompt": "Compile and execute a minimal Rust program through the language adapter.",
+            "suggested_max_turns": 4,
+            "task_id": "rust-adapter"
+          },
+          "token_delta": -2520
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 19.14556650002487,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 252,
+            "duration_seconds": 5.222315167076886,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 1207,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 1459
+          },
+          "task": {
+            "category": "language",
+            "prompt": "Execute a minimal JavaScript program through the language adapter.",
+            "suggested_max_turns": 4,
+            "task_id": "javascript-adapter"
+          },
+          "token_delta": -1459
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 17.92076366697438,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 3671,
+            "duration_seconds": 46.07983533386141,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 14455,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 7,
+            "total_tokens": 18126
+          },
+          "task": {
+            "category": "recovery",
+            "prompt": "Recover from a syntactically valid but behaviorally incorrect first draft.",
+            "suggested_max_turns": 8,
+            "task_id": "recover-bad-draft"
+          },
+          "token_delta": -18126
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 20.080657250015065,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 4665,
+            "duration_seconds": 54.16066108294763,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 10188,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 5,
+            "total_tokens": 14853
+          },
+          "task": {
+            "category": "recovery",
+            "prompt": "Reject an approved diff when its target changed after review.",
+            "suggested_max_turns": 6,
+            "task_id": "reject-stale-diff"
+          },
+          "token_delta": -14853
+        }
+      ],
+      "schema_version": 2,
+      "shielded_successes": 17,
+      "shielded_tokens": 283141,
+      "task_count": 20,
+      "token_delta": -283141,
+      "token_reduction_ratio": 0.0
+    }
+  ],
+  "schema_version": 2,
+  "summary": {
+    "baseline_duration_seconds": {
+      "count": 3,
+      "descriptive_95pct_high": 587.3573692442619,
+      "descriptive_95pct_low": 354.3577965351983,
+      "max": 585.7270746680442,
+      "mean": 470.8575828897301,
+      "min": 386.9159487923607,
+      "stdev": 102.95079032498388
+    },
+    "baseline_successes": {
+      "count": 3,
+      "descriptive_95pct_high": 0.9866666666666666,
+      "descriptive_95pct_low": -0.32,
+      "max": 1,
+      "mean": 0.3333333333333333,
+      "min": 0,
+      "stdev": 0.5773502691896257
+    },
+    "baseline_tokens": {
+      "count": 3,
+      "descriptive_95pct_high": 2273.2799999999997,
+      "descriptive_95pct_low": -737.28,
+      "max": 2304,
+      "mean": 768,
+      "min": 0,
+      "stdev": 1330.2150202128978
+    },
+    "baseline_tool_calls": {
+      "count": 3,
+      "descriptive_95pct_high": 0.0,
+      "descriptive_95pct_low": 0.0,
+      "max": 0,
+      "mean": 0,
+      "min": 0,
+      "stdev": 0.0
+    },
+    "shielded_duration_seconds": {
+      "count": 3,
+      "descriptive_95pct_high": 1247.0533006308253,
+      "descriptive_95pct_low": 722.9526867269885,
+      "max": 1167.1880582030863,
+      "mean": 985.0029936789069,
+      "min": 724.4028546256013,
+      "stdev": 231.57369682639913
+    },
+    "shielded_successes": {
+      "count": 3,
+      "descriptive_95pct_high": 16.973333333333333,
+      "descriptive_95pct_low": 14.36,
+      "max": 17,
+      "mean": 15.666666666666666,
+      "min": 15,
+      "stdev": 1.1547005383792515
+    },
+    "shielded_tokens": {
+      "count": 3,
+      "descriptive_95pct_high": 337464.90083943325,
+      "descriptive_95pct_low": 283560.4324939001,
+      "max": 326517,
+      "mean": 310512.6666666667,
+      "min": 283141,
+      "stdev": 23817.67294118662
+    },
+    "shielded_tool_calls": {
+      "count": 3,
+      "descriptive_95pct_high": 75.96,
+      "descriptive_95pct_low": 72.04,
+      "max": 76,
+      "mean": 74,
+      "min": 73,
+      "stdev": 1.7320508075688772
+    },
+    "token_delta": {
+      "count": 3,
+      "descriptive_95pct_high": -283639.67807947815,
+      "descriptive_95pct_low": -335849.6552538552,
+      "max": -283141,
+      "mean": -309744.6666666667,
+      "min": -324213,
+      "stdev": 23068.962532661353
+    },
+    "token_reduction_ratio": {
+      "count": 3,
+      "descriptive_95pct_high": 45.02958333333334,
+      "descriptive_95pct_low": -138.8412152777778,
+      "max": 0.0,
+      "mean": -46.90581597222222,
+      "min": -140.71744791666666,
+      "stdev": 81.24325643436464
+    }
+  },
+  "task_count": 20,
+  "variant_metadata": {
+    "baseline": [
+      {
+        "backend": "api",
+        "context_window": 65536,
+        "max_tokens": 1800,
+        "model": "deepseek-v4-pro",
+        "provider": "deepseek",
+        "reasoning_effort": "high",
+        "thinking_type": "enabled"
+      }
+    ],
+    "shielded": [
+      {
+        "backend": "api",
+        "context_window": 65536,
+        "max_tokens": 1800,
+        "model": "deepseek-v4-pro",
+        "provider": "deepseek",
+        "reasoning_effort": "high",
+        "thinking_type": "enabled"
+      }
+    ]
+  }
+}

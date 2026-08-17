@@ -171,6 +171,29 @@ candidate source, so task-level outcomes can be audited without reconstruction.
 The unsuccessful clarification follow-up is preserved in
 [`results/formal-counterexample-repair-postcondition-semantics-2026-08-15.md`](results/formal-counterexample-repair-postcondition-semantics-2026-08-15.md).
 
+### Diverse-fixture failure diagnoses
+
+The raw candidates in the general-directive control were inspected before any
+further prompt changes. `formal-order-pair` is not a counterexample-guidance
+regression: baseline candidates asserted input ordering or non-negativity, and
+guided candidates raised `ValueError` when `left > right`. The contract has no
+such precondition; `(1, 0)` is valid input and the repair must return `(0, 1)`.
+This is a repeatable small-model semantic repair failure in both variants, so
+the study retains it as a hard fixture rather than adding another broad
+directive.
+
+`formal-trim-text` is different. The guided candidate was exactly
+`return text.strip()`, which satisfies its postcondition; one evaluation was
+recorded as a CrossHair timeout at the benchmark's 3-second per-condition
+budget. That event is verifier-time-budget noise, not evidence that the
+candidate was incorrect. Future reports keep timeouts separate from concrete
+contract violations and do not treat this case as a prompt-repair failure.
+
+No further attempt will be made to unify the nonnegative fix into a general
+directive. The pre-registered general control was negative; the evidence
+supports diagnosis and narrowly scoped repair per failure pattern, not a
+single prompt rule for every contract.
+
 ## Cost-aware route evidence
 
 API calls can report an estimated dollar cost; local Ollama calls are instead
@@ -235,6 +258,10 @@ make research-compute-shield \
 Run local-model experiments only on hardware that can sustain the selected
 model. The 2026-08-11 Qwen 1.5B/3B comparison is published, but it is a
 single fixed-corpus observation rather than a general 3B performance claim.
+The current-revision Qwen 1.5B rerun is published in
+[`results/compute-shield-10-2026-08-16.md`](results/compute-shield-10-2026-08-16.md):
+both variants completed 10/10, while the tool loop used more tokens and wall
+time. It is retained as diagnostic evidence, not a claim of local efficiency.
 
 ## Local model-size comparison
 
@@ -262,6 +289,13 @@ make research-fixture-qwen
 
 These commands write raw JSON under `docs/results/raw/`. Render and commit a
 dated Markdown report for each run; retain every failure and raw task record.
+
+The current Qwen 1.5B fixture run is published in
+[`results/fixture-qwen-1.5b-repeated-2026-08-16.md`](results/fixture-qwen-1.5b-repeated-2026-08-16.md).
+Across three repetitions, baseline averaged 9.67/10 completions and the
+shielded tool loop averaged 8.00/10, with 5.94x the mean model-token use. One
+Ollama startup timeout and all turn-limit failures remain in the raw artifact.
+It is cross-repository diagnostic evidence, not a tool-loop efficiency claim.
 
 ## Live end-to-end evaluation
 
@@ -308,3 +342,16 @@ hashes—not keys, raw private prompts, or absolute local paths.
    single-function general-directive control is complete and negative.
 5. Accumulate further real sessions only after the controlled receipt set is
    complete; do not elevate anecdotal success into a benchmark claim.
+
+### Current DeepSeek 20-task rerun (2026-08-16)
+
+The requested three-repeat rerun is published in
+[`results/deepseek-20-repeated-2026-08-16.md`](results/deepseek-20-repeated-2026-08-16.md)
+with its complete raw JSON. It is **not** a valid baseline-versus-shielded
+quality comparison: the direct baseline repeatedly returned empty API responses
+(0.33/20 mean successful tasks), while the shielded path averaged 15.67/20.
+The shielded route also used 310,512.67 mean model tokens versus 768.00 and
+took longer. Retain the data as an API reliability/operational finding, not as
+evidence that tool shielding improves completion or efficiency. A future
+quality comparison needs an API-health gate that rejects or separately labels a
+run with empty-response failures before aggregation.

@@ -1,0 +1,571 @@
+{
+  "commands": {
+    "baseline": "python3 scripts/run_ollama_benchmark_agent.py --mode baseline --model qwen2.5-coder:1.5b",
+    "shielded": "python3 scripts/run_ollama_benchmark_agent.py --mode shielded --model qwen2.5-coder:1.5b"
+  },
+  "experiment": "compute-shield-frozen-10",
+  "metrics": {
+    "delta": -15739,
+    "phase": 3,
+    "tasks": [
+      {
+        "baseline_tokens": 1262,
+        "shielded_tokens": 1441,
+        "task": "locate-routing"
+      },
+      {
+        "baseline_tokens": 560,
+        "shielded_tokens": 1446,
+        "task": "locate-sandbox"
+      },
+      {
+        "baseline_tokens": 203,
+        "shielded_tokens": 4867,
+        "task": "fix-doc-command"
+      },
+      {
+        "baseline_tokens": 331,
+        "shielded_tokens": 2443,
+        "task": "add-validation"
+      },
+      {
+        "baseline_tokens": 599,
+        "shielded_tokens": 1420,
+        "task": "repair-unit-test"
+      },
+      {
+        "baseline_tokens": 439,
+        "shielded_tokens": 1111,
+        "task": "repair-parser"
+      },
+      {
+        "baseline_tokens": 424,
+        "shielded_tokens": 2356,
+        "task": "add-event"
+      },
+      {
+        "baseline_tokens": 606,
+        "shielded_tokens": 2423,
+        "task": "add-command"
+      },
+      {
+        "baseline_tokens": 816,
+        "shielded_tokens": 2699,
+        "task": "refactor-duplicate"
+      },
+      {
+        "baseline_tokens": 366,
+        "shielded_tokens": 1139,
+        "task": "refactor-state"
+      }
+    ],
+    "tokens_baseline": 5606,
+    "tokens_shielded": 21345,
+    "type": "compute_shield_metrics"
+  },
+  "provenance": {
+    "captured_at_utc": "2026-08-16T14:57:48.524041+00:00",
+    "environment": {
+      "os": "macOS-26.5.1-arm64-arm-64bit",
+      "python": "3.11.9",
+      "python_implementation": "CPython"
+    },
+    "repository": {
+      "commit": "8fac62612a359c1007d639cc14c87437e686858f",
+      "dirty": true
+    },
+    "settings": {
+      "expected_task_count": 10
+    },
+    "task_corpus": {
+      "path": "data/compute_shield_tasks_10.json",
+      "sha256": "76ece79b62f55910e5dda7dadc8d2d5382ff8f4dbeec4606ab307b32b5d8ed4a"
+    }
+  },
+  "report": {
+    "baseline_successes": 10,
+    "baseline_tokens": 5606,
+    "median_task_token_delta": -1351.5,
+    "results": [
+      {
+        "baseline": {
+          "completion_tokens": 1200,
+          "duration_seconds": 85.25280345813371,
+          "error": "",
+          "metadata": {
+            "backend": "local",
+            "context_window": 8192,
+            "model": "qwen2.5-coder:1.5b",
+            "provider": "ollama",
+            "reasoning_effort": "not_supported",
+            "thinking_type": "not_supported"
+          },
+          "prompt_tokens": 62,
+          "retries": 0,
+          "success": true,
+          "tool_calls": 0,
+          "total_tokens": 1262
+        },
+        "shielded": {
+          "completion_tokens": 96,
+          "duration_seconds": 24.264639500062913,
+          "error": "",
+          "metadata": {
+            "backend": "local",
+            "context_window": 16384,
+            "model": "qwen2.5-coder:1.5b",
+            "provider": "ollama",
+            "reasoning_effort": "not_supported",
+            "thinking_type": "not_supported"
+          },
+          "prompt_tokens": 1345,
+          "retries": 0,
+          "success": true,
+          "tool_calls": 1,
+          "total_tokens": 1441
+        },
+        "task": {
+          "category": "inspect",
+          "prompt": "Find the repository's routing entrypoint and report its path and purpose.",
+          "suggested_max_turns": 4,
+          "task_id": "locate-routing"
+        },
+        "token_delta": -179
+      },
+      {
+        "baseline": {
+          "completion_tokens": 499,
+          "duration_seconds": 40.63173170783557,
+          "error": "",
+          "metadata": {
+            "backend": "local",
+            "context_window": 8192,
+            "model": "qwen2.5-coder:1.5b",
+            "provider": "ollama",
+            "reasoning_effort": "not_supported",
+            "thinking_type": "not_supported"
+          },
+          "prompt_tokens": 61,
+          "retries": 0,
+          "success": true,
+          "tool_calls": 0,
+          "total_tokens": 560
+        },
+        "shielded": {
+          "completion_tokens": 137,
+          "duration_seconds": 50.58189645805396,
+          "error": "",
+          "metadata": {
+            "backend": "local",
+            "context_window": 16384,
+            "model": "qwen2.5-coder:1.5b",
+            "provider": "ollama",
+            "reasoning_effort": "not_supported",
+            "thinking_type": "not_supported"
+          },
+          "prompt_tokens": 1309,
+          "retries": 0,
+          "success": true,
+          "tool_calls": 1,
+          "total_tokens": 1446
+        },
+        "task": {
+          "category": "inspect",
+          "prompt": "Find the execution sandbox boundary and summarize its network and environment policy.",
+          "suggested_max_turns": 4,
+          "task_id": "locate-sandbox"
+        },
+        "token_delta": -886
+      },
+      {
+        "baseline": {
+          "completion_tokens": 143,
+          "duration_seconds": 23.094117500120774,
+          "error": "",
+          "metadata": {
+            "backend": "local",
+            "context_window": 8192,
+            "model": "qwen2.5-coder:1.5b",
+            "provider": "ollama",
+            "reasoning_effort": "not_supported",
+            "thinking_type": "not_supported"
+          },
+          "prompt_tokens": 60,
+          "retries": 0,
+          "success": true,
+          "tool_calls": 0,
+          "total_tokens": 203
+        },
+        "shielded": {
+          "completion_tokens": 567,
+          "duration_seconds": 210.15173550019972,
+          "error": "",
+          "metadata": {
+            "backend": "local",
+            "context_window": 16384,
+            "model": "qwen2.5-coder:1.5b",
+            "provider": "ollama",
+            "reasoning_effort": "not_supported",
+            "thinking_type": "not_supported"
+          },
+          "prompt_tokens": 4300,
+          "retries": 6,
+          "success": true,
+          "tool_calls": 6,
+          "total_tokens": 4867
+        },
+        "task": {
+          "category": "single_file",
+          "prompt": "Correct one outdated command in repository documentation and provide a diff.",
+          "suggested_max_turns": 8,
+          "task_id": "fix-doc-command"
+        },
+        "token_delta": -4664
+      },
+      {
+        "baseline": {
+          "completion_tokens": 269,
+          "duration_seconds": 20.417183458805084,
+          "error": "",
+          "metadata": {
+            "backend": "local",
+            "context_window": 8192,
+            "model": "qwen2.5-coder:1.5b",
+            "provider": "ollama",
+            "reasoning_effort": "not_supported",
+            "thinking_type": "not_supported"
+          },
+          "prompt_tokens": 62,
+          "retries": 0,
+          "success": true,
+          "tool_calls": 0,
+          "total_tokens": 331
+        },
+        "shielded": {
+          "completion_tokens": 259,
+          "duration_seconds": 42.62135566608049,
+          "error": "",
+          "metadata": {
+            "backend": "local",
+            "context_window": 16384,
+            "model": "qwen2.5-coder:1.5b",
+            "provider": "ollama",
+            "reasoning_effort": "not_supported",
+            "thinking_type": "not_supported"
+          },
+          "prompt_tokens": 2184,
+          "retries": 1,
+          "success": true,
+          "tool_calls": 2,
+          "total_tokens": 2443
+        },
+        "task": {
+          "category": "single_file",
+          "prompt": "Find the validation entrypoint and propose a focused check for malformed input.",
+          "suggested_max_turns": 6,
+          "task_id": "add-validation"
+        },
+        "token_delta": -2112
+      },
+      {
+        "baseline": {
+          "completion_tokens": 536,
+          "duration_seconds": 29.561955124838278,
+          "error": "",
+          "metadata": {
+            "backend": "local",
+            "context_window": 8192,
+            "model": "qwen2.5-coder:1.5b",
+            "provider": "ollama",
+            "reasoning_effort": "not_supported",
+            "thinking_type": "not_supported"
+          },
+          "prompt_tokens": 63,
+          "retries": 0,
+          "success": true,
+          "tool_calls": 0,
+          "total_tokens": 599
+        },
+        "shielded": {
+          "completion_tokens": 105,
+          "duration_seconds": 10.857283416902646,
+          "error": "",
+          "metadata": {
+            "backend": "local",
+            "context_window": 16384,
+            "model": "qwen2.5-coder:1.5b",
+            "provider": "ollama",
+            "reasoning_effort": "not_supported",
+            "thinking_type": "not_supported"
+          },
+          "prompt_tokens": 1315,
+          "retries": 0,
+          "success": true,
+          "tool_calls": 1,
+          "total_tokens": 1420
+        },
+        "task": {
+          "category": "repair",
+          "prompt": "Locate the unit-test fixture for a failing helper and describe the smallest repair.",
+          "suggested_max_turns": 6,
+          "task_id": "repair-unit-test"
+        },
+        "token_delta": -821
+      },
+      {
+        "baseline": {
+          "completion_tokens": 377,
+          "duration_seconds": 21.385836249915883,
+          "error": "",
+          "metadata": {
+            "backend": "local",
+            "context_window": 8192,
+            "model": "qwen2.5-coder:1.5b",
+            "provider": "ollama",
+            "reasoning_effort": "not_supported",
+            "thinking_type": "not_supported"
+          },
+          "prompt_tokens": 62,
+          "retries": 0,
+          "success": true,
+          "tool_calls": 0,
+          "total_tokens": 439
+        },
+        "shielded": {
+          "completion_tokens": 96,
+          "duration_seconds": 9.610847915988415,
+          "error": "",
+          "metadata": {
+            "backend": "local",
+            "context_window": 16384,
+            "model": "qwen2.5-coder:1.5b",
+            "provider": "ollama",
+            "reasoning_effort": "not_supported",
+            "thinking_type": "not_supported"
+          },
+          "prompt_tokens": 1015,
+          "retries": 1,
+          "success": true,
+          "tool_calls": 1,
+          "total_tokens": 1111
+        },
+        "task": {
+          "category": "repair",
+          "prompt": "Inspect the parser implementation and identify how it handles an empty record.",
+          "suggested_max_turns": 6,
+          "task_id": "repair-parser"
+        },
+        "token_delta": -672
+      },
+      {
+        "baseline": {
+          "completion_tokens": 360,
+          "duration_seconds": 21.121497290907428,
+          "error": "",
+          "metadata": {
+            "backend": "local",
+            "context_window": 8192,
+            "model": "qwen2.5-coder:1.5b",
+            "provider": "ollama",
+            "reasoning_effort": "not_supported",
+            "thinking_type": "not_supported"
+          },
+          "prompt_tokens": 64,
+          "retries": 0,
+          "success": true,
+          "tool_calls": 0,
+          "total_tokens": 424
+        },
+        "shielded": {
+          "completion_tokens": 166,
+          "duration_seconds": 16.81954820896499,
+          "error": "",
+          "metadata": {
+            "backend": "local",
+            "context_window": 16384,
+            "model": "qwen2.5-coder:1.5b",
+            "provider": "ollama",
+            "reasoning_effort": "not_supported",
+            "thinking_type": "not_supported"
+          },
+          "prompt_tokens": 2190,
+          "retries": 1,
+          "success": true,
+          "tool_calls": 2,
+          "total_tokens": 2356
+        },
+        "task": {
+          "category": "multi_file",
+          "prompt": "Trace the event type and its handler, then propose where a new event belongs.",
+          "suggested_max_turns": 8,
+          "task_id": "add-event"
+        },
+        "token_delta": -1932
+      },
+      {
+        "baseline": {
+          "completion_tokens": 544,
+          "duration_seconds": 30.905251124873757,
+          "error": "",
+          "metadata": {
+            "backend": "local",
+            "context_window": 8192,
+            "model": "qwen2.5-coder:1.5b",
+            "provider": "ollama",
+            "reasoning_effort": "not_supported",
+            "thinking_type": "not_supported"
+          },
+          "prompt_tokens": 62,
+          "retries": 0,
+          "success": true,
+          "tool_calls": 0,
+          "total_tokens": 606
+        },
+        "shielded": {
+          "completion_tokens": 239,
+          "duration_seconds": 20.966114584123716,
+          "error": "",
+          "metadata": {
+            "backend": "local",
+            "context_window": 16384,
+            "model": "qwen2.5-coder:1.5b",
+            "provider": "ollama",
+            "reasoning_effort": "not_supported",
+            "thinking_type": "not_supported"
+          },
+          "prompt_tokens": 2184,
+          "retries": 1,
+          "success": true,
+          "tool_calls": 2,
+          "total_tokens": 2423
+        },
+        "task": {
+          "category": "multi_file",
+          "prompt": "Trace a command from protocol definition to handler and summarize the files involved.",
+          "suggested_max_turns": 8,
+          "task_id": "add-command"
+        },
+        "token_delta": -1817
+      },
+      {
+        "baseline": {
+          "completion_tokens": 755,
+          "duration_seconds": 43.33734212489799,
+          "error": "",
+          "metadata": {
+            "backend": "local",
+            "context_window": 8192,
+            "model": "qwen2.5-coder:1.5b",
+            "provider": "ollama",
+            "reasoning_effort": "not_supported",
+            "thinking_type": "not_supported"
+          },
+          "prompt_tokens": 61,
+          "retries": 0,
+          "success": true,
+          "tool_calls": 0,
+          "total_tokens": 816
+        },
+        "shielded": {
+          "completion_tokens": 518,
+          "duration_seconds": 35.94299591705203,
+          "error": "",
+          "metadata": {
+            "backend": "local",
+            "context_window": 16384,
+            "model": "qwen2.5-coder:1.5b",
+            "provider": "ollama",
+            "reasoning_effort": "not_supported",
+            "thinking_type": "not_supported"
+          },
+          "prompt_tokens": 2181,
+          "retries": 1,
+          "success": true,
+          "tool_calls": 2,
+          "total_tokens": 2699
+        },
+        "task": {
+          "category": "refactor",
+          "prompt": "Find a duplicated helper pattern and report the safest shared extraction point.",
+          "suggested_max_turns": 6,
+          "task_id": "refactor-duplicate"
+        },
+        "token_delta": -1883
+      },
+      {
+        "baseline": {
+          "completion_tokens": 302,
+          "duration_seconds": 17.953854457940906,
+          "error": "",
+          "metadata": {
+            "backend": "local",
+            "context_window": 8192,
+            "model": "qwen2.5-coder:1.5b",
+            "provider": "ollama",
+            "reasoning_effort": "not_supported",
+            "thinking_type": "not_supported"
+          },
+          "prompt_tokens": 64,
+          "retries": 0,
+          "success": true,
+          "tool_calls": 0,
+          "total_tokens": 366
+        },
+        "shielded": {
+          "completion_tokens": 120,
+          "duration_seconds": 10.951906624948606,
+          "error": "",
+          "metadata": {
+            "backend": "local",
+            "context_window": 16384,
+            "model": "qwen2.5-coder:1.5b",
+            "provider": "ollama",
+            "reasoning_effort": "not_supported",
+            "thinking_type": "not_supported"
+          },
+          "prompt_tokens": 1019,
+          "retries": 1,
+          "success": true,
+          "tool_calls": 1,
+          "total_tokens": 1139
+        },
+        "task": {
+          "category": "refactor",
+          "prompt": "Inspect state mutation flow and report one function that could be made more explicit.",
+          "suggested_max_turns": 6,
+          "task_id": "refactor-state"
+        },
+        "token_delta": -773
+      }
+    ],
+    "schema_version": 2,
+    "shielded_successes": 10,
+    "shielded_tokens": 21345,
+    "task_count": 10,
+    "token_delta": -15739,
+    "token_reduction_ratio": -2.807527648947556
+  },
+  "schema_version": 2,
+  "variant_metadata": {
+    "baseline": [
+      {
+        "backend": "local",
+        "context_window": 8192,
+        "model": "qwen2.5-coder:1.5b",
+        "provider": "ollama",
+        "reasoning_effort": "not_supported",
+        "thinking_type": "not_supported"
+      }
+    ],
+    "shielded": [
+      {
+        "backend": "local",
+        "context_window": 16384,
+        "model": "qwen2.5-coder:1.5b",
+        "provider": "ollama",
+        "reasoning_effort": "not_supported",
+        "thinking_type": "not_supported"
+      }
+    ]
+  }
+}

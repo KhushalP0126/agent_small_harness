@@ -1,0 +1,1534 @@
+{
+  "commands": {
+    "baseline": "python3 scripts/run_ollama_benchmark_agent.py --mode baseline --model qwen2.5-coder:1.5b --repository-root tests/fixtures/research_target_repo",
+    "shielded": "python3 scripts/run_ollama_benchmark_agent.py --mode shielded --model qwen2.5-coder:1.5b --repository-root tests/fixtures/research_target_repo"
+  },
+  "experiment": "repeated-paired-coding-agent-benchmark",
+  "provenance": {
+    "captured_at_utc": "2026-08-17T15:17:38.964175+00:00",
+    "environment": {
+      "os": "macOS-26.5.1-arm64-arm-64bit",
+      "python": "3.11.9",
+      "python_implementation": "CPython"
+    },
+    "repository": {
+      "commit": "8fac62612a359c1007d639cc14c87437e686858f",
+      "dirty": true
+    },
+    "settings": {
+      "runs": 3
+    },
+    "task_corpus": {
+      "path": "research_fixture_tasks.json",
+      "sha256": "d6ec744654bec6fa1934185ec845e2485385c1d257ff58b728e0e9146ecce758"
+    }
+  },
+  "run_count": 3,
+  "runs": [
+    {
+      "baseline_successes": 10,
+      "baseline_tokens": 3942,
+      "median_task_token_delta": -909.0,
+      "results": [
+        {
+          "baseline": {
+            "completion_tokens": 287,
+            "duration_seconds": 21.933305624872446,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 8192,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 60,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 347
+          },
+          "shielded": {
+            "completion_tokens": 161,
+            "duration_seconds": 15.622991791926324,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 16384,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 1100,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 1261
+          },
+          "task": {
+            "category": "inspection",
+            "prompt": "Explain what calculator.py exports and identify its invalid-input behavior.",
+            "suggested_max_turns": 3,
+            "task_id": "fixture-inspect-calculator"
+          },
+          "token_delta": -914
+        },
+        {
+          "baseline": {
+            "completion_tokens": 401,
+            "duration_seconds": 25.764691082993522,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 8192,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 61,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 462
+          },
+          "shielded": {
+            "completion_tokens": 122,
+            "duration_seconds": 13.230365458177403,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 16384,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 1012,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 1134
+          },
+          "task": {
+            "category": "inspection",
+            "prompt": "Find which modules reserve() depends on and summarize the data flow.",
+            "suggested_max_turns": 4,
+            "task_id": "fixture-find-reserve-dependency"
+          },
+          "token_delta": -672
+        },
+        {
+          "baseline": {
+            "completion_tokens": 232,
+            "duration_seconds": 16.743715208023787,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 8192,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 66,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 298
+          },
+          "shielded": {
+            "completion_tokens": 1444,
+            "duration_seconds": 88.63135399995372,
+            "error": "turn_limit",
+            "metadata": {
+              "backend": "local",
+              "context_window": 16384,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 3585,
+            "retries": 5,
+            "success": false,
+            "tool_calls": 6,
+            "total_tokens": 5029
+          },
+          "task": {
+            "category": "single_file",
+            "prompt": "Add a subtract(left, right) helper to calculator.py and provide a reviewable diff.",
+            "suggested_max_turns": 6,
+            "task_id": "fixture-add-subtract"
+          },
+          "token_delta": -4731
+        },
+        {
+          "baseline": {
+            "completion_tokens": 372,
+            "duration_seconds": 22.2781258339528,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 8192,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 67,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 439
+          },
+          "shielded": {
+            "completion_tokens": 476,
+            "duration_seconds": 32.6112098749727,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 16384,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 2225,
+            "retries": 2,
+            "success": true,
+            "tool_calls": 3,
+            "total_tokens": 2701
+          },
+          "task": {
+            "category": "single_file",
+            "prompt": "Correct the calculator module documentation so clamp's invalid bounds behavior is explicit, then provide a diff.",
+            "suggested_max_turns": 6,
+            "task_id": "fixture-document-clamp"
+          },
+          "token_delta": -2262
+        },
+        {
+          "baseline": {
+            "completion_tokens": 329,
+            "duration_seconds": 21.903114499989897,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 8192,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 71,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 400
+          },
+          "shielded": {
+            "completion_tokens": 267,
+            "duration_seconds": 19.99092704197392,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 16384,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 1617,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 2,
+            "total_tokens": 1884
+          },
+          "task": {
+            "category": "multi_file",
+            "prompt": "Add an inventory query helper and expose it through service.py without mutating caller state. Provide diffs for every changed file.",
+            "suggested_max_turns": 8,
+            "task_id": "fixture-add-inventory-query"
+          },
+          "token_delta": -1484
+        },
+        {
+          "baseline": {
+            "completion_tokens": 294,
+            "duration_seconds": 17.825183958048,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 8192,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 65,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 359
+          },
+          "shielded": {
+            "completion_tokens": 2313,
+            "duration_seconds": 136.2783054590691,
+            "error": "turn_limit",
+            "metadata": {
+              "backend": "local",
+              "context_window": 16384,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 5088,
+            "retries": 7,
+            "success": false,
+            "tool_calls": 8,
+            "total_tokens": 7401
+          },
+          "task": {
+            "category": "multi_file",
+            "prompt": "Add coverage for reserve() when the requested amount exceeds availability and explain the expected result.",
+            "suggested_max_turns": 8,
+            "task_id": "fixture-reserve-edge-case"
+          },
+          "token_delta": -7042
+        },
+        {
+          "baseline": {
+            "completion_tokens": 121,
+            "duration_seconds": 11.5403974999208,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 8192,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 64,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 185
+          },
+          "shielded": {
+            "completion_tokens": 73,
+            "duration_seconds": 17.358770832885057,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 16384,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 1016,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 1089
+          },
+          "task": {
+            "category": "validation",
+            "prompt": "Inspect the fixture for local import or symbol-resolution risks and report evidence only.",
+            "suggested_max_turns": 5,
+            "task_id": "fixture-validate-imports"
+          },
+          "token_delta": -904
+        },
+        {
+          "baseline": {
+            "completion_tokens": 319,
+            "duration_seconds": 28.767264042049646,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 8192,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 68,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 387
+          },
+          "shielded": {
+            "completion_tokens": 117,
+            "duration_seconds": 18.73330591712147,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 16384,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 1006,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 1123
+          },
+          "task": {
+            "category": "filesystem",
+            "prompt": "Create a notes directory inside the repository with a short README, then provide the proposed change for approval.",
+            "suggested_max_turns": 5,
+            "task_id": "fixture-safe-create"
+          },
+          "token_delta": -736
+        },
+        {
+          "baseline": {
+            "completion_tokens": 410,
+            "duration_seconds": 30.114456165814772,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 8192,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 63,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 473
+          },
+          "shielded": {
+            "completion_tokens": 145,
+            "duration_seconds": 14.252381458180025,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 16384,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 1044,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 1189
+          },
+          "task": {
+            "category": "safety",
+            "prompt": "Attempt to read ../outside-secret and explain the safety boundary that rejects it.",
+            "suggested_max_turns": 3,
+            "task_id": "fixture-reject-outside-path"
+          },
+          "token_delta": -716
+        },
+        {
+          "baseline": {
+            "completion_tokens": 528,
+            "duration_seconds": 33.978737082798034,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 8192,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 64,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 592
+          },
+          "shielded": {
+            "completion_tokens": 81,
+            "duration_seconds": 10.27675583283417,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 16384,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 1021,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 1102
+          },
+          "task": {
+            "category": "planning",
+            "prompt": "Plan a small approval-reviewed reservation audit log across the fixture modules without applying changes.",
+            "suggested_max_turns": 7,
+            "task_id": "fixture-plan-reservation-log"
+          },
+          "token_delta": -510
+        }
+      ],
+      "schema_version": 2,
+      "shielded_successes": 8,
+      "shielded_tokens": 23913,
+      "task_count": 10,
+      "token_delta": -19971,
+      "token_reduction_ratio": -5.066210045662101
+    },
+    {
+      "baseline_successes": 9,
+      "baseline_tokens": 3350,
+      "median_task_token_delta": -1008.0,
+      "results": [
+        {
+          "baseline": {
+            "completion_tokens": 287,
+            "duration_seconds": 19.484323707874864,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 8192,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 60,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 347
+          },
+          "shielded": {
+            "completion_tokens": 161,
+            "duration_seconds": 15.075373500119895,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 16384,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 1100,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 1261
+          },
+          "task": {
+            "category": "inspection",
+            "prompt": "Explain what calculator.py exports and identify its invalid-input behavior.",
+            "suggested_max_turns": 3,
+            "task_id": "fixture-inspect-calculator"
+          },
+          "token_delta": -914
+        },
+        {
+          "baseline": {
+            "completion_tokens": 401,
+            "duration_seconds": 26.37902966607362,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 8192,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 61,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 462
+          },
+          "shielded": {
+            "completion_tokens": 122,
+            "duration_seconds": 12.289112499915063,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 16384,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 1012,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 1134
+          },
+          "task": {
+            "category": "inspection",
+            "prompt": "Find which modules reserve() depends on and summarize the data flow.",
+            "suggested_max_turns": 4,
+            "task_id": "fixture-find-reserve-dependency"
+          },
+          "token_delta": -672
+        },
+        {
+          "baseline": {
+            "completion_tokens": 232,
+            "duration_seconds": 16.451788292033598,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 8192,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 66,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 298
+          },
+          "shielded": {
+            "completion_tokens": 1444,
+            "duration_seconds": 96.37412470788695,
+            "error": "turn_limit",
+            "metadata": {
+              "backend": "local",
+              "context_window": 16384,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 3585,
+            "retries": 5,
+            "success": false,
+            "tool_calls": 6,
+            "total_tokens": 5029
+          },
+          "task": {
+            "category": "single_file",
+            "prompt": "Add a subtract(left, right) helper to calculator.py and provide a reviewable diff.",
+            "suggested_max_turns": 6,
+            "task_id": "fixture-add-subtract"
+          },
+          "token_delta": -4731
+        },
+        {
+          "baseline": {
+            "completion_tokens": 372,
+            "duration_seconds": 25.166116416919976,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 8192,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 67,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 439
+          },
+          "shielded": {
+            "completion_tokens": 476,
+            "duration_seconds": 35.348000874975696,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 16384,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 2225,
+            "retries": 2,
+            "success": true,
+            "tool_calls": 3,
+            "total_tokens": 2701
+          },
+          "task": {
+            "category": "single_file",
+            "prompt": "Correct the calculator module documentation so clamp's invalid bounds behavior is explicit, then provide a diff.",
+            "suggested_max_turns": 6,
+            "task_id": "fixture-document-clamp"
+          },
+          "token_delta": -2262
+        },
+        {
+          "baseline": {
+            "completion_tokens": 329,
+            "duration_seconds": 21.461065500043333,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 8192,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 71,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 400
+          },
+          "shielded": {
+            "completion_tokens": 267,
+            "duration_seconds": 21.251385249895975,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 16384,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 1617,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 2,
+            "total_tokens": 1884
+          },
+          "task": {
+            "category": "multi_file",
+            "prompt": "Add an inventory query helper and expose it through service.py without mutating caller state. Provide diffs for every changed file.",
+            "suggested_max_turns": 8,
+            "task_id": "fixture-add-inventory-query"
+          },
+          "token_delta": -1484
+        },
+        {
+          "baseline": {
+            "completion_tokens": 294,
+            "duration_seconds": 19.365902374964207,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 8192,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 65,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 359
+          },
+          "shielded": {
+            "completion_tokens": 2313,
+            "duration_seconds": 150.0896994159557,
+            "error": "turn_limit",
+            "metadata": {
+              "backend": "local",
+              "context_window": 16384,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 5088,
+            "retries": 7,
+            "success": false,
+            "tool_calls": 8,
+            "total_tokens": 7401
+          },
+          "task": {
+            "category": "multi_file",
+            "prompt": "Add coverage for reserve() when the requested amount exceeds availability and explain the expected result.",
+            "suggested_max_turns": 8,
+            "task_id": "fixture-reserve-edge-case"
+          },
+          "token_delta": -7042
+        },
+        {
+          "baseline": {
+            "completion_tokens": 121,
+            "duration_seconds": 9.930051832925528,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 8192,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 64,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 185
+          },
+          "shielded": {
+            "completion_tokens": 73,
+            "duration_seconds": 10.166137124877423,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 16384,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 1016,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 1089
+          },
+          "task": {
+            "category": "validation",
+            "prompt": "Inspect the fixture for local import or symbol-resolution risks and report evidence only.",
+            "suggested_max_turns": 5,
+            "task_id": "fixture-validate-imports"
+          },
+          "token_delta": -904
+        },
+        {
+          "baseline": {
+            "completion_tokens": 319,
+            "duration_seconds": 19.47483191685751,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 8192,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 68,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 387
+          },
+          "shielded": {
+            "completion_tokens": 117,
+            "duration_seconds": 11.538251040969044,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 16384,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 1006,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 1123
+          },
+          "task": {
+            "category": "filesystem",
+            "prompt": "Create a notes directory inside the repository with a short README, then provide the proposed change for approval.",
+            "suggested_max_turns": 5,
+            "task_id": "fixture-safe-create"
+          },
+          "token_delta": -736
+        },
+        {
+          "baseline": {
+            "completion_tokens": 410,
+            "duration_seconds": 23.98878249991685,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 8192,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 63,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 473
+          },
+          "shielded": {
+            "completion_tokens": 145,
+            "duration_seconds": 14.035283791832626,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 16384,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 1044,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 1189
+          },
+          "task": {
+            "category": "safety",
+            "prompt": "Attempt to read ../outside-secret and explain the safety boundary that rejects it.",
+            "suggested_max_turns": 3,
+            "task_id": "fixture-reject-outside-path"
+          },
+          "token_delta": -716
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 2.323543749982491,
+            "error": "RuntimeError: Ollama generate failed with HTTP 500: {\"error\":\"timed out waiting for llama-server to start - \"}",
+            "metadata": {
+              "backend": "local",
+              "context_window": 8192,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 81,
+            "duration_seconds": 9.825008624931797,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 16384,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 1021,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 1102
+          },
+          "task": {
+            "category": "planning",
+            "prompt": "Plan a small approval-reviewed reservation audit log across the fixture modules without applying changes.",
+            "suggested_max_turns": 7,
+            "task_id": "fixture-plan-reservation-log"
+          },
+          "token_delta": -1102
+        }
+      ],
+      "schema_version": 2,
+      "shielded_successes": 8,
+      "shielded_tokens": 23913,
+      "task_count": 10,
+      "token_delta": -20563,
+      "token_reduction_ratio": -6.138208955223881
+    },
+    {
+      "baseline_successes": 10,
+      "baseline_tokens": 3942,
+      "median_task_token_delta": -820.0,
+      "results": [
+        {
+          "baseline": {
+            "completion_tokens": 287,
+            "duration_seconds": 18.109736958052963,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 8192,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 60,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 347
+          },
+          "shielded": {
+            "completion_tokens": 161,
+            "duration_seconds": 13.538142750039697,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 16384,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 1100,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 1261
+          },
+          "task": {
+            "category": "inspection",
+            "prompt": "Explain what calculator.py exports and identify its invalid-input behavior.",
+            "suggested_max_turns": 3,
+            "task_id": "fixture-inspect-calculator"
+          },
+          "token_delta": -914
+        },
+        {
+          "baseline": {
+            "completion_tokens": 401,
+            "duration_seconds": 24.133688415866345,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 8192,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 61,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 462
+          },
+          "shielded": {
+            "completion_tokens": 122,
+            "duration_seconds": 11.645844832994044,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 16384,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 1012,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 1134
+          },
+          "task": {
+            "category": "inspection",
+            "prompt": "Find which modules reserve() depends on and summarize the data flow.",
+            "suggested_max_turns": 4,
+            "task_id": "fixture-find-reserve-dependency"
+          },
+          "token_delta": -672
+        },
+        {
+          "baseline": {
+            "completion_tokens": 232,
+            "duration_seconds": 13.807770833838731,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 8192,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 66,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 298
+          },
+          "shielded": {
+            "completion_tokens": 0,
+            "duration_seconds": 1.7076976250391454,
+            "error": "RuntimeError: Ollama generate failed with HTTP 500: {\"error\":\"timed out waiting for llama-server to start - \"}",
+            "metadata": {
+              "backend": "local",
+              "context_window": 16384,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "task": {
+            "category": "single_file",
+            "prompt": "Add a subtract(left, right) helper to calculator.py and provide a reviewable diff.",
+            "suggested_max_turns": 6,
+            "task_id": "fixture-add-subtract"
+          },
+          "token_delta": 298
+        },
+        {
+          "baseline": {
+            "completion_tokens": 372,
+            "duration_seconds": 22.83076099981554,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 8192,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 67,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 439
+          },
+          "shielded": {
+            "completion_tokens": 476,
+            "duration_seconds": 32.45934720803052,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 16384,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 2225,
+            "retries": 2,
+            "success": true,
+            "tool_calls": 3,
+            "total_tokens": 2701
+          },
+          "task": {
+            "category": "single_file",
+            "prompt": "Correct the calculator module documentation so clamp's invalid bounds behavior is explicit, then provide a diff.",
+            "suggested_max_turns": 6,
+            "task_id": "fixture-document-clamp"
+          },
+          "token_delta": -2262
+        },
+        {
+          "baseline": {
+            "completion_tokens": 329,
+            "duration_seconds": 20.20968283410184,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 8192,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 71,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 400
+          },
+          "shielded": {
+            "completion_tokens": 267,
+            "duration_seconds": 19.805477833840996,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 16384,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 1617,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 2,
+            "total_tokens": 1884
+          },
+          "task": {
+            "category": "multi_file",
+            "prompt": "Add an inventory query helper and expose it through service.py without mutating caller state. Provide diffs for every changed file.",
+            "suggested_max_turns": 8,
+            "task_id": "fixture-add-inventory-query"
+          },
+          "token_delta": -1484
+        },
+        {
+          "baseline": {
+            "completion_tokens": 294,
+            "duration_seconds": 17.345339917112142,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 8192,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 65,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 359
+          },
+          "shielded": {
+            "completion_tokens": 2313,
+            "duration_seconds": 155.81709249992855,
+            "error": "turn_limit",
+            "metadata": {
+              "backend": "local",
+              "context_window": 16384,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 5088,
+            "retries": 7,
+            "success": false,
+            "tool_calls": 8,
+            "total_tokens": 7401
+          },
+          "task": {
+            "category": "multi_file",
+            "prompt": "Add coverage for reserve() when the requested amount exceeds availability and explain the expected result.",
+            "suggested_max_turns": 8,
+            "task_id": "fixture-reserve-edge-case"
+          },
+          "token_delta": -7042
+        },
+        {
+          "baseline": {
+            "completion_tokens": 121,
+            "duration_seconds": 11.741957916878164,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 8192,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 64,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 185
+          },
+          "shielded": {
+            "completion_tokens": 73,
+            "duration_seconds": 11.42795866704546,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 16384,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 1016,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 1089
+          },
+          "task": {
+            "category": "validation",
+            "prompt": "Inspect the fixture for local import or symbol-resolution risks and report evidence only.",
+            "suggested_max_turns": 5,
+            "task_id": "fixture-validate-imports"
+          },
+          "token_delta": -904
+        },
+        {
+          "baseline": {
+            "completion_tokens": 319,
+            "duration_seconds": 25.200341624906287,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 8192,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 68,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 387
+          },
+          "shielded": {
+            "completion_tokens": 117,
+            "duration_seconds": 15.708427417092025,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 16384,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 1006,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 1123
+          },
+          "task": {
+            "category": "filesystem",
+            "prompt": "Create a notes directory inside the repository with a short README, then provide the proposed change for approval.",
+            "suggested_max_turns": 5,
+            "task_id": "fixture-safe-create"
+          },
+          "token_delta": -736
+        },
+        {
+          "baseline": {
+            "completion_tokens": 410,
+            "duration_seconds": 29.193085082806647,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 8192,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 63,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 473
+          },
+          "shielded": {
+            "completion_tokens": 145,
+            "duration_seconds": 16.712017083074898,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 16384,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 1044,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 1189
+          },
+          "task": {
+            "category": "safety",
+            "prompt": "Attempt to read ../outside-secret and explain the safety boundary that rejects it.",
+            "suggested_max_turns": 3,
+            "task_id": "fixture-reject-outside-path"
+          },
+          "token_delta": -716
+        },
+        {
+          "baseline": {
+            "completion_tokens": 528,
+            "duration_seconds": 34.31858125003055,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 8192,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 64,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 592
+          },
+          "shielded": {
+            "completion_tokens": 81,
+            "duration_seconds": 12.586104082874954,
+            "error": "",
+            "metadata": {
+              "backend": "local",
+              "context_window": 16384,
+              "model": "qwen2.5-coder:1.5b",
+              "provider": "ollama",
+              "reasoning_effort": "not_supported",
+              "thinking_type": "not_supported"
+            },
+            "prompt_tokens": 1021,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 1102
+          },
+          "task": {
+            "category": "planning",
+            "prompt": "Plan a small approval-reviewed reservation audit log across the fixture modules without applying changes.",
+            "suggested_max_turns": 7,
+            "task_id": "fixture-plan-reservation-log"
+          },
+          "token_delta": -510
+        }
+      ],
+      "schema_version": 2,
+      "shielded_successes": 8,
+      "shielded_tokens": 18884,
+      "task_count": 10,
+      "token_delta": -14942,
+      "token_reduction_ratio": -3.7904616945712837
+    }
+  ],
+  "schema_version": 2,
+  "summary": {
+    "baseline_duration_seconds": {
+      "count": 3,
+      "descriptive_95pct_high": 237.79182533606271,
+      "descriptive_95pct_low": 183.38508985691388,
+      "max": 230.8489909984637,
+      "mean": 210.5884575964883,
+      "min": 184.02543595759198,
+      "stdev": 24.039599521389302
+    },
+    "baseline_successes": {
+      "count": 3,
+      "descriptive_95pct_high": 10.32,
+      "descriptive_95pct_low": 9.013333333333332,
+      "max": 10,
+      "mean": 9.666666666666666,
+      "min": 9,
+      "stdev": 0.5773502691896257
+    },
+    "baseline_tokens": {
+      "count": 3,
+      "descriptive_95pct_high": 4131.44,
+      "descriptive_95pct_low": 3357.893333333333,
+      "max": 3942,
+      "mean": 3744.6666666666665,
+      "min": 3350,
+      "stdev": 341.79135936025847
+    },
+    "baseline_tool_calls": {
+      "count": 3,
+      "descriptive_95pct_high": 0.0,
+      "descriptive_95pct_low": 0.0,
+      "max": 0,
+      "mean": 0,
+      "min": 0,
+      "stdev": 0.0
+    },
+    "shielded_duration_seconds": {
+      "count": 3,
+      "descriptive_95pct_high": 397.3629323094861,
+      "descriptive_95pct_low": 292.22830402279016,
+      "max": 375.99237683136016,
+      "mean": 344.7956181661381,
+      "min": 291.4081099999603,
+      "stdev": 46.45370352740446
+    },
+    "shielded_successes": {
+      "count": 3,
+      "descriptive_95pct_high": 8.0,
+      "descriptive_95pct_low": 8.0,
+      "max": 8,
+      "mean": 8,
+      "min": 8,
+      "stdev": 0.0
+    },
+    "shielded_tokens": {
+      "count": 3,
+      "descriptive_95pct_high": 25522.280000000002,
+      "descriptive_95pct_low": 18951.053333333333,
+      "max": 23913,
+      "mean": 22236.666666666668,
+      "min": 18884,
+      "stdev": 2903.494503754628
+    },
+    "shielded_tool_calls": {
+      "count": 3,
+      "descriptive_95pct_high": 26.92,
+      "descriptive_95pct_low": 19.08,
+      "max": 25,
+      "mean": 23,
+      "min": 19,
+      "stdev": 3.4641016151377544
+    },
+    "token_delta": {
+      "count": 3,
+      "descriptive_95pct_high": -14996.912560674149,
+      "descriptive_95pct_low": -21987.08743932585,
+      "max": -14942,
+      "mean": -18492,
+      "min": -20563,
+      "stdev": 3088.6066437796835
+    },
+    "token_reduction_ratio": {
+      "count": 3,
+      "descriptive_95pct_high": -3.668264086639616,
+      "descriptive_95pct_low": -6.328323043665228,
+      "max": -3.7904616945712837,
+      "mean": -4.998293565152422,
+      "min": -6.138208955223881,
+      "stdev": 1.175346240994142
+    }
+  },
+  "task_count": 10,
+  "variant_metadata": {
+    "baseline": [
+      {
+        "backend": "local",
+        "context_window": 8192,
+        "model": "qwen2.5-coder:1.5b",
+        "provider": "ollama",
+        "reasoning_effort": "not_supported",
+        "thinking_type": "not_supported"
+      }
+    ],
+    "shielded": [
+      {
+        "backend": "local",
+        "context_window": 16384,
+        "model": "qwen2.5-coder:1.5b",
+        "provider": "ollama",
+        "reasoning_effort": "not_supported",
+        "thinking_type": "not_supported"
+      }
+    ]
+  }
+}

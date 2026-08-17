@@ -40,11 +40,27 @@ render a dated Markdown summary without hiding failed task rows.
   verifier-aligned directive on that same 11-task corpus. The general
   directive averaged 6.67/11 versus 9.00/11 for narrow guidance, used 16.10%
   more mean tokens, and was slower; it is retained as negative evidence.
+  Raw-candidate inspection also distinguishes the retained failures:
+  `formal-order-pair` rejects valid reversed inputs instead of ordering them,
+  while one correct `formal-trim-text` `strip()` candidate exceeded the
+  CrossHair time budget.
 - `compute-shield-10-2026-08-04.md` — frozen 1.5B Compute Shield comparison.
+- `compute-shield-10-2026-08-16.md` — current-revision rerun of the same
+  frozen Qwen 1.5B corpus. Both paths completed 10/10; the shielded loop used
+  21,345 tokens versus 5,606 for baseline and was slower. It is retained as an
+  updated diagnostic observation, not a token-saving claim.
 - `local-model-comparison-2026-08-11.md` — controlled Qwen 1.5B versus 3B
   comparison on the same frozen ten-task corpus. Both completed 10/10
   shielded tasks; retain the linked raw JSON rather than inferring a scaling
   law from the two-model observation.
+- `deepseek-20-repeated-2026-08-16.md` — three-repeat current-revision API
+  run. The baseline repeatedly returned empty API responses, so the 0.33/20
+  baseline and 15.67/20 shielded completion means are an API-reliability
+  observation, not a valid quality or efficiency comparison.
+- `fixture-qwen-1.5b-repeated-2026-08-16.md` — three-repeat benchmark on the
+  independent repository fixture. Qwen 1.5B baseline averaged 9.67/10 and the
+  shielded loop 8.00/10, using 5.94x as many mean tokens; all turn-limit and
+  Ollama-startup failures are retained in the linked raw JSON.
 - `qwen-capability-results-2026-07-18.md` — local Qwen capability runs.
 - `gemma-deepseek-capability-results-2026-07-19.md` — Gemma and DeepSeek runs.
 - `snake-pong-execution-report-2026-07-19.md` — structured-spec execution
