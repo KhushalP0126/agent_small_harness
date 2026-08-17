@@ -77,6 +77,36 @@ class ResearchProvenanceTests(unittest.TestCase):
         self.assertIn("turn_limit", rendered)
         self.assertIn("does not claim token savings", rendered)
 
+    def test_report_renderer_rejects_provider_unhealthy_comparison(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        provenance = collect_provenance(
+            repository_root=root,
+            task_corpus=root / "data" / "research_fixture_tasks.json",
+        )
+        payload = {
+            "schema_version": 3,
+            "provenance": provenance,
+            "run_count": 2,
+            "summary": {
+                key: {"mean": 0}
+                for key in (
+                    "baseline_successes", "shielded_successes", "baseline_tokens",
+                    "shielded_tokens", "baseline_tool_calls", "shielded_tool_calls",
+                    "baseline_duration_seconds", "shielded_duration_seconds", "token_delta",
+                )
+            },
+            "comparison_summary": None,
+            "health": {
+                "comparison_eligible": False,
+                "provider_failure_count": 1,
+                "reason": "provider failure recorded",
+            },
+            "runs": [],
+        }
+        rendered = render_report(payload, title="Unhealthy fixture report")
+        self.assertIn("comparison rejected", rendered)
+        self.assertIn("do not support a quality", rendered)
+
     def test_live_session_receipt_requires_multi_file_accept_and_reject(self) -> None:
         root = Path(__file__).resolve().parents[1]
         receipt = build_live_session_receipt(

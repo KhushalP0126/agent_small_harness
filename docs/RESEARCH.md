@@ -332,10 +332,10 @@ hashes—not keys, raw private prompts, or absolute local paths.
 
 ## Remaining research work
 
-1. Run at least three repeated 20-task DeepSeek comparisons on the current
-   revision and render the committed raw JSON.
-2. Rerun the frozen Qwen 1.5B corpus, then run both Qwen 1.5B and DeepSeek on
-   the independent fixture corpus.
+1. Rerun the 20-task DeepSeek comparison with the API-health gate. The runner
+   now writes all rows but rejects any aggregate comparison if a provider emits
+   an empty response, times out, or is unreachable.
+2. Run the DeepSeek side of the independent fixture corpus with that same gate.
 3. Record the five controlled approval-reviewed session receipts.
 4. Expand the Python/CrossHair study beyond single-function contracts with a
    repository or multi-function corpus; retain its Python-only scope. The
@@ -354,4 +354,22 @@ The shielded route also used 310,512.67 mean model tokens versus 768.00 and
 took longer. Retain the data as an API reliability/operational finding, not as
 evidence that tool shielding improves completion or efficiency. A future
 quality comparison needs an API-health gate that rejects or separately labels a
-run with empty-response failures before aggregation.
+run with empty-response failures before aggregation. That gate is now part of
+the benchmark runner: new API experiments write raw evidence but exit nonzero
+and produce no comparison summary when a provider-health failure occurs.
+
+### Provider-health gate (2026-08-17)
+
+The API client now treats a 2xx response with no usable completion as a
+retryable provider failure, using the configured retry budget before returning
+an explicit error. Repeated benchmark reports classify empty Architect API
+responses, provider timeouts/unreachability, and local Ollama startup timeouts
+separately from validation or turn-limit task failures. An unhealthy run is
+retained for diagnosis but cannot be averaged into a baseline-versus-shielded
+quality or efficiency claim. `make research-agent-benchmark`,
+`make research-fixture-deepseek`, and `make research-fixture-qwen` enforce this
+with `--require-healthy`.
+
+The previously captured DeepSeek fixture raw file remains unqualified evidence:
+it was started before the gate existed and contains empty-response failures. It
+must not be rendered or presented as a comparison; a fresh gated run is needed.

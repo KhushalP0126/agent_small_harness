@@ -3,7 +3,7 @@ from __future__ import annotations
 import unittest
 
 from harness_kernel.e2e_benchmark import AgentRunMetrics, BenchmarkTask
-from harness_kernel.research_reporting import run_repeated_paired_benchmark, summarize_reports
+from harness_kernel.research_reporting import benchmark_health, run_repeated_paired_benchmark, summarize_reports
 from scripts.render_research_report import _scope_lines, _variant_lines
 
 
@@ -30,6 +30,39 @@ class ResearchReportingTests(unittest.TestCase):
         self.assertEqual(report["summary"]["baseline_tokens"]["count"], 3)
         self.assertGreater(report["summary"]["baseline_tokens"]["stdev"], 0)
         self.assertEqual(report["summary"]["shielded_tool_calls"]["mean"], 1)
+        self.assertTrue(report["health"]["comparison_eligible"])
+        self.assertIsNotNone(report["comparison_summary"])
+
+    def test_empty_architect_response_rejects_comparison_aggregation(self) -> None:
+        task = BenchmarkTask("one", "inspection", "inspect one file")
+        failed = AgentRunMetrics(
+            False,
+            0,
+            0,
+            0,
+            0,
+            0.1,
+            "RuntimeError: Architect API returned an empty response after 3 attempts.",
+        )
+        succeeded = AgentRunMetrics(True, 10, 2, 0, 0, 0.1)
+        report = run_repeated_paired_benchmark(
+            [task], lambda _task: failed, lambda _task: succeeded, runs=2
+        )
+        self.assertFalse(report["health"]["comparison_eligible"])
+        self.assertEqual(report["health"]["provider_failure_count"], 2)
+        self.assertIsNone(report["comparison_summary"])
+
+    def test_task_failure_does_not_look_like_provider_failure(self) -> None:
+        report = {
+            "results": [
+                {
+                    "task": {"task_id": "invalid-candidate"},
+                    "baseline": {"success": False, "error": "validation failed"},
+                    "shielded": {"success": True},
+                }
+            ]
+        }
+        self.assertTrue(benchmark_health([report])["comparison_eligible"])
 
     def test_repeated_report_requires_multiple_runs(self) -> None:
         task = BenchmarkTask("one", "inspection", "inspect one file")

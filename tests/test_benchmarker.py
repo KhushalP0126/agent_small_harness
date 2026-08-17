@@ -4,7 +4,7 @@ import stat
 import tempfile
 import unittest
 from contextlib import redirect_stdout
-from io import StringIO
+from io import BytesIO, StringIO
 from pathlib import Path
 from unittest.mock import patch
 
@@ -13,7 +13,7 @@ import httpx
 from agents.config_loader import ConfigError, load_config
 from agents.artifact_manager import ArtifactManager
 from backends.architect_client import ArchitectApiClient, ArchitectConfig, ArchitectModelSupplier
-from backends.ollama_client import DEFAULT_OLLAMA_MODEL, OllamaGenerationConfig, OllamaModelSupplier
+from backends.ollama_client import DEFAULT_OLLAMA_MODEL, OllamaClient, OllamaGenerationConfig, OllamaModelSupplier
 from benchmarker import (
     ROOT,
     build_ollama_controller,
@@ -1480,6 +1480,78 @@ def nonnegative(value: int) -> int:
                 client.generate(prompt="write code", system="return code")
 
             http_client.close()
+
+    def test_architect_client_retries_empty_successful_response(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env_file = Path(tmpdir) / ".env"
+            env_file.write_text(
+                "DEEPSEEK_TEST_KEY=test-secret\n"
+                "ARCHITECT_TEST_RETRY_ATTEMPTS=2\n"
+                "ARCHITECT_TEST_RETRY_BACKOFF_SECONDS=0\n",
+                encoding="utf-8",
+            )
+            responses = iter(
+                [
+                    {"choices": []},
+                    {"choices": [{"message": {"content": "def fixed():\n    return 1"}}]},
+                ]
+            )
+            http_client = httpx.Client(
+                transport=httpx.MockTransport(
+                    lambda request: httpx.Response(200, request=request, json=next(responses))
+                )
+            )
+            client = ArchitectApiClient(
+                config=ArchitectConfig(
+                    api_key_env="MISSING_ARCHITECT_TEST_KEY",
+                    fallback_api_key_env="DEEPSEEK_TEST_KEY",
+                    retry_attempts_env="ARCHITECT_TEST_RETRY_ATTEMPTS",
+                    retry_backoff_seconds_env="ARCHITECT_TEST_RETRY_BACKOFF_SECONDS",
+                    env_file=str(env_file),
+                ),
+                sleep=lambda _delay: None,
+                http_client=http_client,
+            )
+            self.assertEqual(client.generate(prompt="write", system="code"), "def fixed():\n    return 1")
+            http_client.close()
+
+    def test_ollama_client_retries_model_start_timeout(self) -> None:
+        from urllib.error import HTTPError
+
+        calls = 0
+        sleeps: list[float] = []
+
+        class Response:
+            def __enter__(self) -> "Response":
+                return self
+
+            def __exit__(self, *_args: object) -> None:
+                return None
+
+            def read(self) -> bytes:
+                return b'{"response":"ok", "prompt_eval_count":2, "eval_count":3}'
+
+        def opener(_request: object, **_kwargs: object) -> Response:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                raise HTTPError(
+                    "http://127.0.0.1:11434/api/generate",
+                    500,
+                    "server error",
+                    None,
+                    BytesIO(b'{"error":"timed out waiting for llama-server to start -"}'),
+                )
+            return Response()
+
+        client = OllamaClient(
+            opener=opener,
+            sleep=sleeps.append,
+            startup_retry_backoff_seconds=0.25,
+        )
+        self.assertEqual(client.generate("hello"), "ok")
+        self.assertEqual(calls, 2)
+        self.assertEqual(sleeps, [0.25])
 
     def test_architect_supplier_extracts_code_from_api_response(self) -> None:
         class StubArchitectClient:

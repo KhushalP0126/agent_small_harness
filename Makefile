@@ -59,6 +59,7 @@ help:
 	@printf "  make start REPO_ROOT=.           Launch the default Rust terminal interface\n"
 	@printf "  make check                       Run Python and Rust tests (no model calls)\n"
 	@printf "  make research-check              Verify the reproducible research surface (no model calls)\n"
+	@printf "  make research-agent-benchmark   Run a health-gated repeated API comparison\n"
 	@printf "  make research-report REPORT_INPUT=...  Render a dated Markdown report from raw JSON\n"
 	@printf "  make research-model-comparison         Compare frozen Qwen 1.5B and 3B reports\n"
 	@printf "\nDaily work:\n"
@@ -136,13 +137,13 @@ research-check: check
 research-agent-benchmark:
 	@test -n "$(BASELINE_CMD)" || (echo "Set BASELINE_CMD to a JSON runner command" && exit 1)
 	@test -n "$(SHIELDED_CMD)" || (echo "Set SHIELDED_CMD to a JSON runner command" && exit 1)
-	$(PYTHON) scripts/run_repeated_agent_benchmark.py --baseline-command "$(BASELINE_CMD)" --shielded-command "$(SHIELDED_CMD)" --runs "$(RESEARCH_RUNS)" --output "$(RESEARCH_OUTPUT)"
+	$(PYTHON) scripts/run_repeated_agent_benchmark.py --baseline-command "$(BASELINE_CMD)" --shielded-command "$(SHIELDED_CMD)" --runs "$(RESEARCH_RUNS)" --output "$(RESEARCH_OUTPUT)" --require-healthy
 
 research-fixture-deepseek:
-	$(PYTHON) scripts/run_repeated_agent_benchmark.py --tasks "$(RESEARCH_FIXTURE_TASKS)" --repository-root "$(RESEARCH_FIXTURE_ROOT)" --baseline-command "$(PYTHON) scripts/run_deepseek_benchmark_agent.py --mode baseline --repository-root $(RESEARCH_FIXTURE_ROOT)" --shielded-command "$(PYTHON) scripts/run_deepseek_benchmark_agent.py --mode shielded --repository-root $(RESEARCH_FIXTURE_ROOT)" --runs "$(RESEARCH_RUNS)" --output "$(RESEARCH_FIXTURE_DEEPSEEK_OUTPUT)"
+	$(PYTHON) scripts/run_repeated_agent_benchmark.py --tasks "$(RESEARCH_FIXTURE_TASKS)" --repository-root "$(RESEARCH_FIXTURE_ROOT)" --baseline-command "$(PYTHON) scripts/run_deepseek_benchmark_agent.py --mode baseline --repository-root $(RESEARCH_FIXTURE_ROOT)" --shielded-command "$(PYTHON) scripts/run_deepseek_benchmark_agent.py --mode shielded --repository-root $(RESEARCH_FIXTURE_ROOT)" --runs "$(RESEARCH_RUNS)" --output "$(RESEARCH_FIXTURE_DEEPSEEK_OUTPUT)" --require-healthy
 
 research-fixture-qwen:
-	$(PYTHON) scripts/run_repeated_agent_benchmark.py --tasks "$(RESEARCH_FIXTURE_TASKS)" --repository-root "$(RESEARCH_FIXTURE_ROOT)" --baseline-command "$(PYTHON) scripts/run_ollama_benchmark_agent.py --mode baseline --model qwen2.5-coder:1.5b --repository-root $(RESEARCH_FIXTURE_ROOT)" --shielded-command "$(PYTHON) scripts/run_ollama_benchmark_agent.py --mode shielded --model qwen2.5-coder:1.5b --repository-root $(RESEARCH_FIXTURE_ROOT)" --runs "$(RESEARCH_RUNS)" --output "$(RESEARCH_FIXTURE_QWEN_OUTPUT)"
+	$(PYTHON) scripts/run_repeated_agent_benchmark.py --tasks "$(RESEARCH_FIXTURE_TASKS)" --repository-root "$(RESEARCH_FIXTURE_ROOT)" --baseline-command "$(PYTHON) scripts/run_ollama_benchmark_agent.py --mode baseline --model qwen2.5-coder:1.5b --repository-root $(RESEARCH_FIXTURE_ROOT)" --shielded-command "$(PYTHON) scripts/run_ollama_benchmark_agent.py --mode shielded --model qwen2.5-coder:1.5b --repository-root $(RESEARCH_FIXTURE_ROOT)" --runs "$(RESEARCH_RUNS)" --output "$(RESEARCH_FIXTURE_QWEN_OUTPUT)" --require-healthy
 
 research-report:
 	$(PYTHON) scripts/render_research_report.py --input "$(REPORT_INPUT)" --output "$(REPORT_OUTPUT)" --title "$(REPORT_TITLE)"

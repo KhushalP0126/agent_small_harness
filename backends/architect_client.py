@@ -83,6 +83,10 @@ class ContractArchitectError(RuntimeError):
         self.code = code
 
 
+class ArchitectEmptyResponseError(RuntimeError):
+    """A successful HTTP response without a usable model completion."""
+
+
 def _dotenv_values(path: str) -> dict[str, str]:
     env_path = Path(path)
     if not env_path.exists():
@@ -280,13 +284,7 @@ class ArchitectApiClient:
             "stream": False,
         }
         body = self._request_with_retries(payload, profile)
-
-        try:
-            content = body["choices"][0]["message"]["content"]
-        except (KeyError, IndexError, TypeError):
-            content = body.get("choices", [{}])[0].get("text", "") if isinstance(body.get("choices"), list) else ""
-        if not isinstance(content, str) or not content.strip():
-            raise RuntimeError("Architect API returned an empty response.")
+        content = _response_content(body)
         self.last_usage = _usage_from_response(body, profile.model, prompt, content)
         return content
 
@@ -302,7 +300,23 @@ class ArchitectApiClient:
                     timeout=profile.timeout_seconds,
                 )
                 response.raise_for_status()
-                return response.json()
+                body = response.json()
+                _response_content(body)
+                return body
+            except ArchitectEmptyResponseError as exc:
+                last_error = exc
+                if attempt >= attempts:
+                    raise RuntimeError(
+                        f"Architect API returned an empty response after {attempts} "
+                        f"attempt{'s' if attempts != 1 else ''}."
+                    ) from exc
+            except json.JSONDecodeError as exc:
+                last_error = exc
+                if attempt >= attempts:
+                    raise RuntimeError(
+                        f"Architect API returned a malformed response after {attempts} "
+                        f"attempt{'s' if attempts != 1 else ''}."
+                    ) from exc
             except httpx.TimeoutException as exc:
                 last_error = exc
                 if attempt >= attempts:
@@ -328,6 +342,22 @@ class ArchitectApiClient:
             self._sleep(_retry_delay(self.config.retry_backoff_seconds, attempt))
 
         raise RuntimeError(f"Architect API request failed after {attempts} attempts: {last_error}")
+
+
+def _response_content(body: Any) -> str:
+    """Return one usable completion or make a retryable API-health failure explicit."""
+
+    if not isinstance(body, dict):
+        raise ArchitectEmptyResponseError("Architect API response was not a JSON object")
+    choices = body.get("choices")
+    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+        raise ArchitectEmptyResponseError("Architect API response contained no choices")
+    choice = choices[0]
+    message = choice.get("message")
+    content = message.get("content") if isinstance(message, dict) else choice.get("text", "")
+    if not isinstance(content, str) or not content.strip():
+        raise ArchitectEmptyResponseError("Architect API returned an empty response")
+    return content
 
 
 class ArchitectModelSupplier:

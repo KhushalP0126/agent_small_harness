@@ -25,6 +25,11 @@ def main() -> int:
     parser.add_argument("--runs", type=int, default=3)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--repository-root", type=Path, default=ROOT)
+    parser.add_argument(
+        "--require-healthy",
+        action="store_true",
+        help="write raw evidence but return nonzero when provider failures invalidate comparison aggregation",
+    )
     args = parser.parse_args()
 
     report = run_repeated_paired_benchmark(
@@ -50,6 +55,12 @@ def main() -> int:
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(json.dumps(payload["summary"], indent=2, sort_keys=True))
+    if args.require_healthy and not payload["health"]["comparison_eligible"]:
+        print(
+            "benchmark comparison rejected: " + payload["health"]["reason"],
+            file=sys.stderr,
+        )
+        return 2
     return 0
 
 

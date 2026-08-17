@@ -3,8 +3,9 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -16,6 +17,8 @@ if TYPE_CHECKING:
 
 DEFAULT_OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434")
 DEFAULT_OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5-coder:1.5b")
+DEFAULT_OLLAMA_STARTUP_RETRY_ATTEMPTS = 3
+DEFAULT_OLLAMA_STARTUP_RETRY_BACKOFF_SECONDS = 1.0
 FENCED_CODE_RE = re.compile(r"```(?:[a-zA-Z0-9_+#.-]+)?\s*(.*?)```", re.IGNORECASE | re.DOTALL)
 # A stray bare language-tag line (e.g. "cpp") some models emit without backticks.
 LANGUAGE_TAG_LINE_RE = re.compile(r"^[ \t]*(?:python|py|cpp|c\+\+|cxx|cc|c)[ \t]*$", re.IGNORECASE)
@@ -34,10 +37,18 @@ class OllamaClient:
         base_url: str = DEFAULT_OLLAMA_URL,
         timeout_seconds: int = 120,
         keep_alive: str | None = None,
+        startup_retry_attempts: int = DEFAULT_OLLAMA_STARTUP_RETRY_ATTEMPTS,
+        startup_retry_backoff_seconds: float = DEFAULT_OLLAMA_STARTUP_RETRY_BACKOFF_SECONDS,
+        opener: Callable[..., Any] | None = None,
+        sleep: Callable[[float], None] | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.timeout_seconds = timeout_seconds
         self.keep_alive = keep_alive
+        self.startup_retry_attempts = max(1, startup_retry_attempts)
+        self.startup_retry_backoff_seconds = max(0.0, startup_retry_backoff_seconds)
+        self._opener = opener or urlopen
+        self._sleep = sleep or time.sleep
         self.last_usage: dict[str, int] = {}
 
     def generate(
@@ -68,14 +79,7 @@ class OllamaClient:
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        try:
-            with urlopen(request, timeout=self.timeout_seconds) as response:
-                body = json.loads(response.read().decode("utf-8"))
-        except HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"Ollama generate failed with HTTP {exc.code}: {detail}") from exc
-        except URLError as exc:
-            raise RuntimeError(f"Ollama is not reachable at {self.base_url}: {exc.reason}") from exc
+        body = self._request_with_startup_retry(request)
         result = body.get("response", "")
         if not isinstance(result, str) or not result.strip():
             raise RuntimeError("Ollama returned an empty response.")
@@ -87,6 +91,27 @@ class OllamaClient:
             "total_tokens": prompt_tokens + completion_tokens,
         }
         return result
+
+    def _request_with_startup_retry(self, request: Request) -> dict[str, Any]:
+        for attempt in range(1, self.startup_retry_attempts + 1):
+            try:
+                with self._opener(request, timeout=self.timeout_seconds) as response:
+                    body = json.loads(response.read().decode("utf-8"))
+                if not isinstance(body, dict):
+                    raise RuntimeError("Ollama returned a non-object response.")
+                return body
+            except HTTPError as exc:
+                detail = exc.read().decode("utf-8", errors="replace")
+                retryable_startup_failure = (
+                    exc.code in {500, 503}
+                    and "timed out waiting for llama-server to start" in detail.casefold()
+                )
+                if not retryable_startup_failure or attempt >= self.startup_retry_attempts:
+                    raise RuntimeError(f"Ollama generate failed with HTTP {exc.code}: {detail}") from exc
+                self._sleep(self.startup_retry_backoff_seconds * attempt)
+            except URLError as exc:
+                raise RuntimeError(f"Ollama is not reachable at {self.base_url}: {exc.reason}") from exc
+        raise RuntimeError("Ollama startup retry loop ended without a response.")
 
 
 class OllamaModelSupplier:

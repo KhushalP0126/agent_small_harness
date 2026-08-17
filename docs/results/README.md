@@ -11,6 +11,12 @@ The full protocol, repeat-run command, and publication checklist are in
 receipts. Use `make research-report REPORT_INPUT=... REPORT_OUTPUT=...` to
 render a dated Markdown summary without hiding failed task rows.
 
+Repeated benchmark artifacts now include a provider-health gate. Empty API
+completions, provider timeouts/unreachability, and Ollama model-start timeouts
+are recorded separately from task outcomes. If any occur, the raw artifact is
+kept for diagnosis but the run is rejected as a comparison and must not support
+a success-rate or token-efficiency claim.
+
 - `formal-counterexample-repair-2026-08-15.md` — three-repeat Qwen 1.5B
   counterexample-guided repair study over eight Python contracts. The guided
   variant completed 7.67/8 tasks versus 8.00/8 baseline, with 6.73% more mean

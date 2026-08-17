@@ -24,6 +24,21 @@ SUMMARY_METRICS = (
 )
 
 
+# These failures describe the provider or its local serving process, not a
+# candidate's ability to solve a benchmark task.  They must never be averaged
+# into a quality or efficiency comparison.
+_PROVIDER_FAILURES: tuple[tuple[str, str], ...] = (
+    ("architect_empty_response", "architect api returned an empty response"),
+    ("architect_malformed_response", "architect api returned a malformed response"),
+    ("architect_timeout", "architect api timed out"),
+    ("architect_unreachable", "architect api is not reachable"),
+    ("architect_http_5xx", "architect api failed with http 5"),
+    ("ollama_startup_timeout", "timed out waiting for llama-server to start"),
+    ("ollama_unreachable", "ollama is not reachable"),
+    ("ollama_http_5xx", "ollama generate failed with http 5"),
+)
+
+
 def run_repeated_paired_benchmark(
     tasks: Sequence[BenchmarkTask],
     baseline_runner: AgentRunner,
@@ -39,12 +54,17 @@ def run_repeated_paired_benchmark(
         run_paired_benchmark(list(tasks), baseline_runner, shielded_runner)
         for _ in range(runs)
     ]
+    health = benchmark_health(reports)
     return {
-        "schema_version": 2,
+        "schema_version": 3,
         "task_count": len(tasks),
         "run_count": runs,
         "runs": reports,
+        "health": health,
+        # Preserve a complete operational summary for diagnostics, but only
+        # expose it as a comparison when every repeated run is provider-healthy.
         "summary": summarize_reports(reports),
+        "comparison_summary": summarize_reports(reports) if health["comparison_eligible"] else None,
     }
 
 
@@ -59,6 +79,64 @@ def summarize_reports(reports: Sequence[dict[str, Any]]) -> dict[str, dict[str, 
         for metric, value in derived.items():
             values[metric].append(value)
     return {metric: _distribution(series) for metric, series in values.items()}
+
+
+def benchmark_health(reports: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    """Classify provider/infrastructure failures before comparison aggregation."""
+
+    run_statuses: list[dict[str, Any]] = []
+    all_failures: list[dict[str, Any]] = []
+    for run_number, report in enumerate(reports, start=1):
+        failures = _provider_failures(report, run_number)
+        all_failures.extend(failures)
+        run_statuses.append(
+            {
+                "run": run_number,
+                "eligible": not failures,
+                "provider_failures": failures,
+            }
+        )
+    return {
+        "comparison_eligible": not all_failures,
+        "reason": (
+            "all provider calls produced usable responses"
+            if not all_failures
+            else "provider or local-model infrastructure failures were recorded; comparison aggregation is rejected"
+        ),
+        "provider_failure_count": len(all_failures),
+        "runs": run_statuses,
+    }
+
+
+def _provider_failures(report: dict[str, Any], run_number: int) -> list[dict[str, Any]]:
+    failures: list[dict[str, Any]] = []
+    for result in report.get("results", []):
+        task = str(result.get("task", {}).get("task_id", "unknown"))
+        for variant in ("baseline", "shielded"):
+            outcome = result.get(variant, {})
+            if not isinstance(outcome, dict) or outcome.get("success", False):
+                continue
+            error = str(outcome.get("error") or "")
+            failure_kind = _provider_failure_kind(error)
+            if failure_kind:
+                failures.append(
+                    {
+                        "run": run_number,
+                        "task_id": task,
+                        "variant": variant,
+                        "kind": failure_kind,
+                        "error": error,
+                    }
+                )
+    return failures
+
+
+def _provider_failure_kind(error: str) -> str:
+    normalized = error.casefold()
+    for kind, marker in _PROVIDER_FAILURES:
+        if marker in normalized:
+            return kind
+    return ""
 
 
 def _report_metrics(report: dict[str, Any]) -> dict[str, float | int]:

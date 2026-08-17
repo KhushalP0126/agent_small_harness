@@ -16,7 +16,9 @@ if str(ROOT) not in sys.path:
 
 def render_report(payload: dict[str, Any], *, title: str) -> str:
     _validate(payload)
-    summary = payload["summary"]
+    health = payload.get("health", {"comparison_eligible": True})
+    comparison_eligible = bool(health.get("comparison_eligible", True)) if isinstance(health, dict) else True
+    summary = payload["comparison_summary"] if comparison_eligible and payload.get("comparison_summary") else payload["summary"]
     rows = [
         ("Successful tasks", "baseline_successes", "shielded_successes"),
         ("Model tokens", "baseline_tokens", "shielded_tokens"),
@@ -43,7 +45,11 @@ def render_report(payload: dict[str, Any], *, title: str) -> str:
         *_variant_lines(payload.get("variant_metadata", {})),
         *_scope_lines(payload.get("variant_metadata", {})),
         "",
-        "## Descriptive summary",
+        "## Provider health gate",
+        "",
+        _health_line(health),
+        "",
+        "## " + ("Descriptive comparison summary" if comparison_eligible else "Operational summary (comparison rejected)"),
         "",
         "| Measure | Baseline mean ± SD | Shielded mean ± SD | Difference |",
         "| --- | ---: | ---: | ---: |",
@@ -63,7 +69,7 @@ def render_report(payload: dict[str, Any], *, title: str) -> str:
             "",
             "## Interpretation",
             "",
-            _interpretation(token_delta),
+            _interpretation(token_delta, comparison_eligible),
             "",
             "## Failures retained",
             "",
@@ -143,7 +149,19 @@ def _scope_lines(variants: Any) -> list[str]:
     return [f"- Scope: `{scope}`" for scope in sorted(scopes)]
 
 
-def _interpretation(token_delta: float) -> str:
+def _health_line(health: Any) -> str:
+    if not isinstance(health, dict):
+        return "- Provider health metadata was not supplied; this legacy artifact is rendered without a gate decision."
+    if health.get("comparison_eligible", False):
+        return "- **Eligible:** every recorded provider response was usable; aggregate comparison is allowed."
+    count = int(health.get("provider_failure_count", 0) or 0)
+    reason = str(health.get("reason") or "provider failure")
+    return f"- **Rejected:** {reason} (`{count}` provider failure(s)); task outcomes are retained only as operational diagnostics."
+
+
+def _interpretation(token_delta: float, comparison_eligible: bool) -> str:
+    if not comparison_eligible:
+        return "The provider health gate rejected this comparison. These totals do not support a quality, success-rate, or token-efficiency claim."
     if token_delta > 0:
         return "The shielded loop used fewer mean model tokens in this recorded experiment; this is descriptive evidence, not a general efficiency claim."
     if token_delta < 0:
