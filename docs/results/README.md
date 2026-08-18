@@ -4,6 +4,9 @@ This directory holds published, reproducible experiment reports. They are
 evidence, not product claims: each report records its model, task corpus,
 commands, dates, and failures.
 
+Keep raw JSON beside its dated report under `raw/`; do not use an unhealthy
+provider run as a quality or efficiency comparison.
+
 The full protocol, repeat-run command, and publication checklist are in
 [`../RESEARCH.md`](../RESEARCH.md).
 

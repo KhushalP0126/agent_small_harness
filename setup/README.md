@@ -1,4 +1,7 @@
-# Setup
+# Setup guide
+
+This directory intentionally contains documentation only. Run setup from the
+repository root through the Makefile; there is no separate shell installer.
 
 ## Fast path
 

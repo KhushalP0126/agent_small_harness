@@ -37,6 +37,10 @@ make start REPO_ROOT=.
 Use `make check` for deterministic Python and Rust validation. Model calls are
 always opt-in; the default local profile is `qwen2.5-coder:1.5b`.
 
+`setup/` contains setup documentation only; the executable setup path is
+always `make setup`. `TUI/` is a retained legacy Textual fallback, while
+`rust_tui/` is the maintained default interface.
+
 ## Core Idea
 
 The model writes code, but the harness decides whether the code is acceptable.
@@ -59,6 +63,37 @@ No model output is trusted by default.
 
 For the maintained Mermaid source, see
 [`docs/architecture.mmd`](docs/architecture.mmd).
+
+## Repository File Guide
+
+Start here when you need to find a specific responsibility. The table covers
+every maintained repository surface; the detailed, file-by-file index is in
+[`docs/FILE_INDEX.md`](docs/FILE_INDEX.md). Generated caches, local `.env`
+files, and untracked experiment output are intentionally not part of either
+index.
+
+| Location | Files | Responsibility |
+| --- | --- | --- |
+| Root | `README.md`, `ARCHITECTURE.md`, `REPORT.md`, `CHANGELOG.md` | Project entry point, system design, current research summary, and change history. |
+| Root configuration | `Makefile`, `config.yaml`, `pyproject.toml`, `requirements*.txt`, `.env.example`, `Dockerfile` | Reproducible setup, dependency sets, runtime defaults, environment template, and container build. |
+| `rust_tui/` | `Cargo.toml`, `src/main.rs`, `src/protocol.rs`, `src/mermaid_view.rs` | Default Ratatui client, JSONL protocol, and terminal-safe Mermaid/image rendering. |
+| `agents/` | `generation_controller.py`, `plan_mode.py`, `tool_calling_agent.py`, `routing_policy.py`, plus helpers | Orchestration: plan intake, drafting, retries, tool use, artifacts, history, and route decisions. |
+| `backends/` | `architect_client.py`, `ollama_client.py` | DeepSeek-compatible architect API and local Ollama model clients with usage telemetry. |
+| `engines/` | `*_engine.py`, `import_*.py`, `library_registry.py`, `treesitter_*.py` | Deterministic static, structural, import-risk, compilation, and complexity checks. |
+| `validation/` | `behavior.py`, `formal.py`, `formal_repair_router.py`, `import_graph.py`, `policy.py` | Sandboxed behavior tests, CrossHair checks, counterexample routing, import-symbol checks, and acceptance policy. |
+| `harness_kernel/` | `tui_bridge.py`, `tool_*.py`, `*_sandbox.py`, `e2e_benchmark.py`, `research_reporting.py` | Shared process bridge, guarded repository tools, isolated execution, experiments, provenance, and reports. |
+| `prompt/` | `*_builder.py`, `budget.py`, `summarizer.py`, `constraint_types.py` | Compact prompts, contract packets, retry instructions, context budgets, and summaries. |
+| `routing/` | `bridge.py`, `tools.py` | Small public-facing adapters for repository tooling and bridge integration. |
+| `api/` | `app.py` | Optional FastAPI job, run, and health surface. |
+| `scripts/` | `run_*.py`, `render_*.py`, `record_live_session.py`, `review_run.py` | Explicit CLI entry points for benchmarks, reports, sandboxing, artifacts, and maintenance. |
+| `data/` | `*_tasks.json`, `*_cases.json`, `library_registry.json`, `snippets/` | Versioned benchmark corpora, validation fixtures, risk categories, registries, and language samples. |
+| `docs/` | `RESEARCH.md`, `WORKSTREAMS.md`, `results/`, `reference/` | Research protocol, work tracking, rendered results/raw evidence, and historical design references. |
+| `tests/` | `test_*.py`, `fixtures/`, `adversarial/`, `*_ladders/` | Unit, integration, safety, language, benchmark, and TUI regression coverage. |
+| `examples/specs/` | `snake_game_spec.md`, `pong_game_spec.md` | Example structured-spec inputs; they are fixtures, not product-specific logic. |
+| `TUI/` | `app.py`, `data_source.py`, `mermaid_renderer.py` | Legacy Textual artifact-review interface; Rust TUI is the default client. |
+
+For a task-oriented view, use [`ARCHITECTURE.md`](ARCHITECTURE.md); for an
+exact path-to-purpose lookup, use [`docs/FILE_INDEX.md`](docs/FILE_INDEX.md).
 
 ## Current Scope
 

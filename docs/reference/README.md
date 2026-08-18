@@ -11,3 +11,6 @@ Historical benchmark reports and experiment results live under
 [`docs/results/`](../results/). These reference documents are kept together so
 the repository root can stay focused on executable entrypoints and standard
 package metadata.
+
+Use [`../FILE_INDEX.md`](../FILE_INDEX.md) when you need a source-file owner
+rather than a design-level explanation.

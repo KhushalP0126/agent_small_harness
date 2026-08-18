@@ -1,7 +1,9 @@
 # Rust TUI
 
 This is the default terminal interface. Python remains the source of truth for
-the harness, model calls, validation engines, and artifacts.
+the harness, model calls, validation engines, and artifacts. The TUI consumes
+the bridge's JSONL events, renders normal assistant Markdown (including tables)
+in the stream, and can open the repository README with `/readme`.
 
 The `src/mermaid_view.rs` module owns the image-processing path: Mermaid text
 is rendered to SVG, rasterized to PNG pixels, and emitted through Kitty,

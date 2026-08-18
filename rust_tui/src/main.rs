@@ -47,6 +47,7 @@ enum AppMode {
     DraftingSpec,
     SpecReview { spec_text: String },
     ResearchReview { text: String, path: String },
+    ReadmeView { text: String, path: String },
     ActionApproval { request: String, reason: String },
     ToolDiffReview { path: String, diff: String },
     Executing,
@@ -70,6 +71,7 @@ impl AppMode {
             Self::DraftingSpec => "drafting spec",
             Self::SpecReview { .. } => "spec review",
             Self::ResearchReview { .. } => "research review",
+            Self::ReadmeView { .. } => "README",
             Self::ActionApproval { .. } => "approval required",
             Self::ToolDiffReview { .. } => "tool diff review",
             Self::Executing => "executing",
@@ -878,7 +880,7 @@ async fn run_loop(
                             {
                                 let text = std::mem::take(&mut state.prompt);
                                 send_prompt_command(child_stdin, &mut state, text, repo_root).await?;
-                                state.prompt_active = true;
+                                state.prompt_active = !matches!(state.mode, AppMode::ReadmeView { .. });
                             }
                             KeyCode::Enter => {}
                             KeyCode::Char(digit @ '1'..='5')
@@ -1039,6 +1041,26 @@ async fn run_loop(
                             state.prompt_active = true;
                             state.logs.push("research panel closed".into());
                         }
+                        KeyCode::Esc if matches!(state.mode, AppMode::ReadmeView { .. }) => {
+                            state.mode = AppMode::Chat;
+                            state.prompt_active = true;
+                            state.logs.push("README closed".into());
+                        }
+                        KeyCode::Up if matches!(state.mode, AppMode::ReadmeView { .. }) => {
+                            state.inspector_scroll = state.inspector_scroll.saturating_sub(1);
+                        }
+                        KeyCode::Down if matches!(state.mode, AppMode::ReadmeView { .. }) => {
+                            state.inspector_scroll = state.inspector_scroll.saturating_add(1);
+                        }
+                        KeyCode::PageUp if matches!(state.mode, AppMode::ReadmeView { .. }) => {
+                            state.inspector_scroll = state.inspector_scroll.saturating_sub(20);
+                        }
+                        KeyCode::PageDown if matches!(state.mode, AppMode::ReadmeView { .. }) => {
+                            state.inspector_scroll = state.inspector_scroll.saturating_add(20);
+                        }
+                        KeyCode::Home if matches!(state.mode, AppMode::ReadmeView { .. }) => {
+                            state.inspector_scroll = 0;
+                        }
                         KeyCode::Up if state.history_visible => {
                             state.history_selected = state.history_selected.saturating_sub(1);
                             state.history_detail = None;
@@ -1128,9 +1150,22 @@ async fn send_prompt_command(
         });
     match command {
         "/help" => state.logs.push(
-            "commands: /map /open /check <path> /history /research /spec /model /remember <note> /mention <path> /tools <task>"
+            "commands: /readme /map /open /check <path> /history /research /spec /model /remember <note> /mention <path> /tools <task>"
                 .into(),
         ),
+        "/readme" if argument.is_empty() => match fs::read_to_string(repo_root.join("README.md")) {
+            Ok(text) => {
+                state.mode = AppMode::ReadmeView {
+                    text,
+                    path: "README.md".into(),
+                };
+                state.inspector_scroll = 0;
+                state.prompt_active = false;
+                state.logs.push("opened README.md".into());
+            }
+            Err(error) => state.logs.push(format!("[error] could not read README.md: {error}")),
+        },
+        "/readme" => state.logs.push("usage: /readme".into()),
         "/map" => {
             state.repo_mode = "diagram".into();
             send_command(
@@ -1265,6 +1300,10 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState) {
 
     if let AppMode::ResearchReview { text, path } = &state.mode {
         draw_research_review(frame, state, text, path, content[1]);
+    }
+
+    if let AppMode::ReadmeView { text, path } = &state.mode {
+        draw_readme_view(frame, state, text, path);
     }
 
     if state.mode == AppMode::Questionnaire {
@@ -1503,21 +1542,19 @@ fn stream_lines(state: &AppState) -> Vec<Line<'static>> {
     } else {
         "ready".into()
     };
-    let mut lines = vec![
-        Line::from(vec![
-            Span::styled(
-                format!("codex {marker}"),
-                Style::default()
-                    .fg(theme_cyan())
-                    .add_modifier(Modifier::BOLD),
-            ),
-            Span::styled(
-                format!(" · {status} · stream",),
-                Style::default().fg(theme_muted()),
-            ),
-        ]),
-        stream_divider(),
+    let header = vec![
+        Span::styled(
+            format!("codex {marker}"),
+            Style::default()
+                .fg(theme_cyan())
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            format!(" · {status} · stream"),
+            Style::default().fg(theme_muted()),
+        ),
     ];
+    let mut lines = vec![Line::from(header), stream_divider()];
     if state.logs.is_empty() {
         lines.push(Line::styled(
             "• ready",
@@ -1685,12 +1722,59 @@ fn stream_log_lines(line: &str) -> Vec<Line<'static>> {
         };
     let mut rendered = Vec::new();
     let mut in_code_block = false;
-    for (index, content_line) in content.lines().enumerate() {
+    let mut markdown_block = false;
+    for content_line in content.lines() {
         let trimmed = content_line.trim_start();
         let is_fence = trimmed.starts_with("```");
-        let line_color = if content_line.starts_with('+') && !content_line.starts_with("+++") {
+        if is_fence {
+            let language = trimmed.trim_start_matches('`').trim().to_ascii_lowercase();
+            let was_markdown_block = markdown_block;
+            if !in_code_block {
+                in_code_block = true;
+                markdown_block = matches!(language.as_str(), "" | "md" | "markdown" | "text");
+            } else {
+                in_code_block = false;
+                markdown_block = false;
+            }
+            // Markdown tables are commonly returned inside a ```markdown fence.
+            // Treat that as presentation markup, not a literal source-code block.
+            if was_markdown_block
+                || markdown_block
+                || language == "markdown"
+                || language == "md"
+                || language == "text"
+            {
+                continue;
+            }
+        }
+        let markdown_presentation = !in_code_block || markdown_block;
+        let heading_level = trimmed
+            .chars()
+            .take_while(|character| *character == '#')
+            .count();
+        let heading = markdown_presentation
+            && heading_level > 0
+            && trimmed.as_bytes().get(heading_level) == Some(&b' ');
+        let bullet =
+            markdown_presentation && (trimmed.starts_with("- ") || trimmed.starts_with("* "));
+        let quote = markdown_presentation && trimmed.starts_with("> ");
+        let table_row = markdown_presentation && trimmed.starts_with('|') && trimmed.ends_with('|');
+        let table_rule = markdown_presentation && is_markdown_table_separator(trimmed);
+        let line_color = if table_rule {
+            theme_border()
+        } else if heading {
+            theme_assistant()
+        } else if bullet || quote {
+            theme_foreground()
+        } else if label == "diff"
+            && content_line.starts_with('+')
+            && !content_line.starts_with("+++")
+        {
             Color::LightGreen
-        } else if content_line.starts_with('-') && !content_line.starts_with("---") {
+        } else if label == "diff"
+            && content_line.starts_with('-')
+            && !content_line.starts_with("---")
+        {
             Color::LightRed
         } else if content_line.starts_with("@@") {
             Color::Yellow
@@ -1703,9 +1787,9 @@ fn stream_log_lines(line: &str) -> Vec<Line<'static>> {
         } else {
             content_color
         };
-        let marker = if index == 0 { "• " } else { "└ " };
+        let marker = if rendered.is_empty() { "• " } else { "└ " };
         let mut spans = vec![Span::styled(marker, Style::default().fg(label_color))];
-        if index == 0 {
+        if rendered.is_empty() {
             spans.push(Span::styled(
                 format!("{label}  "),
                 Style::default()
@@ -1713,27 +1797,45 @@ fn stream_log_lines(line: &str) -> Vec<Line<'static>> {
                     .add_modifier(Modifier::BOLD),
             ));
         }
-        let style =
-            if label == "diff" && content_line.starts_with('+') && !content_line.starts_with("+++")
-            {
-                Style::default()
-                    .fg(Color::LightGreen)
-                    .bg(Color::Rgb(16, 57, 37))
-            } else if label == "diff"
-                && content_line.starts_with('-')
-                && !content_line.starts_with("---")
-            {
-                Style::default()
-                    .fg(Color::LightRed)
-                    .bg(Color::Rgb(74, 29, 35))
-            } else {
-                Style::default().fg(line_color)
-            };
-        spans.push(Span::styled(content_line.to_owned(), style));
+        let style = if heading {
+            Style::default().fg(line_color).add_modifier(Modifier::BOLD)
+        } else if label == "diff"
+            && content_line.starts_with('+')
+            && !content_line.starts_with("+++")
+        {
+            Style::default()
+                .fg(Color::LightGreen)
+                .bg(Color::Rgb(16, 57, 37))
+        } else if label == "diff"
+            && content_line.starts_with('-')
+            && !content_line.starts_with("---")
+        {
+            Style::default()
+                .fg(Color::LightRed)
+                .bg(Color::Rgb(74, 29, 35))
+        } else {
+            Style::default().fg(line_color)
+        };
+        let display = if heading {
+            trimmed[heading_level + 1..].trim().to_owned()
+        } else if bullet {
+            format!("• {}", trimmed[2..].trim())
+        } else if quote {
+            format!("│ {}", trimmed[2..].trim())
+        } else if table_rule {
+            "─".repeat(60)
+        } else if table_row {
+            trimmed
+                .trim_matches('|')
+                .split('|')
+                .map(str::trim)
+                .collect::<Vec<_>>()
+                .join("  │  ")
+        } else {
+            content_line.to_owned()
+        };
+        spans.push(Span::styled(display, style));
         rendered.push(Line::from(spans));
-        if is_fence {
-            in_code_block = !in_code_block;
-        }
     }
     if rendered.is_empty() {
         rendered.push(Line::from(vec![
@@ -1943,6 +2045,126 @@ fn draw_research_review(
     );
 }
 
+fn draw_readme_view(frame: &mut ratatui::Frame, state: &AppState, text: &str, path: &str) {
+    let area = centered_rect(92, 90, frame.area());
+    frame.render_widget(Clear, area);
+    frame.render_widget(
+        pane_block(
+            format!(" README · {path} · Up/Down scroll · Esc close "),
+            true,
+        ),
+        area,
+    );
+    let inner = Rect {
+        x: area.x + 1,
+        y: area.y + 1,
+        width: area.width.saturating_sub(2),
+        height: area.height.saturating_sub(2),
+    };
+    frame.render_widget(
+        Paragraph::new(Text::from(markdown_lines(text)))
+            .wrap(Wrap { trim: false })
+            .scroll((state.inspector_scroll.min(u16::MAX as usize) as u16, 0)),
+        inner,
+    );
+}
+
+/// Small dependency-free Markdown renderer for repository documentation.
+/// It intentionally handles the README constructs that matter in a terminal
+/// (headings, lists, quotes, tables, rules, and fenced code) rather than
+/// exposing raw Markdown punctuation to the user.
+fn markdown_lines(source: &str) -> Vec<Line<'static>> {
+    let mut lines = Vec::new();
+    let mut in_code_block = false;
+    for raw in source.lines() {
+        let trimmed = raw.trim();
+        if trimmed.starts_with("```") {
+            in_code_block = !in_code_block;
+            let language = trimmed.trim_start_matches('`').trim();
+            lines.push(Line::styled(
+                if in_code_block {
+                    format!("┌ code {}", language)
+                } else {
+                    "└".into()
+                },
+                Style::default().fg(theme_muted()),
+            ));
+            continue;
+        }
+        if in_code_block {
+            lines.push(Line::styled(
+                raw.to_owned(),
+                Style::default().fg(Color::LightBlue),
+            ));
+            continue;
+        }
+        let heading_level = trimmed
+            .chars()
+            .take_while(|character| *character == '#')
+            .count();
+        if heading_level > 0 && trimmed.as_bytes().get(heading_level) == Some(&b' ') {
+            let title = trimmed[heading_level + 1..].trim();
+            lines.push(Line::styled(
+                title.to_owned(),
+                Style::default()
+                    .fg(if heading_level == 1 {
+                        theme_cyan()
+                    } else {
+                        theme_assistant()
+                    })
+                    .add_modifier(Modifier::BOLD),
+            ));
+        } else if trimmed == "---" || trimmed == "***" || trimmed == "___" {
+            lines.push(Line::styled(
+                "─".repeat(72),
+                Style::default().fg(theme_border()),
+            ));
+        } else if let Some(item) = trimmed.strip_prefix("> ") {
+            lines.push(Line::from(vec![
+                Span::styled("│ ", Style::default().fg(theme_muted())),
+                Span::styled(item.to_owned(), Style::default().fg(theme_foreground())),
+            ]));
+        } else if let Some(item) = trimmed
+            .strip_prefix("- ")
+            .or_else(|| trimmed.strip_prefix("* "))
+        {
+            lines.push(Line::from(vec![
+                Span::styled("• ", Style::default().fg(theme_cyan())),
+                Span::styled(item.to_owned(), Style::default().fg(theme_foreground())),
+            ]));
+        } else if is_markdown_table_separator(trimmed) {
+            lines.push(Line::styled(
+                "─".repeat(72),
+                Style::default().fg(theme_border()),
+            ));
+        } else if trimmed.starts_with('|') && trimmed.ends_with('|') {
+            let cells = trimmed
+                .trim_matches('|')
+                .split('|')
+                .map(str::trim)
+                .collect::<Vec<_>>()
+                .join("  │  ");
+            lines.push(Line::styled(cells, Style::default().fg(theme_foreground())));
+        } else if trimmed.is_empty() {
+            lines.push(Line::raw(""));
+        } else {
+            lines.push(Line::styled(
+                raw.to_owned(),
+                Style::default().fg(theme_foreground()),
+            ));
+        }
+    }
+    lines
+}
+
+fn is_markdown_table_separator(line: &str) -> bool {
+    line.starts_with('|')
+        && line.ends_with('|')
+        && line
+            .chars()
+            .all(|character| matches!(character, '|' | '-' | ':' | ' '))
+}
+
 fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
     let vertical = Layout::vertical([
         Constraint::Percentage((100 - percent_y) / 2),
@@ -2025,6 +2247,42 @@ mod tests {
             .last()
             .unwrap()
             .contains("docs/research/example.md"));
+    }
+
+    #[test]
+    fn markdown_renderer_formats_readme_structure_without_raw_fences() {
+        let lines = markdown_lines(
+            "# Title\n\n- item\n\n```rust\nlet x = 1;\n```\n\n| A | B |\n| - | - |\n| 1 | 2 |",
+        );
+        let rendered = lines
+            .iter()
+            .map(|line| {
+                line.spans
+                    .iter()
+                    .map(|span| span.content.as_ref())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>();
+
+        assert!(rendered.iter().any(|line| line == "Title"));
+        assert!(rendered.iter().any(|line| line == "• item"));
+        assert!(rendered.iter().any(|line| line == "┌ code rust"));
+        assert!(rendered.iter().any(|line| line == "A  │  B"));
+        assert!(!rendered.iter().any(|line| line == "```rust"));
+    }
+
+    #[test]
+    fn readme_mode_uses_the_full_screen_view() {
+        let state = AppState {
+            mode: AppMode::ReadmeView {
+                text: "# README".into(),
+                path: "README.md".into(),
+            },
+            ..AppState::default()
+        };
+        assert!(!state.side_inspector_active());
+        assert!(state.main_output_active());
+        assert_eq!(state.mode.label(), "README");
     }
 
     #[test]
@@ -2337,6 +2595,31 @@ mod tests {
             .spans
             .iter()
             .any(|span| span.content.contains("return 0"))));
+    }
+
+    #[test]
+    fn chat_markdown_table_fences_render_as_terminal_columns() {
+        let lines = stream_log_lines(
+            "[assistant] ## Status\n\n- automatic formatting\n\n```markdown\n| Feature | Status |\n| --- | --- |\n| README | Done |\n```",
+        );
+        let rendered = lines
+            .iter()
+            .map(|line| {
+                line.spans
+                    .iter()
+                    .map(|span| span.content.as_ref())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>();
+        assert!(rendered.iter().any(|line| line.contains("Status")));
+        assert!(rendered
+            .iter()
+            .any(|line| line.contains("• automatic formatting")));
+        assert!(rendered
+            .iter()
+            .any(|line| line.contains("Feature  │  Status")));
+        assert!(rendered.iter().any(|line| line.contains("README  │  Done")));
+        assert!(!rendered.iter().any(|line| line.contains("```markdown")));
     }
 
     #[test]

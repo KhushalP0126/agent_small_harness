@@ -8,6 +8,7 @@
 | Reproduce research | [`RESEARCH.md`](RESEARCH.md) |
 | Read design rules | [`reference/`](reference/) |
 | Review evidence | [`results/`](results/) |
+| Find a file | [`FILE_INDEX.md`](FILE_INDEX.md) |
 
 Reference documents describe the current system. Result reports are dated,
 reproducible evidence and are not product claims.
