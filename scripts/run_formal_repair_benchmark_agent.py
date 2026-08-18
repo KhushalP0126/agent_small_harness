@@ -22,6 +22,7 @@ if str(ROOT) not in sys.path:
 from backends.ollama_client import DEFAULT_OLLAMA_MODEL, OllamaGenerationConfig, OllamaModelSupplier
 from prompt.retry_builder import build_small_worker_retry_prompt
 from validation.formal import FormalResult, validate_with_crosshair
+from validation.formal_repair_router import FormalRepairRoute, route_formal_repair
 from validation.types import Violation
 
 
@@ -178,6 +179,29 @@ def _result(
     }
 
 
+def _task_timeout(task_id: str, requested_timeout: float) -> float:
+    """Use a documented verifier budget for the known string-normalization case.
+
+    ``trim_text`` still remains a CrossHair timeout at this budget. Applying
+    the same eight-second budget to every study arm makes that verifier limit
+    explicit in raw evidence without mislabelling a correct candidate as a
+    routed-repair success.
+    """
+
+    if task_id == "formal-trim-text":
+        return max(requested_timeout, 8.0)
+    return requested_timeout
+
+
+def _routed_prompt(source: str, violations: list[Violation]) -> tuple[str, FormalRepairRoute]:
+    route = route_formal_repair(source, violations[0] if violations else None)
+    if route.classified:
+        return build_small_worker_retry_prompt(source, violations, repair_directive=route.directive), route
+    # Unknown failures must not inherit a broad verifier directive.  Preserve
+    # the baseline code-only repair contract while omitting the witness line.
+    return _baseline_prompt(build_small_worker_retry_prompt(source, violations)), route
+
+
 def run_task(
     task: dict[str, Any], *, mode: str, model: str, timeout_seconds: float
 ) -> dict[str, Any]:
@@ -186,7 +210,8 @@ def run_task(
     source = BROKEN_SOURCES.get(task_id)
     if source is None:
         return _result(False, started, error=f"unknown formal benchmark task: {task_id}")
-    formal = validate_with_crosshair(source, timeout_seconds=timeout_seconds)
+    verification_timeout = _task_timeout(task_id, timeout_seconds)
+    formal = validate_with_crosshair(source, timeout_seconds=verification_timeout)
     if formal.skipped:
         return _result(
             False,
@@ -200,15 +225,31 @@ def run_task(
     # an explicit code-only contract. The generic retry prompt is intended for
     # a higher-capacity orchestrator and permits explanatory text, which makes
     # a small local model's benchmark output needlessly ambiguous.
-    prompt = build_small_worker_retry_prompt(source, _formal_violations(formal))
+    violations = _formal_violations(formal)
+    prompt = build_small_worker_retry_prompt(source, violations)
+    route = FormalRepairRoute("not_applicable")
     if mode == "baseline":
         prompt = _baseline_prompt(prompt)
+    elif mode == "no_repair":
+        # The historic baseline preserves its original protocol for published
+        # A/B replication. The new three-arm study needs a true no-formal-
+        # guidance control: still request code repair, but neither the witness
+        # nor a task-specific verifier directive is present.
+        prompt = _baseline_prompt(
+            build_small_worker_retry_prompt(
+                source,
+                violations,
+                repair_directive="Fix the current draft while preserving its required behavior.",
+            )
+        )
     elif mode == "general":
         prompt = _general_formal_prompt(prompt)
+    elif mode == "routed":
+        prompt, route = _routed_prompt(source, violations)
     supplier = OllamaModelSupplier(model=model)
     try:
         repaired = supplier.repair_draft(source, prompt)
-        outcome = validate_with_crosshair(repaired, timeout_seconds=timeout_seconds)
+        outcome = validate_with_crosshair(repaired, timeout_seconds=verification_timeout)
         usage = supplier.telemetry[-1] if supplier.telemetry else {}
         return _result(
             outcome.is_compliant and not outcome.skipped,
@@ -224,8 +265,14 @@ def run_task(
                 "thinking_type": "not_applicable",
                 "reasoning_effort": "not_applicable",
                 "scope": "python-crosshair-only",
-                "counterexample_in_prompt": mode != "baseline",
+                "counterexample_in_prompt": mode not in {"baseline", "no_repair"},
                 "counterexample": formal.issues[0].counterexample if formal.issues else "",
+                "repair_route": {
+                    "signature_id": route.signature_id,
+                    "classified": route.classified,
+                    "rationale": route.rationale,
+                },
+                "verification_timeout_seconds": verification_timeout,
                 "repair_prompt": prompt,
                 "candidate_source": repaired,
                 "pricing_basis": usage.get("pricing_basis", "local_unpriced"),
@@ -240,7 +287,7 @@ def run_task(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--mode", choices=("baseline", "guided", "general"), required=True)
+    parser.add_argument("--mode", choices=("baseline", "no_repair", "guided", "general", "routed"), required=True)
     parser.add_argument("--model", default=DEFAULT_OLLAMA_MODEL)
     parser.add_argument("--timeout", type=float, default=3.0)
     args = parser.parse_args()

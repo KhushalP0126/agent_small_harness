@@ -4,6 +4,7 @@ from harness_kernel.e2e_benchmark import (
     AgentRunMetrics,
     BenchmarkTask,
     run_paired_benchmark,
+    run_three_arm_benchmark,
 )
 
 
@@ -42,3 +43,29 @@ class EndToEndBenchmarkTests(unittest.TestCase):
             report["results"][0]["baseline"]["error"],
             "backend unavailable",
         )
+
+    def test_three_arm_report_keeps_regressions_and_routed_coverage_visible(self) -> None:
+        tasks = [BenchmarkTask("one", "repair", "one"), BenchmarkTask("two", "repair", "two")]
+
+        def baseline(_task):
+            return AgentRunMetrics(True, 2, 2, 0, 0, 0.1)
+
+        def generic(task):
+            return AgentRunMetrics(task.task_id == "one", 3, 3, 0, 0, 0.1)
+
+        def routed(task):
+            return AgentRunMetrics(
+                True,
+                4,
+                4,
+                0,
+                0,
+                0.1,
+                metadata={"repair_route": {"classified": task.task_id == "one"}},
+            )
+
+        report = run_three_arm_benchmark(tasks, baseline, generic, routed)
+        self.assertEqual(report["arms"]["routed"]["successes"], 2)
+        self.assertEqual(report["regressions"]["generic"]["regressed_tasks"], ["two"])
+        self.assertEqual(report["regressions"]["routed"]["rate"], 0.0)
+        self.assertEqual(report["routed_coverage"]["classified_tasks"], 1)

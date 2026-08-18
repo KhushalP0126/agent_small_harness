@@ -3,7 +3,12 @@ from __future__ import annotations
 import unittest
 
 from harness_kernel.e2e_benchmark import AgentRunMetrics, BenchmarkTask
-from harness_kernel.research_reporting import benchmark_health, run_repeated_paired_benchmark, summarize_reports
+from harness_kernel.research_reporting import (
+    benchmark_health,
+    run_repeated_paired_benchmark,
+    run_repeated_three_arm_benchmark,
+    summarize_reports,
+)
 from scripts.render_research_report import _scope_lines, _variant_lines
 
 
@@ -88,6 +93,20 @@ class ResearchReportingTests(unittest.TestCase):
         summary = summarize_reports([report])
         self.assertEqual(summary["baseline_tool_calls"]["mean"], 2)
         self.assertEqual(summary["shielded_duration_seconds"]["mean"], 2.5)
+
+    def test_repeated_three_arm_summary_includes_regression_and_coverage(self) -> None:
+        task = BenchmarkTask("one", "formal", "repair")
+        baseline = AgentRunMetrics(True, 1, 1, 0, 0, 0.1)
+        generic = AgentRunMetrics(False, 1, 1, 0, 0, 0.1, "failed")
+        routed = AgentRunMetrics(
+            True, 1, 1, 0, 0, 0.1,
+            metadata={"repair_route": {"classified": True}},
+        )
+        report = run_repeated_three_arm_benchmark(
+            [task], lambda _task: baseline, lambda _task: generic, lambda _task: routed, runs=2
+        )
+        self.assertEqual(report["summary"]["regressions"]["generic"]["rate"]["mean"], 1.0)
+        self.assertEqual(report["summary"]["routed_coverage"]["rate"]["mean"], 1.0)
 
     def test_renderer_deduplicates_variant_identity_and_surfaces_scope(self) -> None:
         variants = {

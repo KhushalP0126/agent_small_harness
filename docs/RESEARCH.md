@@ -194,6 +194,59 @@ directive. The pre-registered general control was negative; the evidence
 supports diagnosis and narrowly scoped repair per failure pattern, not a
 single prompt rule for every contract.
 
+### Failure-mode-routed repair study (pre-registered)
+
+The next formal study separates three strategies on the same 11-task corpus:
+no counterexample-specific formal guidance, the retained generic verifier directive,
+and a **failure-mode-routed** repair arm. The router is intentionally small
+and independently tested. It matches only transcript-backed signatures:
+
+- `nonnegative_defensive_raise`: a negative witness for `post: _ >= 0`;
+- `order_pair_input_rejection`: a reversed `ordered_pair(left, right)` witness
+  for a returned-pair ordering postcondition;
+- `trim_text_wrong_method`: a `trim_text(...)` witness for a `text.strip()`
+  postcondition.
+
+For a known signature, the routed arm injects that signature's precise,
+diagnosed directive. For every other case it omits the counterexample-specific
+instruction instead of falling back to the generic directive. `formal-trim-text`
+remains a documented verifier-limit case: the correct `return text.strip()`
+candidate also timed out at an eight-second CrossHair budget in an isolated
+check. It therefore receives a narrow directive for transcript analysis, but
+it must not be used to claim formal-verifier success until a reliable verifier
+or separately scoped semantics check is added.
+
+```bash
+make research-formal-repair-routed RESEARCH_RUNS=3 MODEL=qwen2.5-coder:1.5b
+make research-report \
+  REPORT_INPUT=docs/results/raw/formal-counterexample-repair-routed-YYYY-MM-DD.json \
+  REPORT_OUTPUT=docs/results/formal-counterexample-repair-routed-YYYY-MM-DD.md \
+  REPORT_TITLE="Failure-mode-routed formal repair"
+```
+
+The three-arm raw schema reports completion, tokens, wall-clock time,
+**regression rate** (a baseline pass changed into a repair-arm failure), and
+routed-signature coverage. No effectiveness claim is made until this command
+is run and its raw JSON plus rendered report are committed.
+
+### First three-arm observation (2026-08-17)
+
+The completed three-repeat run is recorded in
+[`results/formal-counterexample-repair-routed-2026-08-17.md`](results/formal-counterexample-repair-routed-2026-08-17.md).
+On the same 11-task Python/CrossHair corpus, the no-formal-guidance arm
+completed 8.67 ± 1.15 tasks, the generic-directive arm completed 6.33 ± 0.58,
+and the failure-mode-routed arm completed 10.00 ± 0.00. The generic arm turned
+an average 25.83% of baseline passes into failures; the routed arm recorded no
+such regressions. Its narrow taxonomy covered 3/11 task shapes (27.27%), and
+the remaining shapes deliberately received no generic verifier directive.
+
+Routed repair used 2,718.67 mean tokens versus 2,495.67 for the no-guidance
+arm (+8.93%). This is a reliability result with a retained token premium, not
+a token-saving claim. The one unresolved task is `formal-trim-text`: a correct
+`text.strip()` candidate can still exceed CrossHair's eight-second condition
+budget, so the 10/11 score must not be described as formal-verifier completeness.
+The raw JSON preserves that timeout separately from concrete contract failures.
+
 ## Cost-aware route evidence
 
 API calls can report an estimated dollar cost; local Ollama calls are instead

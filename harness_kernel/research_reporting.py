@@ -7,7 +7,7 @@ import statistics
 from collections.abc import Sequence
 from typing import Any
 
-from .e2e_benchmark import AgentRunner, BenchmarkTask, run_paired_benchmark
+from .e2e_benchmark import AgentRunner, BenchmarkTask, run_paired_benchmark, run_three_arm_benchmark
 
 
 SUMMARY_METRICS = (
@@ -21,6 +21,8 @@ SUMMARY_METRICS = (
     "shielded_tool_calls",
     "baseline_duration_seconds",
     "shielded_duration_seconds",
+    "shielded_regression_count",
+    "shielded_regression_rate",
 )
 
 
@@ -68,6 +70,35 @@ def run_repeated_paired_benchmark(
     }
 
 
+def run_repeated_three_arm_benchmark(
+    tasks: Sequence[BenchmarkTask],
+    baseline_runner: AgentRunner,
+    generic_runner: AgentRunner,
+    routed_runner: AgentRunner,
+    *,
+    runs: int,
+) -> dict[str, Any]:
+    """Repeat a fixed no-formal-guidance/generic/routed formal-repair study."""
+
+    if runs < 2:
+        raise ValueError("runs must be at least 2 to report a repeated benchmark")
+    reports = [
+        run_three_arm_benchmark(list(tasks), baseline_runner, generic_runner, routed_runner)
+        for _ in range(runs)
+    ]
+    health = benchmark_health(reports)
+    return {
+        "schema_version": 4,
+        "task_count": len(tasks),
+        "run_count": runs,
+        "arms": ("baseline", "generic", "routed"),
+        "runs": reports,
+        "health": health,
+        "summary": summarize_three_arm_reports(reports),
+        "comparison_summary": summarize_three_arm_reports(reports) if health["comparison_eligible"] else None,
+    }
+
+
 def summarize_reports(reports: Sequence[dict[str, Any]]) -> dict[str, dict[str, float | int]]:
     """Return descriptive statistics while preserving the full raw reports."""
 
@@ -112,7 +143,7 @@ def _provider_failures(report: dict[str, Any], run_number: int) -> list[dict[str
     failures: list[dict[str, Any]] = []
     for result in report.get("results", []):
         task = str(result.get("task", {}).get("task_id", "unknown"))
-        for variant in ("baseline", "shielded"):
+        for variant in _variants_for_result(result):
             outcome = result.get(variant, {})
             if not isinstance(outcome, dict) or outcome.get("success", False):
                 continue
@@ -139,6 +170,44 @@ def _provider_failure_kind(error: str) -> str:
     return ""
 
 
+def _variants_for_result(result: dict[str, Any]) -> tuple[str, ...]:
+    """Support paired legacy artifacts and explicit multi-arm artifacts."""
+
+    excluded = {"task", "token_delta"}
+    return tuple(
+        key for key, value in result.items()
+        if key not in excluded and isinstance(value, dict) and "success" in value
+    )
+
+
+def summarize_three_arm_reports(reports: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    """Summarize each three-arm outcome plus required regression/coverage metrics."""
+
+    if not reports:
+        raise ValueError("at least one report is required")
+    arm_names = ("baseline", "generic", "routed")
+    arms: dict[str, dict[str, dict[str, float | int]]] = {}
+    for arm in arm_names:
+        arms[arm] = {
+            metric: _distribution([float(report["arms"][arm][metric]) for report in reports])
+            for metric in ("successes", "tokens", "tool_calls", "duration_seconds")
+        }
+    return {
+        "arms": arms,
+        "regressions": {
+            arm: {
+                key: _distribution([float(report["regressions"][arm][key]) for report in reports])
+                for key in ("count", "rate")
+            }
+            for arm in ("generic", "routed")
+        },
+        "routed_coverage": {
+            key: _distribution([float(report["routed_coverage"][key]) for report in reports])
+            for key in ("classified_tasks", "unclassified_tasks", "rate")
+        },
+    }
+
+
 def _report_metrics(report: dict[str, Any]) -> dict[str, float | int]:
     results = report.get("results", [])
     baseline = [row["baseline"] for row in results]
@@ -154,6 +223,24 @@ def _report_metrics(report: dict[str, Any]) -> dict[str, float | int]:
         "shielded_tool_calls": sum(int(row.get("tool_calls", 0)) for row in shielded),
         "baseline_duration_seconds": sum(float(row.get("duration_seconds", 0.0)) for row in baseline),
         "shielded_duration_seconds": sum(float(row.get("duration_seconds", 0.0)) for row in shielded),
+        "shielded_regression_count": int(
+            report.get("shielded_regression", _derived_paired_regression(report))["count"]
+        ),
+        "shielded_regression_rate": float(
+            report.get("shielded_regression", _derived_paired_regression(report))["rate"]
+        ),
+    }
+
+
+def _derived_paired_regression(report: dict[str, Any]) -> dict[str, int | float]:
+    rows = report.get("results", [])
+    baseline_passes = [row for row in rows if bool(row.get("baseline", {}).get("success"))]
+    count = sum(
+        1 for row in baseline_passes if not bool(row.get("shielded", {}).get("success"))
+    )
+    return {
+        "count": count,
+        "rate": count / len(baseline_passes) if baseline_passes else 0.0,
     }
 
 

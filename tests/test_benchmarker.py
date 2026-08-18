@@ -45,6 +45,13 @@ from validation.formal import (
     is_crosshair_available,
     validate_with_crosshair,
 )
+from validation.formal_repair_router import (
+    NONNEGATIVE_RAISE,
+    ORDER_PAIR_REJECTION,
+    TRIM_TEXT_METHOD,
+    UNCLASSIFIED,
+    route_formal_repair,
+)
 from validation.policy import validate_findings
 from validation.types import ValidationResult, Violation
 from scripts.run_coding_capability import _behavior_spec, _build_prompt, _usage_summary, _worker_contribution
@@ -1280,6 +1287,62 @@ def nonnegative(value: int) -> int:
             BROKEN_SOURCES["formal-identity"], [violation]
         )
         self.assertNotIn("Do NOT write `if value < 0: raise ...`", identity_prompt)
+
+    def test_formal_router_uses_only_diagnosed_signature_pairs(self) -> None:
+        def violation(witness: str) -> Violation:
+            return Violation(
+                engine="formal-crosshair",
+                kind="formal_counterexample",
+                severity="error",
+                summary="contract issue",
+                rationale="",
+                current_value="bad",
+                allowed_value="good",
+                evidence={"issue": {"counterexample": witness}},
+            )
+
+        self.assertEqual(
+            route_formal_repair(BROKEN_SOURCES["formal-nonnegative"], violation("nonnegative(-1)")).signature_id,
+            NONNEGATIVE_RAISE,
+        )
+        order_route = route_formal_repair(
+            BROKEN_SOURCES["formal-order-pair"], violation("ordered_pair(1, 0)")
+        )
+        self.assertEqual(order_route.signature_id, ORDER_PAIR_REJECTION)
+        self.assertIn("min(left, right)", order_route.directive)
+        trim_route = route_formal_repair(
+            BROKEN_SOURCES["formal-trim-text"], violation("trim_text('\\x00\\t')")
+        )
+        self.assertEqual(trim_route.signature_id, TRIM_TEXT_METHOD)
+        self.assertIn("text.strip()", trim_route.directive)
+        self.assertEqual(
+            route_formal_repair(BROKEN_SOURCES["formal-identity"], violation("identity(1)")).signature_id,
+            UNCLASSIFIED,
+        )
+
+    def test_routed_formal_benchmark_uses_narrow_order_pair_directive(self) -> None:
+        if not is_crosshair_available():
+            self.skipTest("CrossHair is not installed")
+
+        class StubSupplier:
+            telemetry = [{"prompt_tokens": 1, "completion_tokens": 1, "pricing_basis": "local_unpriced"}]
+
+            def __init__(self, **_kwargs: object) -> None:
+                pass
+
+            def repair_draft(self, _source: str, _prompt: str) -> str:
+                return '''
+def ordered_pair(left: int, right: int) -> tuple[int, int]:
+    """post: _[0] <= _[1]"""
+    return (min(left, right), max(left, right))
+'''.strip()
+
+        with patch("scripts.run_formal_repair_benchmark_agent.OllamaModelSupplier", StubSupplier):
+            outcome = run_formal_repair_task(
+                {"task_id": "formal-order-pair"}, mode="routed", model="fixture", timeout_seconds=3.0
+            )
+        self.assertTrue(outcome["success"])
+        self.assertEqual(outcome["metadata"]["repair_route"]["signature_id"], ORDER_PAIR_REJECTION)
 
     def test_formal_benchmark_compacts_import_trace_for_report(self) -> None:
         trace = "Could not import your code:\\nTraceback ...\\nNameError: name 'obj' is not defined"

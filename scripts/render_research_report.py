@@ -16,6 +16,8 @@ if str(ROOT) not in sys.path:
 
 def render_report(payload: dict[str, Any], *, title: str) -> str:
     _validate(payload)
+    if "arms" in payload and isinstance(payload["arms"], (list, tuple)):
+        return _render_three_arm_report(payload, title=title)
     health = payload.get("health", {"comparison_eligible": True})
     comparison_eligible = bool(health.get("comparison_eligible", True)) if isinstance(health, dict) else True
     summary = payload["comparison_summary"] if comparison_eligible and payload.get("comparison_summary") else payload["summary"]
@@ -70,6 +72,7 @@ def render_report(payload: dict[str, Any], *, title: str) -> str:
             "## Interpretation",
             "",
             _interpretation(token_delta, comparison_eligible),
+            _paired_regression_line(payload),
             "",
             "## Failures retained",
             "",
@@ -108,7 +111,7 @@ def _variant_lines(variants: Any) -> list[str]:
     if not isinstance(variants, dict):
         return ["- Variant metadata was not supplied."]
     lines: list[str] = []
-    for variant in ("baseline", "shielded"):
+    for variant in variants:
         entries = variants.get(variant, [])
         if not entries:
             lines.append(f"- {variant}: metadata unavailable")
@@ -174,11 +177,98 @@ def _failures(reports: list[dict[str, Any]]) -> list[tuple[int, str, str, str]]:
     for index, report in enumerate(reports, start=1):
         for result in report.get("results", []):
             task = str(result.get("task", {}).get("task_id", "unknown"))
-            for variant in ("baseline", "shielded"):
+            for variant in _result_variants(result):
                 outcome = result.get(variant, {})
                 if not outcome.get("success", False):
                     rows.append((index, task, variant, str(outcome.get("error") or "unspecified failure")))
     return rows
+
+
+def _result_variants(result: dict[str, Any]) -> tuple[str, ...]:
+    return tuple(
+        key for key, value in result.items()
+        if key not in {"task", "token_delta"} and isinstance(value, dict) and "success" in value
+    )
+
+
+def _paired_regression_line(payload: dict[str, Any]) -> str:
+    """Surface the outcome regression metric for current and historic paired raw JSON."""
+
+    counts: list[float] = []
+    rates: list[float] = []
+    for report in payload.get("runs", []):
+        metric = report.get("shielded_regression")
+        if not isinstance(metric, dict):
+            baseline = [row for row in report.get("results", []) if row.get("baseline", {}).get("success")]
+            count = sum(1 for row in baseline if not row.get("shielded", {}).get("success"))
+            metric = {"count": count, "rate": count / len(baseline) if baseline else 0.0}
+        counts.append(float(metric.get("count", 0)))
+        rates.append(float(metric.get("rate", 0.0)))
+    if not rates:
+        return ""
+    return f"- Regression rate (baseline passes turned into shielded failures): `{sum(rates) / len(rates):.2%}` (mean `{sum(counts) / len(counts):.2f}` task(s) per run)."
+
+
+def _render_three_arm_report(payload: dict[str, Any], *, title: str) -> str:
+    health = payload.get("health", {"comparison_eligible": True})
+    eligible = bool(health.get("comparison_eligible", True)) if isinstance(health, dict) else True
+    summary = payload["comparison_summary"] if eligible and payload.get("comparison_summary") else payload["summary"]
+    lines = [
+        f"# {title}",
+        "",
+        f"> Generated: {datetime.now(timezone.utc).date().isoformat()} · Source schema: {payload['schema_version']}",
+        "",
+        "## Reproducibility",
+        "",
+        f"- Commit: `{payload['provenance']['repository']['commit']}`",
+        f"- Corpus: `{payload['provenance']['task_corpus']['path']}`",
+        f"- Corpus SHA-256: `{payload['provenance']['task_corpus']['sha256']}`",
+        f"- Repetitions: `{payload['run_count']}`",
+        "",
+        "## Configured variants",
+        "",
+        *_variant_lines(payload.get("variant_metadata", {})),
+        *_scope_lines(payload.get("variant_metadata", {})),
+        "",
+        "## Provider health gate",
+        "",
+        _health_line(health),
+        "",
+        "## Three-arm comparison" if eligible else "## Operational summary (comparison rejected)",
+        "",
+        "| Measure | No formal guidance | Generic directive | Failure-mode routed |",
+        "| --- | ---: | ---: | ---: |",
+    ]
+    for label, key in (("Successful tasks", "successes"), ("Model tokens", "tokens"), ("Tool calls", "tool_calls"), ("Wall-clock seconds", "duration_seconds")):
+        values = [summary["arms"][arm][key] for arm in ("baseline", "generic", "routed")]
+        lines.append("| " + label + " | " + " | ".join(f"{float(value['mean']):.2f} ± {float(value.get('stdev', 0.0)):.2f}" for value in values) + " |")
+    lines.extend([
+        "",
+        "## Regression and coverage",
+        "",
+        "| Measure | Generic directive | Failure-mode routed |",
+        "| --- | ---: | ---: |",
+        "| Regression rate | " + " | ".join(f"{float(summary['regressions'][arm]['rate']['mean']):.2%}" for arm in ("generic", "routed")) + " |",
+        "| Baseline-pass regressions | " + " | ".join(f"{float(summary['regressions'][arm]['count']['mean']):.2f}" for arm in ("generic", "routed")) + " |",
+        f"| Routed known-signature coverage | n/a | {float(summary['routed_coverage']['rate']['mean']):.2%} |",
+        "",
+        "Regression means a task that passed without repair but failed after the named repair strategy. Routed coverage is the fraction of task failures matched to a pre-diagnosed signature; unclassified cases receive no generic verifier directive.",
+        "",
+        "## Failures retained",
+        "",
+    ])
+    failures = _failures(payload["runs"])
+    lines.extend(
+        f"- Run {run}: `{task}` ({variant}) — {error}" for run, task, variant, error in failures
+    ) if failures else lines.append("- No failed task outcomes were recorded.")
+    lines.extend([
+        "",
+        "## Raw evidence",
+        "",
+        "This report is a rendering of a versioned JSON input. It retains per-task outcomes, exact prompts, candidates, routing decisions, and verifier evidence; it does not replace the raw artifact.",
+        "",
+    ])
+    return "\n".join(lines)
 
 
 def main() -> int:

@@ -157,13 +157,18 @@ def build_small_worker_retry_prompt(
     original_code: str,
     violations: list[Violation],
     preserve_context: str = "",
+    repair_directive: str | None = None,
 ) -> str:
     violation = _primary_violation(violations)
     code = _scoped_code(original_code, violation)
-    directives = list(
-        dict.fromkeys(
-            _low_noise_directive_for_source(item, original_code)
-            for item in violations
+    directives = (
+        [repair_directive]
+        if repair_directive
+        else list(
+            dict.fromkeys(
+                _low_noise_directive_for_source(item, original_code)
+                for item in violations
+            )
         )
     ) or ["Fix the current draft while preserving its required behavior."]
     sections = [

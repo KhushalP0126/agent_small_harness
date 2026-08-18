@@ -143,6 +143,7 @@ def run_paired_benchmark(
             else 0.0
         ),
         "median_task_token_delta": statistics.median(deltas) if deltas else 0,
+        "shielded_regression": _paired_regression(results),
         "results": [
             {
                 "task": asdict(row.task),
@@ -152,4 +153,91 @@ def run_paired_benchmark(
             }
             for row in results
         ],
+    }
+
+
+def _paired_regression(results: list[PairedTaskResult]) -> dict[str, int | float | list[str]]:
+    baseline_passes = [row for row in results if row.baseline.success]
+    regressed = [row.task.task_id for row in baseline_passes if not row.shielded.success]
+    return {
+        "baseline_successes": len(baseline_passes),
+        "regressed_tasks": regressed,
+        "count": len(regressed),
+        "rate": len(regressed) / len(baseline_passes) if baseline_passes else 0.0,
+    }
+
+
+def run_three_arm_benchmark(
+    tasks: list[BenchmarkTask],
+    baseline_runner: AgentRunner,
+    generic_runner: AgentRunner,
+    routed_runner: AgentRunner,
+) -> dict[str, Any]:
+    """Run no-formal-guidance, generic, and signature-routed repair together.
+
+    This deliberately has its own schema instead of relabelling the paired
+    ``shielded`` field.  A three-arm study should be readable from raw JSON
+    without relying on command-line provenance to infer what an arm meant.
+    """
+
+    runners = {
+        "baseline": baseline_runner,
+        "generic": generic_runner,
+        "routed": routed_runner,
+    }
+    results: list[dict[str, Any]] = []
+    for task in tasks:
+        outcomes = {name: runner(task) for name, runner in runners.items()}
+        row: dict[str, Any] = {"task": asdict(task)}
+        for name, outcome in outcomes.items():
+            row[name] = {**asdict(outcome), "total_tokens": outcome.total_tokens}
+        results.append(row)
+
+    arm_metrics: dict[str, dict[str, int | float]] = {}
+    for name in runners:
+        outcomes = [row[name] for row in results]
+        arm_metrics[name] = {
+            "successes": sum(bool(outcome["success"]) for outcome in outcomes),
+            "tokens": sum(int(outcome["total_tokens"]) for outcome in outcomes),
+            "tool_calls": sum(int(outcome["tool_calls"]) for outcome in outcomes),
+            "duration_seconds": sum(float(outcome["duration_seconds"]) for outcome in outcomes),
+        }
+    regressions = {
+        name: _regression_metrics(results, name)
+        for name in ("generic", "routed")
+    }
+    classified = sum(
+        bool(row["routed"].get("metadata", {}).get("repair_route", {}).get("classified"))
+        for row in results
+    )
+    return {
+        "schema_version": 3,
+        "task_count": len(results),
+        "arms": arm_metrics,
+        "regressions": regressions,
+        "routed_coverage": {
+            "classified_tasks": classified,
+            "unclassified_tasks": len(results) - classified,
+            "rate": classified / len(results) if results else 0.0,
+        },
+        "results": results,
+    }
+
+
+def _regression_metrics(results: list[dict[str, Any]], arm: str) -> dict[str, int | float | list[str]]:
+    """Measure baseline passes that a repair arm turns into failures."""
+
+    baseline_successes = [
+        row for row in results if bool(row.get("baseline", {}).get("success"))
+    ]
+    regressed = [
+        str(row.get("task", {}).get("task_id", "unknown"))
+        for row in baseline_successes
+        if not bool(row.get(arm, {}).get("success"))
+    ]
+    return {
+        "baseline_successes": len(baseline_successes),
+        "regressed_tasks": regressed,
+        "count": len(regressed),
+        "rate": len(regressed) / len(baseline_successes) if baseline_successes else 0.0,
     }
