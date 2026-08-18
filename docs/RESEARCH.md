@@ -183,11 +183,13 @@ the study retains it as a hard fixture rather than adding another broad
 directive.
 
 `formal-trim-text` is different. The guided candidate was exactly
-`return text.strip()`, which satisfies its postcondition; one evaluation was
-recorded as a CrossHair timeout at the benchmark's 3-second per-condition
-budget. That event is verifier-time-budget noise, not evidence that the
-candidate was incorrect. Future reports keep timeouts separate from concrete
-contract violations and do not treat this case as a prompt-repair failure.
+`return text.strip()`, which satisfies its postcondition, yet CrossHair also
+times out at a 30-second per-condition budget. Raising the limit is therefore
+not a useful remedy. When this documented verifier limitation occurs, the
+benchmark runs a bounded sandboxed behavior matrix instead and records the
+method as `behavioral_fallback_after_crosshair_timeout`. This is behavioral
+evidence, **not** a formal-verifier proof; reports retain the timeout flag and
+must not describe the case as CrossHair completeness.
 
 No further attempt will be made to unify the nonnegative fix into a general
 directive. The pre-registered general control was negative; the evidence
@@ -211,10 +213,10 @@ For a known signature, the routed arm injects that signature's precise,
 diagnosed directive. For every other case it omits the counterexample-specific
 instruction instead of falling back to the generic directive. `formal-trim-text`
 remains a documented verifier-limit case: the correct `return text.strip()`
-candidate also timed out at an eight-second CrossHair budget in an isolated
-check. It therefore receives a narrow directive for transcript analysis, but
-it must not be used to claim formal-verifier success until a reliable verifier
-or separately scoped semantics check is added.
+candidate also timed out at a 30-second CrossHair budget in an isolated check.
+It therefore receives a narrow directive for transcript analysis and, only
+after the formal timeout, a bounded sandboxed behavior matrix. That result is
+explicitly labeled behavioral evidence rather than formal-verifier success.
 
 ```bash
 make research-formal-repair-routed RESEARCH_RUNS=3 MODEL=qwen2.5-coder:1.5b
@@ -242,10 +244,29 @@ the remaining shapes deliberately received no generic verifier directive.
 
 Routed repair used 2,718.67 mean tokens versus 2,495.67 for the no-guidance
 arm (+8.93%). This is a reliability result with a retained token premium, not
-a token-saving claim. The one unresolved task is `formal-trim-text`: a correct
-`text.strip()` candidate can still exceed CrossHair's eight-second condition
-budget, so the 10/11 score must not be described as formal-verifier completeness.
-The raw JSON preserves that timeout separately from concrete contract failures.
+a token-saving claim. The one verifier-limited task is `formal-trim-text`: a
+correct `text.strip()` candidate can exceed CrossHair's 30-second condition
+budget. Future runs use a bounded behavioral fallback after that timeout and
+preserve both the timeout flag and verification method in raw JSON; this must
+not be described as formal-verifier completeness.
+
+### Behavioral-fallback remeasurement (2026-08-17)
+
+The timeout handling was remeasured with the same three arms and three
+repetitions in
+[`results/formal-counterexample-repair-routed-behavioral-fallback-2026-08-17.md`](results/formal-counterexample-repair-routed-behavioral-fallback-2026-08-17.md).
+No-formal-guidance completed 8.67 ± 0.58 tasks, the generic directive 7.00 ±
+0.00, and routed repair 10.67 ± 0.58. Generic repair regressed 23.15% of
+baseline-passing tasks; routed repair again had zero such regressions. Routed
+coverage stayed deliberately narrow at 3/11 task shapes (27.27%).
+
+The behavioral fallback lets a correct `trim_text` candidate count as a
+bounded semantic success while preserving its CrossHair timeout in raw data.
+One unrelated `formal-order-pair` candidate still hit the normal three-second
+CrossHair timeout in a routed repetition, so the new 10.67/11 mean is not a
+claim of complete verification. Routed repair cost 2,718.67 mean tokens versus
+2,494.00 for no formal guidance (+9.01%): the evidence remains about avoiding
+generic-repair regressions, not reducing tokens.
 
 ## Cost-aware route evidence
 

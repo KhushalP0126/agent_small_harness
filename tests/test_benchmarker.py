@@ -1344,6 +1344,56 @@ def ordered_pair(left: int, right: int) -> tuple[int, int]:
         self.assertTrue(outcome["success"])
         self.assertEqual(outcome["metadata"]["repair_route"]["signature_id"], ORDER_PAIR_REJECTION)
 
+    def test_trim_text_uses_behavioral_fallback_only_after_crosshair_timeout(self) -> None:
+        from scripts.run_formal_repair_benchmark_agent import _verify_repaired_candidate
+
+        source = '''
+def trim_text(text: str) -> str:
+    """post: _ == text.strip()"""
+    return text.strip()
+'''
+        timeout = FormalResult(
+            is_compliant=False,
+            issues=[FormalIssue(tool="crosshair", summary="CrossHair timed out", details="timeout")],
+        )
+        with patch("scripts.run_formal_repair_benchmark_agent.validate_with_crosshair", return_value=timeout):
+            verified, _formal, method = _verify_repaired_candidate("formal-trim-text", source, 0.1)
+        self.assertTrue(verified)
+        self.assertEqual(method, "behavioral_fallback_after_crosshair_timeout")
+
+    def test_trim_text_benchmark_records_behavioral_fallback_transparently(self) -> None:
+        class StubSupplier:
+            telemetry = [{"prompt_tokens": 1, "completion_tokens": 1, "pricing_basis": "local_unpriced"}]
+
+            def __init__(self, **_kwargs: object) -> None:
+                pass
+
+            def repair_draft(self, _source: str, _prompt: str) -> str:
+                return '''
+def trim_text(text: str) -> str:
+    """post: _ == text.strip()"""
+    return text.strip()
+'''.strip()
+
+        initial_failure = FormalResult(
+            is_compliant=False,
+            issues=[FormalIssue(tool="crosshair", summary="counterexample", details="when calling trim_text(' \\t')")],
+        )
+        timeout = FormalResult(
+            is_compliant=False,
+            issues=[FormalIssue(tool="crosshair", summary="CrossHair timed out", details="timeout")],
+        )
+        with (
+            patch("scripts.run_formal_repair_benchmark_agent.OllamaModelSupplier", StubSupplier),
+            patch("scripts.run_formal_repair_benchmark_agent.validate_with_crosshair", side_effect=[initial_failure, timeout]),
+        ):
+            outcome = run_formal_repair_task(
+                {"task_id": "formal-trim-text"}, mode="routed", model="fixture", timeout_seconds=0.1
+            )
+        self.assertTrue(outcome["success"])
+        self.assertEqual(outcome["metadata"]["verification_method"], "behavioral_fallback_after_crosshair_timeout")
+        self.assertTrue(outcome["metadata"]["formal_verifier_timeout"])
+
     def test_formal_benchmark_compacts_import_trace_for_report(self) -> None:
         trace = "Could not import your code:\\nTraceback ...\\nNameError: name 'obj' is not defined"
         self.assertEqual(

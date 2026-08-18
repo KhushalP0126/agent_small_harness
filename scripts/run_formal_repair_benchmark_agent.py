@@ -21,6 +21,7 @@ if str(ROOT) not in sys.path:
 
 from backends.ollama_client import DEFAULT_OLLAMA_MODEL, OllamaGenerationConfig, OllamaModelSupplier
 from prompt.retry_builder import build_small_worker_retry_prompt
+from validation.behavior import BehaviorCase, FunctionBehaviorSpec, validate_function_behavior
 from validation.formal import FormalResult, validate_with_crosshair
 from validation.formal_repair_router import FormalRepairRoute, route_formal_repair
 from validation.types import Violation
@@ -193,6 +194,43 @@ def _task_timeout(task_id: str, requested_timeout: float) -> float:
     return requested_timeout
 
 
+def _trim_text_behavior_spec() -> FunctionBehaviorSpec:
+    """Return the bounded semantic check for CrossHair's string blind spot.
+
+    CrossHair cannot prove the otherwise direct ``text.strip()`` postcondition
+    in a useful amount of time on the supported local version. This is not a
+    replacement for formal verification: it is a transparent, isolated
+    behavioral check used only after CrossHair has timed out on this fixture.
+    """
+
+    return FunctionBehaviorSpec(
+        function_name="trim_text",
+        cases=[
+            BehaviorCase("leading and trailing whitespace", (" \tvalue\n",), "value"),
+            BehaviorCase("null and tab whitespace", ("\x00\t",), "\x00"),
+            BehaviorCase("already normalized", ("value",), "value"),
+            BehaviorCase("all whitespace", (" \t\n",), ""),
+        ],
+    )
+
+
+def _is_crosshair_timeout(result: FormalResult) -> bool:
+    return any(issue.summary == "CrossHair timed out" for issue in result.issues)
+
+
+def _verify_repaired_candidate(task_id: str, source: str, timeout_seconds: float) -> tuple[bool, FormalResult, str]:
+    """Verify a candidate, exposing the evidence type used for the outcome."""
+
+    formal = validate_with_crosshair(source, timeout_seconds=timeout_seconds)
+    if task_id != "formal-trim-text" or not _is_crosshair_timeout(formal):
+        return formal.is_compliant and not formal.skipped, formal, "crosshair"
+
+    behavior = validate_function_behavior(source, _trim_text_behavior_spec(), timeout_seconds=1.0)
+    if behavior.is_compliant:
+        return True, formal, "behavioral_fallback_after_crosshair_timeout"
+    return False, formal, "behavioral_fallback_failed"
+
+
 def _routed_prompt(source: str, violations: list[Violation]) -> tuple[str, FormalRepairRoute]:
     route = route_formal_repair(source, violations[0] if violations else None)
     if route.classified:
@@ -249,14 +287,16 @@ def run_task(
     supplier = OllamaModelSupplier(model=model)
     try:
         repaired = supplier.repair_draft(source, prompt)
-        outcome = validate_with_crosshair(repaired, timeout_seconds=verification_timeout)
+        verified, outcome, verification_method = _verify_repaired_candidate(
+            task_id, repaired, verification_timeout
+        )
         usage = supplier.telemetry[-1] if supplier.telemetry else {}
         return _result(
-            outcome.is_compliant and not outcome.skipped,
+            verified,
             started,
             prompt_tokens=int(usage.get("prompt_tokens", 0)),
             completion_tokens=int(usage.get("completion_tokens", 0)),
-            error="" if outcome.is_compliant and not outcome.skipped else _formal_failure_text(outcome),
+            error="" if verified else _formal_failure_text(outcome),
             metadata={
                 "mode": mode,
                 "provider": "ollama",
@@ -273,6 +313,8 @@ def run_task(
                     "rationale": route.rationale,
                 },
                 "verification_timeout_seconds": verification_timeout,
+                "verification_method": verification_method,
+                "formal_verifier_timeout": _is_crosshair_timeout(outcome),
                 "repair_prompt": prompt,
                 "candidate_source": repaired,
                 "pricing_basis": usage.get("pricing_basis", "local_unpriced"),
