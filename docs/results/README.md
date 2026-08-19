@@ -14,6 +14,12 @@ The full protocol, repeat-run command, and publication checklist are in
 receipts. Use `make research-report REPORT_INPUT=... REPORT_OUTPUT=...` to
 render a dated Markdown summary without hiding failed task rows.
 
+Controlled session receipts are only publishable as a complete five-scenario
+set. After recording genuine sessions, use
+`make verify-live-sessions SESSION_RECEIPT_DIR=docs/results/raw/live_sessions`;
+it rejects duplicate or missing scenarios and incomplete multi-file approval
+evidence rather than filling gaps with synthetic receipts.
+
 Repeated benchmark artifacts now include a provider-health gate. Empty API
 completions, provider timeouts/unreachability, and Ollama model-start timeouts
 are recorded separately from task outcomes. If any occur, the raw artifact is

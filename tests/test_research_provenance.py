@@ -7,7 +7,7 @@ from pathlib import Path
 
 from agents.artifact_manager import ARTIFACT_SCHEMA_VERSION, ArtifactManager
 from harness_kernel.e2e_benchmark import AgentRunMetrics, BenchmarkTask, run_paired_benchmark
-from harness_kernel.live_session import build_live_session_receipt
+from harness_kernel.live_session import SCENARIOS, build_live_session_receipt, validate_live_session_receipts
 from harness_kernel.provenance import collect_provenance, configured_model_settings
 from scripts.render_local_model_comparison import render_comparison
 from scripts.render_research_report import render_report
@@ -139,6 +139,37 @@ class ResearchProvenanceTests(unittest.TestCase):
                 outcome="answered",
                 tool_calls=0,
             )
+
+    def test_live_session_validator_requires_each_scenario_once(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+
+        def receipt(scenario: str, approvals: list[str] | None = None) -> dict:
+            return build_live_session_receipt(
+                repository_root=root,
+                scenario=scenario,
+                prompt_summary=f"Controlled {scenario} session.",
+                provider="fixture",
+                model="fixture-model",
+                approvals=approvals or [],
+                validation_status="passed",
+                outcome="completed",
+                tool_calls=1,
+            )
+
+        receipts = [
+            receipt("plain_question"),
+            receipt("small_edit", ["proposal=approved"]),
+            receipt("multi_file_edit", ["first=approved", "second=rejected"]),
+            receipt("planning_review", ["spec=approved"]),
+            receipt("unavailable_api"),
+        ]
+        result = validate_live_session_receipts(receipts)
+        self.assertTrue(result["complete"])
+        self.assertEqual(set(result["recorded_scenarios"]), SCENARIOS)
+
+        incomplete = validate_live_session_receipts(receipts[:-1])
+        self.assertFalse(incomplete["complete"])
+        self.assertIn("missing scenarios: unavailable_api", incomplete["errors"])
 
     def test_model_comparison_reports_observed_difference_without_scaling_claim(self) -> None:
         def payload(successes: int, tokens: int) -> dict:

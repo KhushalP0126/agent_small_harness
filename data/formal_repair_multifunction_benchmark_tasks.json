@@ -1,0 +1,14 @@
+[
+  {
+    "task_id": "formal-quadruple-value",
+    "category": "formal_repair",
+    "prompt": "Repair quadruple_value so its result is exactly four times its input for every integer, by correctly composing the already-correct double_value helper.",
+    "suggested_max_turns": 1
+  },
+  {
+    "task_id": "formal-maximum-of-three",
+    "category": "formal_repair",
+    "prompt": "Repair maximum_of_three so its result is at least all three integer inputs, by correctly composing the already-correct maximum helper.",
+    "suggested_max_turns": 1
+  }
+]

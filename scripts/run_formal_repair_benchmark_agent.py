@@ -90,6 +90,31 @@ def prefix_sum(count: int) -> int:
         total += value
     return total
 '''.strip(),
+    # Multi-function corpus (research-verification item 3.5): each broken
+    # function is defined in terms of an already-correct helper in the same
+    # source. The bug is in how the caller composes the helper, not in the
+    # helper itself, so a correct repair requires cross-function reasoning
+    # rather than a single-expression fix.
+    "formal-quadruple-value": '''
+def double_value(value: int) -> int:
+    """post: _ == value * 2"""
+    return value * 2
+
+
+def quadruple_value(value: int) -> int:
+    """post: _ == value * 4"""
+    return double_value(value)
+'''.strip(),
+    "formal-maximum-of-three": '''
+def maximum(left: int, right: int) -> int:
+    """post: _ >= left and _ >= right"""
+    return left if left >= right else right
+
+
+def maximum_of_three(a: int, b: int, c: int) -> int:
+    """post: _ >= a and _ >= b and _ >= c"""
+    return maximum(a, b)
+'''.strip(),
 }
 
 
@@ -189,7 +214,7 @@ def _task_timeout(task_id: str, requested_timeout: float) -> float:
     routed-repair success.
     """
 
-    if task_id == "formal-trim-text":
+    if task_id in {"formal-trim-text", "formal-order-pair"}:
         return max(requested_timeout, 8.0)
     return requested_timeout
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from hashlib import sha256
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping, Sequence
 
 from harness_kernel.provenance import collect_provenance
 
@@ -61,6 +61,55 @@ def build_live_session_receipt(
         "artifact_reference": artifact_reference,
         "proposed_diff_sha256": sha256(proposed_diff.encode("utf-8")).hexdigest() if proposed_diff else "",
         "provenance": collect_provenance(repository_root=repository_root),
+    }
+
+
+def validate_live_session_receipts(receipts: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    """Validate the complete, controlled five-session evidence set.
+
+    This validates evidence that came from real reviewed sessions; it never
+    manufactures receipts. It prevents a publication checklist from being
+    satisfied by duplicate or incomplete scenarios.
+    """
+
+    seen: set[str] = set()
+    errors: list[str] = []
+    for index, receipt in enumerate(receipts, start=1):
+        scenario = receipt.get("scenario")
+        if not isinstance(scenario, str) or scenario not in SCENARIOS:
+            errors.append(f"receipt {index}: unknown scenario")
+            continue
+        if scenario in seen:
+            errors.append(f"receipt {index}: duplicate scenario {scenario}")
+        seen.add(scenario)
+        if receipt.get("schema_version") != LIVE_SESSION_SCHEMA_VERSION:
+            errors.append(f"receipt {index}: unsupported schema version")
+        if not isinstance(receipt.get("provenance"), Mapping):
+            errors.append(f"receipt {index}: missing provenance")
+        approvals = receipt.get("approvals")
+        if not isinstance(approvals, list):
+            errors.append(f"receipt {index}: approvals must be a list")
+            continue
+        decisions = {
+            item.get("decision")
+            for item in approvals
+            if isinstance(item, Mapping) and isinstance(item.get("decision"), str)
+        }
+        if scenario in {"small_edit", "planning_review"} and not decisions:
+            errors.append(f"receipt {index}: {scenario} requires an approval decision")
+        if scenario == "multi_file_edit" and decisions != {"approved", "rejected"}:
+            errors.append(
+                f"receipt {index}: multi_file_edit requires approved and rejected decisions"
+            )
+
+    missing = sorted(SCENARIOS - seen)
+    if missing:
+        errors.append(f"missing scenarios: {', '.join(missing)}")
+    return {
+        "complete": not errors,
+        "required_scenarios": sorted(SCENARIOS),
+        "recorded_scenarios": sorted(seen),
+        "errors": errors,
     }
 
 

@@ -1,0 +1,25 @@
+{
+  "approvals": [],
+  "artifact_reference": "scripts/run_tool_agent.py never applies diffs; no repository file was written during the session",
+  "model": "deepseek-v4-pro",
+  "outcome": "answered: the agent read the Makefile and reported research-check's behavior across 7 tool-call turns; no plan and no file mutation occurred",
+  "prompt_summary": "Asked the bounded tool-calling agent what the Makefile research-check target runs and whether it calls a model, using only repository inspection.",
+  "proposed_diff_sha256": "",
+  "provenance": {
+    "captured_at_utc": "2026-08-19T17:25:57.686602+00:00",
+    "environment": {
+      "os": "macOS-26.5.1-arm64-arm-64bit",
+      "python": "3.11.9",
+      "python_implementation": "CPython"
+    },
+    "repository": {
+      "commit": "05d82cd10a8f1c0f2491d4650efdc61bf0cc1eec",
+      "dirty": true
+    }
+  },
+  "provider": "deepseek",
+  "scenario": "plain_question",
+  "schema_version": 1,
+  "tool_calls": 7,
+  "validation_status": "not_applicable"
+}

@@ -1210,8 +1210,41 @@ def analyze(matrix):
     def test_diverse_formal_benchmark_corpus_retains_all_fixture_sources(self) -> None:
         corpus = json.loads((ROOT / "data" / "formal_repair_diverse_benchmark_tasks.json").read_text())
         task_ids = {task["task_id"] for task in corpus}
-        self.assertEqual(task_ids, set(BROKEN_SOURCES))
+        self.assertEqual(task_ids, set(BROKEN_SOURCES) - {"formal-quadruple-value", "formal-maximum-of-three"})
         self.assertEqual(len(task_ids), 11)
+
+    def test_multifunction_formal_benchmark_corpus_requires_cross_function_repair(self) -> None:
+        corpus = json.loads(
+            (ROOT / "data" / "formal_repair_multifunction_benchmark_tasks.json").read_text()
+        )
+        task_ids = {task["task_id"] for task in corpus}
+        self.assertEqual(task_ids, {"formal-quadruple-value", "formal-maximum-of-three"})
+        self.assertTrue(task_ids.issubset(BROKEN_SOURCES))
+        # Each broken source defines two functions: an already-correct helper
+        # and a caller that composes it incorrectly, so the fixture cannot be
+        # solved by a single-expression fix that ignores the helper.
+        for task_id in task_ids:
+            source = BROKEN_SOURCES[task_id]
+            self.assertEqual(source.count("def "), 2)
+
+        if not is_crosshair_available():
+            self.skipTest("CrossHair is not installed")
+        broken = validate_with_crosshair(BROKEN_SOURCES["formal-quadruple-value"], timeout_seconds=3.0)
+        self.assertFalse(broken.is_compliant)
+        fixed = validate_with_crosshair(
+            '''
+def double_value(value: int) -> int:
+    """post: _ == value * 2"""
+    return value * 2
+
+
+def quadruple_value(value: int) -> int:
+    """post: _ == value * 4"""
+    return double_value(double_value(value))
+'''.strip(),
+            timeout_seconds=3.0,
+        )
+        self.assertTrue(fixed.is_compliant)
 
     def test_formal_benchmark_failure_includes_crosshair_witness(self) -> None:
         result = FormalResult(
@@ -1343,6 +1376,13 @@ def ordered_pair(left: int, right: int) -> tuple[int, int]:
             )
         self.assertTrue(outcome["success"])
         self.assertEqual(outcome["metadata"]["repair_route"]["signature_id"], ORDER_PAIR_REJECTION)
+
+    def test_known_expensive_formal_fixtures_receive_a_fair_verifier_budget(self) -> None:
+        from scripts.run_formal_repair_benchmark_agent import _task_timeout
+
+        self.assertEqual(_task_timeout("formal-order-pair", 3.0), 8.0)
+        self.assertEqual(_task_timeout("formal-trim-text", 3.0), 8.0)
+        self.assertEqual(_task_timeout("formal-identity", 3.0), 3.0)
 
     def test_trim_text_uses_behavioral_fallback_only_after_crosshair_timeout(self) -> None:
         from scripts.run_formal_repair_benchmark_agent import _verify_repaired_candidate

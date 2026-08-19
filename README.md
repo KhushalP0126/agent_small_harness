@@ -1054,14 +1054,17 @@ make approve-library LIB=clang.cindex
   2026-08-04 1.5B result is documented in
   `docs/results/compute-shield-10-2026-08-04.md`; it used more shielded tokens and had
   one shielded failure, so no token-saving claim is made.
-- [ ] Extend the mandatory container-only registered-tool policy with a
-  host-enforced OS/filesystem allowlist before accepting adversarial code in a
-  shared or hosted deployment. Registered tools now reject local execution by
-  default and containers already deny network access.
+- [x] Registered tools enforce a host-side container filesystem policy:
+  only a disposable workspace and no-exec `/tmp` are mounted, the container
+  root is read-only, network access is disabled, Docker sockets and extra
+  mounts are rejected, and local execution requires explicit host approval.
+  See `harness_kernel/container_sandbox.py` and
+  `tests/test_container_sandbox_policy.py`.
 - [ ] Extend the repeated paired benchmark beyond Qwen 1.5B and publish
   confidence intervals across models and larger task sets.
 - [ ] Add authentication, authorization, rate limits, and production-grade job
-  storage before exposing the API outside a trusted local environment.
+  storage before exposing the API outside a trusted local environment. This is
+  intentionally not enabled for the local-first prototype.
 - [x] Version the debugger and repository-map artifact/report schemas. Version
   `2` is emitted while legacy timeline/graph field shapes remain readable; the
   execution-trace deserializer ignores the version marker for compatibility.

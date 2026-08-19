@@ -1,0 +1,2413 @@
+{
+  "arms": [
+    "baseline",
+    "generic",
+    "routed"
+  ],
+  "commands": {
+    "baseline": "in_process formal runner --mode no_repair --model qwen2.5-coder:1.5b",
+    "generic": "in_process formal runner --mode general --model qwen2.5-coder:1.5b",
+    "routed": "in_process formal runner --mode routed --model qwen2.5-coder:1.5b"
+  },
+  "comparison_summary": {
+    "arms": {
+      "baseline": {
+        "duration_seconds": {
+          "count": 5,
+          "descriptive_95pct_high": 10.544980711870185,
+          "descriptive_95pct_low": 8.00737592186005,
+          "max": 11.671182624995708,
+          "mean": 9.276178316865117,
+          "min": 7.830147834029049,
+          "stdev": 1.4475144924723822
+        },
+        "successes": {
+          "count": 5,
+          "descriptive_95pct_high": 2.192,
+          "descriptive_95pct_low": 1.4080000000000001,
+          "max": 2.0,
+          "mean": 1.8,
+          "min": 1.0,
+          "stdev": 0.4472135954999579
+        },
+        "tokens": {
+          "count": 5,
+          "descriptive_95pct_high": 591.768,
+          "descriptive_95pct_low": 588.6320000000001,
+          "max": 591.0,
+          "mean": 590.2,
+          "min": 587.0,
+          "stdev": 1.7888543819998317
+        },
+        "tool_calls": {
+          "count": 5,
+          "descriptive_95pct_high": 2.0,
+          "descriptive_95pct_low": 2.0,
+          "max": 2.0,
+          "mean": 2.0,
+          "min": 2.0,
+          "stdev": 0.0
+        }
+      },
+      "generic": {
+        "duration_seconds": {
+          "count": 5,
+          "descriptive_95pct_high": 11.416960077914498,
+          "descriptive_95pct_low": 11.11664045472155,
+          "max": 11.40960891591385,
+          "mean": 11.266800266318024,
+          "min": 11.020529707660899,
+          "stdev": 0.17130997256034539
+        },
+        "successes": {
+          "count": 5,
+          "descriptive_95pct_high": 1.0,
+          "descriptive_95pct_low": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "min": 1.0,
+          "stdev": 0.0
+        },
+        "tokens": {
+          "count": 5,
+          "descriptive_95pct_high": 746.7601999791709,
+          "descriptive_95pct_low": 744.839800020829,
+          "max": 747.0,
+          "mean": 745.8,
+          "min": 745.0,
+          "stdev": 1.0954451150103321
+        },
+        "tool_calls": {
+          "count": 5,
+          "descriptive_95pct_high": 2.0,
+          "descriptive_95pct_low": 2.0,
+          "max": 2.0,
+          "mean": 2.0,
+          "min": 2.0,
+          "stdev": 0.0
+        }
+      },
+      "routed": {
+        "duration_seconds": {
+          "count": 5,
+          "descriptive_95pct_high": 10.087791408677193,
+          "descriptive_95pct_low": 9.349913290529903,
+          "max": 10.219834374729544,
+          "mean": 9.718852349603548,
+          "min": 9.060093916021287,
+          "stdev": 0.420904497777286
+        },
+        "successes": {
+          "count": 5,
+          "descriptive_95pct_high": 1.0,
+          "descriptive_95pct_low": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "min": 1.0,
+          "stdev": 0.0
+        },
+        "tokens": {
+          "count": 5,
+          "descriptive_95pct_high": 609.0,
+          "descriptive_95pct_low": 609.0,
+          "max": 609.0,
+          "mean": 609.0,
+          "min": 609.0,
+          "stdev": 0.0
+        },
+        "tool_calls": {
+          "count": 5,
+          "descriptive_95pct_high": 2.0,
+          "descriptive_95pct_low": 2.0,
+          "max": 2.0,
+          "mean": 2.0,
+          "min": 2.0,
+          "stdev": 0.0
+        }
+      }
+    },
+    "regressions": {
+      "generic": {
+        "count": {
+          "count": 5,
+          "descriptive_95pct_high": 1.0,
+          "descriptive_95pct_low": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "min": 1.0,
+          "stdev": 0.0
+        },
+        "rate": {
+          "count": 5,
+          "descriptive_95pct_high": 0.7959999999999999,
+          "descriptive_95pct_low": 0.404,
+          "max": 1.0,
+          "mean": 0.6,
+          "min": 0.5,
+          "stdev": 0.22360679774997896
+        }
+      },
+      "routed": {
+        "count": {
+          "count": 5,
+          "descriptive_95pct_high": 1.0,
+          "descriptive_95pct_low": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "min": 1.0,
+          "stdev": 0.0
+        },
+        "rate": {
+          "count": 5,
+          "descriptive_95pct_high": 0.7959999999999999,
+          "descriptive_95pct_low": 0.404,
+          "max": 1.0,
+          "mean": 0.6,
+          "min": 0.5,
+          "stdev": 0.22360679774997896
+        }
+      }
+    },
+    "routed_coverage": {
+      "classified_tasks": {
+        "count": 5,
+        "descriptive_95pct_high": 0.0,
+        "descriptive_95pct_low": 0.0,
+        "max": 0.0,
+        "mean": 0.0,
+        "min": 0.0,
+        "stdev": 0.0
+      },
+      "rate": {
+        "count": 5,
+        "descriptive_95pct_high": 0.0,
+        "descriptive_95pct_low": 0.0,
+        "max": 0.0,
+        "mean": 0.0,
+        "min": 0.0,
+        "stdev": 0.0
+      },
+      "unclassified_tasks": {
+        "count": 5,
+        "descriptive_95pct_high": 2.0,
+        "descriptive_95pct_low": 2.0,
+        "max": 2.0,
+        "mean": 2.0,
+        "min": 2.0,
+        "stdev": 0.0
+      }
+    }
+  },
+  "experiment": "failure-mode-routed-formal-repair",
+  "health": {
+    "comparison_eligible": true,
+    "provider_failure_count": 0,
+    "reason": "all provider calls produced usable responses",
+    "runs": [
+      {
+        "eligible": true,
+        "provider_failures": [],
+        "run": 1
+      },
+      {
+        "eligible": true,
+        "provider_failures": [],
+        "run": 2
+      },
+      {
+        "eligible": true,
+        "provider_failures": [],
+        "run": 3
+      },
+      {
+        "eligible": true,
+        "provider_failures": [],
+        "run": 4
+      },
+      {
+        "eligible": true,
+        "provider_failures": [],
+        "run": 5
+      }
+    ]
+  },
+  "provenance": {
+    "captured_at_utc": "2026-08-19T17:12:34.830411+00:00",
+    "environment": {
+      "os": "macOS-26.5.1-arm64-arm-64bit",
+      "python": "3.11.9",
+      "python_implementation": "CPython"
+    },
+    "repository": {
+      "commit": "05d82cd10a8f1c0f2491d4650efdc61bf0cc1eec",
+      "dirty": true
+    },
+    "settings": {
+      "execution": "in_process",
+      "runs": 5
+    },
+    "task_corpus": {
+      "path": "data/formal_repair_multifunction_benchmark_tasks.json",
+      "sha256": "03d37c09d74dd347b33c8a6a95340be8c86565627b8d5a887b9538fa05f7c2f9"
+    }
+  },
+  "run_count": 5,
+  "runs": [
+    {
+      "arms": {
+        "baseline": {
+          "duration_seconds": 7.830147834029049,
+          "successes": 2,
+          "tokens": 591,
+          "tool_calls": 2
+        },
+        "generic": {
+          "duration_seconds": 11.401200415799394,
+          "successes": 1,
+          "tokens": 747,
+          "tool_calls": 2
+        },
+        "routed": {
+          "duration_seconds": 10.219834374729544,
+          "successes": 1,
+          "tokens": 609,
+          "tool_calls": 2
+        }
+      },
+      "regressions": {
+        "generic": {
+          "baseline_successes": 2,
+          "count": 1,
+          "rate": 0.5,
+          "regressed_tasks": [
+            "formal-quadruple-value"
+          ]
+        },
+        "routed": {
+          "baseline_successes": 2,
+          "count": 1,
+          "rate": 0.5,
+          "regressed_tasks": [
+            "formal-quadruple-value"
+          ]
+        }
+      },
+      "results": [
+        {
+          "baseline": {
+            "completion_tokens": 63,
+            "duration_seconds": 2.333585459040478,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    return double_value(double_value(value))",
+              "context_window": 8192,
+              "counterexample": "quadruple_value(1) (which returns 2)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "formal_verifier_timeout": false,
+              "mode": "no_repair",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    return double_value(value)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nFix the current draft while preserving its required behavior.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "repair_route": {
+                "classified": true,
+                "rationale": "No diagnosed failure signature matched.",
+                "signature_id": "not_applicable"
+              },
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable",
+              "verification_method": "crosshair",
+              "verification_timeout_seconds": 3.0
+            },
+            "prompt_tokens": 212,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 275
+          },
+          "generic": {
+            "completion_tokens": 84,
+            "duration_seconds": 5.122007332975045,
+            "error": "CrossHair found a contract or assertion issue: quadruple_value(1) (which returns 2)",
+            "metadata": {
+              "candidate_source": "def double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    if value != 1:\n        raise ValueError(\"quadruple_value does not support non-1 values\")\n    return double_value(value)",
+              "context_window": 8192,
+              "counterexample": "quadruple_value(1) (which returns 2)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [
+                "quadruple_value(1) (which returns 2)"
+              ],
+              "final_issues": [
+                "CrossHair found a contract or assertion issue"
+              ],
+              "final_verifier_output": [
+                "/private/var/folders/fr/zgwhhqkx1k953vglp24mbbkh0000gn/T/agent_harness_crosshair_iqyav79l/candidate.py:6: error: false when calling quadruple_value(1) (which returns 2)"
+              ],
+              "formal_verifier_timeout": false,
+              "mode": "general",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    return double_value(value)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: quadruple_value(1) (which returns 2)\n\nFIX DIRECTIVE:\nUse the verifier's counterexample as a valid input unless the source declares a precondition that excludes it. Make the returned value satisfy the postcondition for that exact input; do not reject it, raise an exception, or add an early-exit branch that the source does not require.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "repair_route": {
+                "classified": true,
+                "rationale": "No diagnosed failure signature matched.",
+                "signature_id": "not_applicable"
+              },
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable",
+              "verification_method": "crosshair",
+              "verification_timeout_seconds": 3.0
+            },
+            "prompt_tokens": 275,
+            "retries": 1,
+            "success": false,
+            "tool_calls": 1,
+            "total_tokens": 359
+          },
+          "routed": {
+            "completion_tokens": 61,
+            "duration_seconds": 4.12887724977918,
+            "error": "CrossHair found a contract or assertion issue: quadruple_value(1) (which returns 2)",
+            "metadata": {
+              "candidate_source": "def double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    return double_value(value)",
+              "context_window": 8192,
+              "counterexample": "quadruple_value(1) (which returns 2)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [
+                "quadruple_value(1) (which returns 2)"
+              ],
+              "final_issues": [
+                "CrossHair found a contract or assertion issue"
+              ],
+              "final_verifier_output": [
+                "/private/var/folders/fr/zgwhhqkx1k953vglp24mbbkh0000gn/T/agent_harness_crosshair_fhk2fzbh/candidate.py:6: error: false when calling quadruple_value(1) (which returns 2)"
+              ],
+              "formal_verifier_timeout": false,
+              "mode": "routed",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    return double_value(value)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "repair_route": {
+                "classified": false,
+                "rationale": "No diagnosed failure signature matched.",
+                "signature_id": "unclassified"
+              },
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable",
+              "verification_method": "crosshair",
+              "verification_timeout_seconds": 3.0
+            },
+            "prompt_tokens": 222,
+            "retries": 1,
+            "success": false,
+            "tool_calls": 1,
+            "total_tokens": 283
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair quadruple_value so its result is exactly four times its input for every integer, by correctly composing the already-correct double_value helper.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-quadruple-value"
+          }
+        },
+        {
+          "baseline": {
+            "completion_tokens": 83,
+            "duration_seconds": 5.496562374988571,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return max(left, right)\n\n\ndef maximum_of_three(a: int, b: int, c: int) -> int:\n    \"\"\"post: _ >= a and _ >= b and _ >= c\"\"\"\n    return maximum(maximum(a, b), c)",
+              "context_window": 8192,
+              "counterexample": "maximum_of_three(-1, 0, 1) (which returns 0)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "formal_verifier_timeout": false,
+              "mode": "no_repair",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return left if left >= right else right\n\n\ndef maximum_of_three(a: int, b: int, c: int) -> int:\n    \"\"\"post: _ >= a and _ >= b and _ >= c\"\"\"\n    return maximum(a, b)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nFix the current draft while preserving its required behavior.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "repair_route": {
+                "classified": true,
+                "rationale": "No diagnosed failure signature matched.",
+                "signature_id": "not_applicable"
+              },
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable",
+              "verification_method": "crosshair",
+              "verification_timeout_seconds": 3.0
+            },
+            "prompt_tokens": 233,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 316
+          },
+          "generic": {
+            "completion_tokens": 86,
+            "duration_seconds": 6.279193082824349,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return left if left >= right else right\n\n\ndef maximum_of_three(a: int, b: int, c: int) -> int:\n    \"\"\"post: _ >= a and _ >= b and _ >= c\"\"\"\n    return maximum(maximum(a, b), c)",
+              "context_window": 8192,
+              "counterexample": "maximum_of_three(-1, 0, 1) (which returns 0)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "formal_verifier_timeout": false,
+              "mode": "general",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return left if left >= right else right\n\n\ndef maximum_of_three(a: int, b: int, c: int) -> int:\n    \"\"\"post: _ >= a and _ >= b and _ >= c\"\"\"\n    return maximum(a, b)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: maximum_of_three(-1, 0, 1) (which returns 0)\n\nFIX DIRECTIVE:\nUse the verifier's counterexample as a valid input unless the source declares a precondition that excludes it. Make the returned value satisfy the postcondition for that exact input; do not reject it, raise an exception, or add an early-exit branch that the source does not require.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "repair_route": {
+                "classified": true,
+                "rationale": "No diagnosed failure signature matched.",
+                "signature_id": "not_applicable"
+              },
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable",
+              "verification_method": "crosshair",
+              "verification_timeout_seconds": 3.0
+            },
+            "prompt_tokens": 302,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 388
+          },
+          "routed": {
+            "completion_tokens": 83,
+            "duration_seconds": 6.090957124950364,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return max(left, right)\n\n\ndef maximum_of_three(a: int, b: int, c: int) -> int:\n    \"\"\"post: _ >= a and _ >= b and _ >= c\"\"\"\n    return maximum(maximum(a, b), c)",
+              "context_window": 8192,
+              "counterexample": "maximum_of_three(-1, 0, 1) (which returns 0)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "formal_verifier_timeout": false,
+              "mode": "routed",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return left if left >= right else right\n\n\ndef maximum_of_three(a: int, b: int, c: int) -> int:\n    \"\"\"post: _ >= a and _ >= b and _ >= c\"\"\"\n    return maximum(a, b)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "repair_route": {
+                "classified": false,
+                "rationale": "No diagnosed failure signature matched.",
+                "signature_id": "unclassified"
+              },
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable",
+              "verification_method": "crosshair",
+              "verification_timeout_seconds": 3.0
+            },
+            "prompt_tokens": 243,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 326
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair maximum_of_three so its result is at least all three integer inputs, by correctly composing the already-correct maximum helper.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-maximum-of-three"
+          }
+        }
+      ],
+      "routed_coverage": {
+        "classified_tasks": 0,
+        "rate": 0.0,
+        "unclassified_tasks": 2
+      },
+      "schema_version": 3,
+      "task_count": 2
+    },
+    {
+      "arms": {
+        "baseline": {
+          "duration_seconds": 8.761190582998097,
+          "successes": 1,
+          "tokens": 587,
+          "tool_calls": 2
+        },
+        "generic": {
+          "duration_seconds": 11.020529707660899,
+          "successes": 1,
+          "tokens": 745,
+          "tool_calls": 2
+        },
+        "routed": {
+          "duration_seconds": 9.870607248973101,
+          "successes": 1,
+          "tokens": 609,
+          "tool_calls": 2
+        }
+      },
+      "regressions": {
+        "generic": {
+          "baseline_successes": 1,
+          "count": 1,
+          "rate": 1.0,
+          "regressed_tasks": [
+            "formal-quadruple-value"
+          ]
+        },
+        "routed": {
+          "baseline_successes": 1,
+          "count": 1,
+          "rate": 1.0,
+          "regressed_tasks": [
+            "formal-quadruple-value"
+          ]
+        }
+      },
+      "results": [
+        {
+          "baseline": {
+            "completion_tokens": 63,
+            "duration_seconds": 3.888296375051141,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    return double_value(double_value(value))",
+              "context_window": 8192,
+              "counterexample": "quadruple_value(1) (which returns 2)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "formal_verifier_timeout": false,
+              "mode": "no_repair",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    return double_value(value)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nFix the current draft while preserving its required behavior.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "repair_route": {
+                "classified": true,
+                "rationale": "No diagnosed failure signature matched.",
+                "signature_id": "not_applicable"
+              },
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable",
+              "verification_method": "crosshair",
+              "verification_timeout_seconds": 3.0
+            },
+            "prompt_tokens": 212,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 275
+          },
+          "generic": {
+            "completion_tokens": 85,
+            "duration_seconds": 5.651581124868244,
+            "error": "CrossHair found a contract or assertion issue: quadruple_value(1) (which returns 2)",
+            "metadata": {
+              "candidate_source": "def double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    if value != 1:\n        raise ValueError(\"quadruple_value is not defined for value != 1\")\n    return double_value(value)",
+              "context_window": 8192,
+              "counterexample": "quadruple_value(1) (which returns 2)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [
+                "quadruple_value(1) (which returns 2)"
+              ],
+              "final_issues": [
+                "CrossHair found a contract or assertion issue"
+              ],
+              "final_verifier_output": [
+                "/private/var/folders/fr/zgwhhqkx1k953vglp24mbbkh0000gn/T/agent_harness_crosshair__5vqogt3/candidate.py:6: error: false when calling quadruple_value(1) (which returns 2)"
+              ],
+              "formal_verifier_timeout": false,
+              "mode": "general",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    return double_value(value)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: quadruple_value(1) (which returns 2)\n\nFIX DIRECTIVE:\nUse the verifier's counterexample as a valid input unless the source declares a precondition that excludes it. Make the returned value satisfy the postcondition for that exact input; do not reject it, raise an exception, or add an early-exit branch that the source does not require.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "repair_route": {
+                "classified": true,
+                "rationale": "No diagnosed failure signature matched.",
+                "signature_id": "not_applicable"
+              },
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable",
+              "verification_method": "crosshair",
+              "verification_timeout_seconds": 3.0
+            },
+            "prompt_tokens": 275,
+            "retries": 1,
+            "success": false,
+            "tool_calls": 1,
+            "total_tokens": 360
+          },
+          "routed": {
+            "completion_tokens": 61,
+            "duration_seconds": 4.392124415840954,
+            "error": "CrossHair found a contract or assertion issue: quadruple_value(1) (which returns 2)",
+            "metadata": {
+              "candidate_source": "def double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    return double_value(value)",
+              "context_window": 8192,
+              "counterexample": "quadruple_value(1) (which returns 2)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [
+                "quadruple_value(1) (which returns 2)"
+              ],
+              "final_issues": [
+                "CrossHair found a contract or assertion issue"
+              ],
+              "final_verifier_output": [
+                "/private/var/folders/fr/zgwhhqkx1k953vglp24mbbkh0000gn/T/agent_harness_crosshair_fy4v9vdy/candidate.py:6: error: false when calling quadruple_value(1) (which returns 2)"
+              ],
+              "formal_verifier_timeout": false,
+              "mode": "routed",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    return double_value(value)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "repair_route": {
+                "classified": false,
+                "rationale": "No diagnosed failure signature matched.",
+                "signature_id": "unclassified"
+              },
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable",
+              "verification_method": "crosshair",
+              "verification_timeout_seconds": 3.0
+            },
+            "prompt_tokens": 222,
+            "retries": 1,
+            "success": false,
+            "tool_calls": 1,
+            "total_tokens": 283
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair quadruple_value so its result is exactly four times its input for every integer, by correctly composing the already-correct double_value helper.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-quadruple-value"
+          }
+        },
+        {
+          "baseline": {
+            "completion_tokens": 79,
+            "duration_seconds": 4.872894207946956,
+            "error": "CrossHair found a contract or assertion issue: maximum_of_three(0, 0, 1) (which returns 0)",
+            "metadata": {
+              "candidate_source": "def maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return max(left, right)\n\n\ndef maximum_of_three(a: int, b: int, c: int) -> int:\n    \"\"\"post: _ >= a and _ >= b and _ >= c\"\"\"\n    return maximum(a, b)",
+              "context_window": 8192,
+              "counterexample": "maximum_of_three(-1, 0, 1) (which returns 0)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [
+                "maximum_of_three(0, 0, 1) (which returns 0)"
+              ],
+              "final_issues": [
+                "CrossHair found a contract or assertion issue"
+              ],
+              "final_verifier_output": [
+                "/private/var/folders/fr/zgwhhqkx1k953vglp24mbbkh0000gn/T/agent_harness_crosshair_hzb9_ysx/candidate.py:7: error: false when calling maximum_of_three(0, 0, 1) (which returns 0)"
+              ],
+              "formal_verifier_timeout": false,
+              "mode": "no_repair",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return left if left >= right else right\n\n\ndef maximum_of_three(a: int, b: int, c: int) -> int:\n    \"\"\"post: _ >= a and _ >= b and _ >= c\"\"\"\n    return maximum(a, b)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nFix the current draft while preserving its required behavior.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "repair_route": {
+                "classified": true,
+                "rationale": "No diagnosed failure signature matched.",
+                "signature_id": "not_applicable"
+              },
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable",
+              "verification_method": "crosshair",
+              "verification_timeout_seconds": 3.0
+            },
+            "prompt_tokens": 233,
+            "retries": 1,
+            "success": false,
+            "tool_calls": 1,
+            "total_tokens": 312
+          },
+          "generic": {
+            "completion_tokens": 83,
+            "duration_seconds": 5.368948582792655,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return max(left, right)\n\ndef maximum_of_three(a: int, b: int, c: int) -> int:\n    \"\"\"post: _ >= a and _ >= b and _ >= c\"\"\"\n    return maximum(maximum(a, b), c)",
+              "context_window": 8192,
+              "counterexample": "maximum_of_three(-1, 0, 1) (which returns 0)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "formal_verifier_timeout": false,
+              "mode": "general",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return left if left >= right else right\n\n\ndef maximum_of_three(a: int, b: int, c: int) -> int:\n    \"\"\"post: _ >= a and _ >= b and _ >= c\"\"\"\n    return maximum(a, b)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: maximum_of_three(-1, 0, 1) (which returns 0)\n\nFIX DIRECTIVE:\nUse the verifier's counterexample as a valid input unless the source declares a precondition that excludes it. Make the returned value satisfy the postcondition for that exact input; do not reject it, raise an exception, or add an early-exit branch that the source does not require.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "repair_route": {
+                "classified": true,
+                "rationale": "No diagnosed failure signature matched.",
+                "signature_id": "not_applicable"
+              },
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable",
+              "verification_method": "crosshair",
+              "verification_timeout_seconds": 3.0
+            },
+            "prompt_tokens": 302,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 385
+          },
+          "routed": {
+            "completion_tokens": 83,
+            "duration_seconds": 5.478482833132148,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return max(left, right)\n\n\ndef maximum_of_three(a: int, b: int, c: int) -> int:\n    \"\"\"post: _ >= a and _ >= b and _ >= c\"\"\"\n    return maximum(maximum(a, b), c)",
+              "context_window": 8192,
+              "counterexample": "maximum_of_three(-1, 0, 1) (which returns 0)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "formal_verifier_timeout": false,
+              "mode": "routed",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return left if left >= right else right\n\n\ndef maximum_of_three(a: int, b: int, c: int) -> int:\n    \"\"\"post: _ >= a and _ >= b and _ >= c\"\"\"\n    return maximum(a, b)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "repair_route": {
+                "classified": false,
+                "rationale": "No diagnosed failure signature matched.",
+                "signature_id": "unclassified"
+              },
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable",
+              "verification_method": "crosshair",
+              "verification_timeout_seconds": 3.0
+            },
+            "prompt_tokens": 243,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 326
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair maximum_of_three so its result is at least all three integer inputs, by correctly composing the already-correct maximum helper.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-maximum-of-three"
+          }
+        }
+      ],
+      "routed_coverage": {
+        "classified_tasks": 0,
+        "rate": 0.0,
+        "unclassified_tasks": 2
+      },
+      "schema_version": 3,
+      "task_count": 2
+    },
+    {
+      "arms": {
+        "baseline": {
+          "duration_seconds": 11.671182624995708,
+          "successes": 2,
+          "tokens": 591,
+          "tool_calls": 2
+        },
+        "generic": {
+          "duration_seconds": 11.40960891591385,
+          "successes": 1,
+          "tokens": 745,
+          "tool_calls": 2
+        },
+        "routed": {
+          "duration_seconds": 9.739877583226189,
+          "successes": 1,
+          "tokens": 609,
+          "tool_calls": 2
+        }
+      },
+      "regressions": {
+        "generic": {
+          "baseline_successes": 2,
+          "count": 1,
+          "rate": 0.5,
+          "regressed_tasks": [
+            "formal-quadruple-value"
+          ]
+        },
+        "routed": {
+          "baseline_successes": 2,
+          "count": 1,
+          "rate": 0.5,
+          "regressed_tasks": [
+            "formal-quadruple-value"
+          ]
+        }
+      },
+      "results": [
+        {
+          "baseline": {
+            "completion_tokens": 63,
+            "duration_seconds": 5.828738749958575,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    return double_value(double_value(value))",
+              "context_window": 8192,
+              "counterexample": "quadruple_value(1) (which returns 2)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "formal_verifier_timeout": false,
+              "mode": "no_repair",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    return double_value(value)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nFix the current draft while preserving its required behavior.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "repair_route": {
+                "classified": true,
+                "rationale": "No diagnosed failure signature matched.",
+                "signature_id": "not_applicable"
+              },
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable",
+              "verification_method": "crosshair",
+              "verification_timeout_seconds": 3.0
+            },
+            "prompt_tokens": 212,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 275
+          },
+          "generic": {
+            "completion_tokens": 85,
+            "duration_seconds": 5.940388457849622,
+            "error": "CrossHair found a contract or assertion issue: quadruple_value(1) (which returns 2)",
+            "metadata": {
+              "candidate_source": "def double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    if value != 1:\n        raise ValueError(\"quadruple_value is not defined for value != 1\")\n    return double_value(value)",
+              "context_window": 8192,
+              "counterexample": "quadruple_value(1) (which returns 2)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [
+                "quadruple_value(1) (which returns 2)"
+              ],
+              "final_issues": [
+                "CrossHair found a contract or assertion issue"
+              ],
+              "final_verifier_output": [
+                "/private/var/folders/fr/zgwhhqkx1k953vglp24mbbkh0000gn/T/agent_harness_crosshair_i7r89p56/candidate.py:6: error: false when calling quadruple_value(1) (which returns 2)"
+              ],
+              "formal_verifier_timeout": false,
+              "mode": "general",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    return double_value(value)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: quadruple_value(1) (which returns 2)\n\nFIX DIRECTIVE:\nUse the verifier's counterexample as a valid input unless the source declares a precondition that excludes it. Make the returned value satisfy the postcondition for that exact input; do not reject it, raise an exception, or add an early-exit branch that the source does not require.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "repair_route": {
+                "classified": true,
+                "rationale": "No diagnosed failure signature matched.",
+                "signature_id": "not_applicable"
+              },
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable",
+              "verification_method": "crosshair",
+              "verification_timeout_seconds": 3.0
+            },
+            "prompt_tokens": 275,
+            "retries": 1,
+            "success": false,
+            "tool_calls": 1,
+            "total_tokens": 360
+          },
+          "routed": {
+            "completion_tokens": 61,
+            "duration_seconds": 4.5592323751188815,
+            "error": "CrossHair found a contract or assertion issue: quadruple_value(1) (which returns 2)",
+            "metadata": {
+              "candidate_source": "def double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    return double_value(value)",
+              "context_window": 8192,
+              "counterexample": "quadruple_value(1) (which returns 2)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [
+                "quadruple_value(1) (which returns 2)"
+              ],
+              "final_issues": [
+                "CrossHair found a contract or assertion issue"
+              ],
+              "final_verifier_output": [
+                "/private/var/folders/fr/zgwhhqkx1k953vglp24mbbkh0000gn/T/agent_harness_crosshair_yru54uo8/candidate.py:6: error: false when calling quadruple_value(1) (which returns 2)"
+              ],
+              "formal_verifier_timeout": false,
+              "mode": "routed",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    return double_value(value)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "repair_route": {
+                "classified": false,
+                "rationale": "No diagnosed failure signature matched.",
+                "signature_id": "unclassified"
+              },
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable",
+              "verification_method": "crosshair",
+              "verification_timeout_seconds": 3.0
+            },
+            "prompt_tokens": 222,
+            "retries": 1,
+            "success": false,
+            "tool_calls": 1,
+            "total_tokens": 283
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair quadruple_value so its result is exactly four times its input for every integer, by correctly composing the already-correct double_value helper.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-quadruple-value"
+          }
+        },
+        {
+          "baseline": {
+            "completion_tokens": 83,
+            "duration_seconds": 5.842443875037134,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return max(left, right)\n\n\ndef maximum_of_three(a: int, b: int, c: int) -> int:\n    \"\"\"post: _ >= a and _ >= b and _ >= c\"\"\"\n    return maximum(maximum(a, b), c)",
+              "context_window": 8192,
+              "counterexample": "maximum_of_three(-1, 0, 1) (which returns 0)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "formal_verifier_timeout": false,
+              "mode": "no_repair",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return left if left >= right else right\n\n\ndef maximum_of_three(a: int, b: int, c: int) -> int:\n    \"\"\"post: _ >= a and _ >= b and _ >= c\"\"\"\n    return maximum(a, b)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nFix the current draft while preserving its required behavior.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "repair_route": {
+                "classified": true,
+                "rationale": "No diagnosed failure signature matched.",
+                "signature_id": "not_applicable"
+              },
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable",
+              "verification_method": "crosshair",
+              "verification_timeout_seconds": 3.0
+            },
+            "prompt_tokens": 233,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 316
+          },
+          "generic": {
+            "completion_tokens": 83,
+            "duration_seconds": 5.469220458064228,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return max(left, right)\n\n\ndef maximum_of_three(a: int, b: int, c: int) -> int:\n    \"\"\"post: _ >= a and _ >= b and _ >= c\"\"\"\n    return maximum(maximum(a, b), c)",
+              "context_window": 8192,
+              "counterexample": "maximum_of_three(-1, 0, 1) (which returns 0)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "formal_verifier_timeout": false,
+              "mode": "general",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return left if left >= right else right\n\n\ndef maximum_of_three(a: int, b: int, c: int) -> int:\n    \"\"\"post: _ >= a and _ >= b and _ >= c\"\"\"\n    return maximum(a, b)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: maximum_of_three(-1, 0, 1) (which returns 0)\n\nFIX DIRECTIVE:\nUse the verifier's counterexample as a valid input unless the source declares a precondition that excludes it. Make the returned value satisfy the postcondition for that exact input; do not reject it, raise an exception, or add an early-exit branch that the source does not require.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "repair_route": {
+                "classified": true,
+                "rationale": "No diagnosed failure signature matched.",
+                "signature_id": "not_applicable"
+              },
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable",
+              "verification_method": "crosshair",
+              "verification_timeout_seconds": 3.0
+            },
+            "prompt_tokens": 302,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 385
+          },
+          "routed": {
+            "completion_tokens": 83,
+            "duration_seconds": 5.1806452081073076,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return max(left, right)\n\n\ndef maximum_of_three(a: int, b: int, c: int) -> int:\n    \"\"\"post: _ >= a and _ >= b and _ >= c\"\"\"\n    return maximum(maximum(a, b), c)",
+              "context_window": 8192,
+              "counterexample": "maximum_of_three(-1, 0, 1) (which returns 0)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "formal_verifier_timeout": false,
+              "mode": "routed",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return left if left >= right else right\n\n\ndef maximum_of_three(a: int, b: int, c: int) -> int:\n    \"\"\"post: _ >= a and _ >= b and _ >= c\"\"\"\n    return maximum(a, b)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "repair_route": {
+                "classified": false,
+                "rationale": "No diagnosed failure signature matched.",
+                "signature_id": "unclassified"
+              },
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable",
+              "verification_method": "crosshair",
+              "verification_timeout_seconds": 3.0
+            },
+            "prompt_tokens": 243,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 326
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair maximum_of_three so its result is at least all three integer inputs, by correctly composing the already-correct maximum helper.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-maximum-of-three"
+          }
+        }
+      ],
+      "routed_coverage": {
+        "classified_tasks": 0,
+        "rate": 0.0,
+        "unclassified_tasks": 2
+      },
+      "schema_version": 3,
+      "task_count": 2
+    },
+    {
+      "arms": {
+        "baseline": {
+          "duration_seconds": 9.371241917135194,
+          "successes": 2,
+          "tokens": 591,
+          "tool_calls": 2
+        },
+        "generic": {
+          "duration_seconds": 11.156983542023227,
+          "successes": 1,
+          "tokens": 747,
+          "tool_calls": 2
+        },
+        "routed": {
+          "duration_seconds": 9.060093916021287,
+          "successes": 1,
+          "tokens": 609,
+          "tool_calls": 2
+        }
+      },
+      "regressions": {
+        "generic": {
+          "baseline_successes": 2,
+          "count": 1,
+          "rate": 0.5,
+          "regressed_tasks": [
+            "formal-quadruple-value"
+          ]
+        },
+        "routed": {
+          "baseline_successes": 2,
+          "count": 1,
+          "rate": 0.5,
+          "regressed_tasks": [
+            "formal-quadruple-value"
+          ]
+        }
+      },
+      "results": [
+        {
+          "baseline": {
+            "completion_tokens": 63,
+            "duration_seconds": 4.068765125004575,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    return double_value(double_value(value))",
+              "context_window": 8192,
+              "counterexample": "quadruple_value(1) (which returns 2)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "formal_verifier_timeout": false,
+              "mode": "no_repair",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    return double_value(value)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nFix the current draft while preserving its required behavior.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "repair_route": {
+                "classified": true,
+                "rationale": "No diagnosed failure signature matched.",
+                "signature_id": "not_applicable"
+              },
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable",
+              "verification_method": "crosshair",
+              "verification_timeout_seconds": 3.0
+            },
+            "prompt_tokens": 212,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 275
+          },
+          "generic": {
+            "completion_tokens": 84,
+            "duration_seconds": 5.278957084054127,
+            "error": "CrossHair found a contract or assertion issue: quadruple_value(1) (which returns 2)",
+            "metadata": {
+              "candidate_source": "def double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    if value != 1:\n        raise ValueError(\"quadruple_value does not support non-1 values\")\n    return double_value(value)",
+              "context_window": 8192,
+              "counterexample": "quadruple_value(1) (which returns 2)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [
+                "quadruple_value(1) (which returns 2)"
+              ],
+              "final_issues": [
+                "CrossHair found a contract or assertion issue"
+              ],
+              "final_verifier_output": [
+                "/private/var/folders/fr/zgwhhqkx1k953vglp24mbbkh0000gn/T/agent_harness_crosshair_pdur5xgs/candidate.py:6: error: false when calling quadruple_value(1) (which returns 2)"
+              ],
+              "formal_verifier_timeout": false,
+              "mode": "general",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    return double_value(value)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: quadruple_value(1) (which returns 2)\n\nFIX DIRECTIVE:\nUse the verifier's counterexample as a valid input unless the source declares a precondition that excludes it. Make the returned value satisfy the postcondition for that exact input; do not reject it, raise an exception, or add an early-exit branch that the source does not require.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "repair_route": {
+                "classified": true,
+                "rationale": "No diagnosed failure signature matched.",
+                "signature_id": "not_applicable"
+              },
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable",
+              "verification_method": "crosshair",
+              "verification_timeout_seconds": 3.0
+            },
+            "prompt_tokens": 275,
+            "retries": 1,
+            "success": false,
+            "tool_calls": 1,
+            "total_tokens": 359
+          },
+          "routed": {
+            "completion_tokens": 61,
+            "duration_seconds": 3.936170458095148,
+            "error": "CrossHair found a contract or assertion issue: quadruple_value(1) (which returns 2)",
+            "metadata": {
+              "candidate_source": "def double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    return double_value(value)",
+              "context_window": 8192,
+              "counterexample": "quadruple_value(1) (which returns 2)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [
+                "quadruple_value(1) (which returns 2)"
+              ],
+              "final_issues": [
+                "CrossHair found a contract or assertion issue"
+              ],
+              "final_verifier_output": [
+                "/private/var/folders/fr/zgwhhqkx1k953vglp24mbbkh0000gn/T/agent_harness_crosshair_wfevm4av/candidate.py:6: error: false when calling quadruple_value(1) (which returns 2)"
+              ],
+              "formal_verifier_timeout": false,
+              "mode": "routed",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    return double_value(value)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "repair_route": {
+                "classified": false,
+                "rationale": "No diagnosed failure signature matched.",
+                "signature_id": "unclassified"
+              },
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable",
+              "verification_method": "crosshair",
+              "verification_timeout_seconds": 3.0
+            },
+            "prompt_tokens": 222,
+            "retries": 1,
+            "success": false,
+            "tool_calls": 1,
+            "total_tokens": 283
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair quadruple_value so its result is exactly four times its input for every integer, by correctly composing the already-correct double_value helper.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-quadruple-value"
+          }
+        },
+        {
+          "baseline": {
+            "completion_tokens": 83,
+            "duration_seconds": 5.302476792130619,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return max(left, right)\n\n\ndef maximum_of_three(a: int, b: int, c: int) -> int:\n    \"\"\"post: _ >= a and _ >= b and _ >= c\"\"\"\n    return maximum(maximum(a, b), c)",
+              "context_window": 8192,
+              "counterexample": "maximum_of_three(-1, 0, 1) (which returns 0)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "formal_verifier_timeout": false,
+              "mode": "no_repair",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return left if left >= right else right\n\n\ndef maximum_of_three(a: int, b: int, c: int) -> int:\n    \"\"\"post: _ >= a and _ >= b and _ >= c\"\"\"\n    return maximum(a, b)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nFix the current draft while preserving its required behavior.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "repair_route": {
+                "classified": true,
+                "rationale": "No diagnosed failure signature matched.",
+                "signature_id": "not_applicable"
+              },
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable",
+              "verification_method": "crosshair",
+              "verification_timeout_seconds": 3.0
+            },
+            "prompt_tokens": 233,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 316
+          },
+          "generic": {
+            "completion_tokens": 86,
+            "duration_seconds": 5.878026457969099,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return left if left >= right else right\n\n\ndef maximum_of_three(a: int, b: int, c: int) -> int:\n    \"\"\"post: _ >= a and _ >= b and _ >= c\"\"\"\n    return maximum(maximum(a, b), c)",
+              "context_window": 8192,
+              "counterexample": "maximum_of_three(-1, 0, 1) (which returns 0)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "formal_verifier_timeout": false,
+              "mode": "general",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return left if left >= right else right\n\n\ndef maximum_of_three(a: int, b: int, c: int) -> int:\n    \"\"\"post: _ >= a and _ >= b and _ >= c\"\"\"\n    return maximum(a, b)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: maximum_of_three(-1, 0, 1) (which returns 0)\n\nFIX DIRECTIVE:\nUse the verifier's counterexample as a valid input unless the source declares a precondition that excludes it. Make the returned value satisfy the postcondition for that exact input; do not reject it, raise an exception, or add an early-exit branch that the source does not require.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "repair_route": {
+                "classified": true,
+                "rationale": "No diagnosed failure signature matched.",
+                "signature_id": "not_applicable"
+              },
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable",
+              "verification_method": "crosshair",
+              "verification_timeout_seconds": 3.0
+            },
+            "prompt_tokens": 302,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 388
+          },
+          "routed": {
+            "completion_tokens": 83,
+            "duration_seconds": 5.123923457926139,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return max(left, right)\n\n\ndef maximum_of_three(a: int, b: int, c: int) -> int:\n    \"\"\"post: _ >= a and _ >= b and _ >= c\"\"\"\n    return maximum(maximum(a, b), c)",
+              "context_window": 8192,
+              "counterexample": "maximum_of_three(-1, 0, 1) (which returns 0)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "formal_verifier_timeout": false,
+              "mode": "routed",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return left if left >= right else right\n\n\ndef maximum_of_three(a: int, b: int, c: int) -> int:\n    \"\"\"post: _ >= a and _ >= b and _ >= c\"\"\"\n    return maximum(a, b)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "repair_route": {
+                "classified": false,
+                "rationale": "No diagnosed failure signature matched.",
+                "signature_id": "unclassified"
+              },
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable",
+              "verification_method": "crosshair",
+              "verification_timeout_seconds": 3.0
+            },
+            "prompt_tokens": 243,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 326
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair maximum_of_three so its result is at least all three integer inputs, by correctly composing the already-correct maximum helper.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-maximum-of-three"
+          }
+        }
+      ],
+      "routed_coverage": {
+        "classified_tasks": 0,
+        "rate": 0.0,
+        "unclassified_tasks": 2
+      },
+      "schema_version": 3,
+      "task_count": 2
+    },
+    {
+      "arms": {
+        "baseline": {
+          "duration_seconds": 8.747128625167534,
+          "successes": 2,
+          "tokens": 591,
+          "tool_calls": 2
+        },
+        "generic": {
+          "duration_seconds": 11.345678750192747,
+          "successes": 1,
+          "tokens": 745,
+          "tool_calls": 2
+        },
+        "routed": {
+          "duration_seconds": 9.703848625067621,
+          "successes": 1,
+          "tokens": 609,
+          "tool_calls": 2
+        }
+      },
+      "regressions": {
+        "generic": {
+          "baseline_successes": 2,
+          "count": 1,
+          "rate": 0.5,
+          "regressed_tasks": [
+            "formal-quadruple-value"
+          ]
+        },
+        "routed": {
+          "baseline_successes": 2,
+          "count": 1,
+          "rate": 0.5,
+          "regressed_tasks": [
+            "formal-quadruple-value"
+          ]
+        }
+      },
+      "results": [
+        {
+          "baseline": {
+            "completion_tokens": 63,
+            "duration_seconds": 3.8793376251123846,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    return double_value(double_value(value))",
+              "context_window": 8192,
+              "counterexample": "quadruple_value(1) (which returns 2)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "formal_verifier_timeout": false,
+              "mode": "no_repair",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    return double_value(value)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nFix the current draft while preserving its required behavior.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "repair_route": {
+                "classified": true,
+                "rationale": "No diagnosed failure signature matched.",
+                "signature_id": "not_applicable"
+              },
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable",
+              "verification_method": "crosshair",
+              "verification_timeout_seconds": 3.0
+            },
+            "prompt_tokens": 212,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 275
+          },
+          "generic": {
+            "completion_tokens": 85,
+            "duration_seconds": 5.137778750155121,
+            "error": "CrossHair found a contract or assertion issue: quadruple_value(1) (which returns 2)",
+            "metadata": {
+              "candidate_source": "def double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    if value != 1:\n        raise ValueError(\"Input must be 1 for quadruple_value to work correctly.\")\n    return double_value(value)",
+              "context_window": 8192,
+              "counterexample": "quadruple_value(1) (which returns 2)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [
+                "quadruple_value(1) (which returns 2)"
+              ],
+              "final_issues": [
+                "CrossHair found a contract or assertion issue"
+              ],
+              "final_verifier_output": [
+                "/private/var/folders/fr/zgwhhqkx1k953vglp24mbbkh0000gn/T/agent_harness_crosshair_2d9w9ei5/candidate.py:6: error: false when calling quadruple_value(1) (which returns 2)"
+              ],
+              "formal_verifier_timeout": false,
+              "mode": "general",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    return double_value(value)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: quadruple_value(1) (which returns 2)\n\nFIX DIRECTIVE:\nUse the verifier's counterexample as a valid input unless the source declares a precondition that excludes it. Make the returned value satisfy the postcondition for that exact input; do not reject it, raise an exception, or add an early-exit branch that the source does not require.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "repair_route": {
+                "classified": true,
+                "rationale": "No diagnosed failure signature matched.",
+                "signature_id": "not_applicable"
+              },
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable",
+              "verification_method": "crosshair",
+              "verification_timeout_seconds": 3.0
+            },
+            "prompt_tokens": 275,
+            "retries": 1,
+            "success": false,
+            "tool_calls": 1,
+            "total_tokens": 360
+          },
+          "routed": {
+            "completion_tokens": 61,
+            "duration_seconds": 3.8179668330121785,
+            "error": "CrossHair found a contract or assertion issue: quadruple_value(1) (which returns 2)",
+            "metadata": {
+              "candidate_source": "def double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    return double_value(value)",
+              "context_window": 8192,
+              "counterexample": "quadruple_value(1) (which returns 2)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [
+                "quadruple_value(1) (which returns 2)"
+              ],
+              "final_issues": [
+                "CrossHair found a contract or assertion issue"
+              ],
+              "final_verifier_output": [
+                "/private/var/folders/fr/zgwhhqkx1k953vglp24mbbkh0000gn/T/agent_harness_crosshair_bhx9ogtm/candidate.py:6: error: false when calling quadruple_value(1) (which returns 2)"
+              ],
+              "formal_verifier_timeout": false,
+              "mode": "routed",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    return double_value(value)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "repair_route": {
+                "classified": false,
+                "rationale": "No diagnosed failure signature matched.",
+                "signature_id": "unclassified"
+              },
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable",
+              "verification_method": "crosshair",
+              "verification_timeout_seconds": 3.0
+            },
+            "prompt_tokens": 222,
+            "retries": 1,
+            "success": false,
+            "tool_calls": 1,
+            "total_tokens": 283
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair quadruple_value so its result is exactly four times its input for every integer, by correctly composing the already-correct double_value helper.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-quadruple-value"
+          }
+        },
+        {
+          "baseline": {
+            "completion_tokens": 83,
+            "duration_seconds": 4.867791000055149,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return max(left, right)\n\n\ndef maximum_of_three(a: int, b: int, c: int) -> int:\n    \"\"\"post: _ >= a and _ >= b and _ >= c\"\"\"\n    return maximum(maximum(a, b), c)",
+              "context_window": 8192,
+              "counterexample": "maximum_of_three(-1, 0, 1) (which returns 0)",
+              "counterexample_in_prompt": false,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "formal_verifier_timeout": false,
+              "mode": "no_repair",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return left if left >= right else right\n\n\ndef maximum_of_three(a: int, b: int, c: int) -> int:\n    \"\"\"post: _ >= a and _ >= b and _ >= c\"\"\"\n    return maximum(a, b)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nFix the current draft while preserving its required behavior.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "repair_route": {
+                "classified": true,
+                "rationale": "No diagnosed failure signature matched.",
+                "signature_id": "not_applicable"
+              },
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable",
+              "verification_method": "crosshair",
+              "verification_timeout_seconds": 3.0
+            },
+            "prompt_tokens": 233,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 316
+          },
+          "generic": {
+            "completion_tokens": 83,
+            "duration_seconds": 6.207900000037625,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return max(left, right)\n\n\ndef maximum_of_three(a: int, b: int, c: int) -> int:\n    \"\"\"post: _ >= a and _ >= b and _ >= c\"\"\"\n    return maximum(maximum(a, b), c)",
+              "context_window": 8192,
+              "counterexample": "maximum_of_three(-1, 0, 1) (which returns 0)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "formal_verifier_timeout": false,
+              "mode": "general",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return left if left >= right else right\n\n\ndef maximum_of_three(a: int, b: int, c: int) -> int:\n    \"\"\"post: _ >= a and _ >= b and _ >= c\"\"\"\n    return maximum(a, b)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: maximum_of_three(-1, 0, 1) (which returns 0)\n\nFIX DIRECTIVE:\nUse the verifier's counterexample as a valid input unless the source declares a precondition that excludes it. Make the returned value satisfy the postcondition for that exact input; do not reject it, raise an exception, or add an early-exit branch that the source does not require.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "repair_route": {
+                "classified": true,
+                "rationale": "No diagnosed failure signature matched.",
+                "signature_id": "not_applicable"
+              },
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable",
+              "verification_method": "crosshair",
+              "verification_timeout_seconds": 3.0
+            },
+            "prompt_tokens": 302,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 385
+          },
+          "routed": {
+            "completion_tokens": 83,
+            "duration_seconds": 5.885881792055443,
+            "error": "",
+            "metadata": {
+              "candidate_source": "def maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return max(left, right)\n\n\ndef maximum_of_three(a: int, b: int, c: int) -> int:\n    \"\"\"post: _ >= a and _ >= b and _ >= c\"\"\"\n    return maximum(maximum(a, b), c)",
+              "context_window": 8192,
+              "counterexample": "maximum_of_three(-1, 0, 1) (which returns 0)",
+              "counterexample_in_prompt": true,
+              "final_counterexamples": [],
+              "final_issues": [],
+              "final_verifier_output": [],
+              "formal_verifier_timeout": false,
+              "mode": "routed",
+              "model": "qwen2.5-coder:1.5b",
+              "pricing_basis": "local_unpriced",
+              "provider": "ollama",
+              "reasoning_effort": "not_applicable",
+              "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return left if left >= right else right\n\n\ndef maximum_of_three(a: int, b: int, c: int) -> int:\n    \"\"\"post: _ >= a and _ >= b and _ >= c\"\"\"\n    return maximum(a, b)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+              "repair_route": {
+                "classified": false,
+                "rationale": "No diagnosed failure signature matched.",
+                "signature_id": "unclassified"
+              },
+              "scope": "python-crosshair-only",
+              "thinking_type": "not_applicable",
+              "verification_method": "crosshair",
+              "verification_timeout_seconds": 3.0
+            },
+            "prompt_tokens": 243,
+            "retries": 1,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 326
+          },
+          "task": {
+            "category": "formal_repair",
+            "prompt": "Repair maximum_of_three so its result is at least all three integer inputs, by correctly composing the already-correct maximum helper.",
+            "suggested_max_turns": 1,
+            "task_id": "formal-maximum-of-three"
+          }
+        }
+      ],
+      "routed_coverage": {
+        "classified_tasks": 0,
+        "rate": 0.0,
+        "unclassified_tasks": 2
+      },
+      "schema_version": 3,
+      "task_count": 2
+    }
+  ],
+  "schema_version": 4,
+  "summary": {
+    "arms": {
+      "baseline": {
+        "duration_seconds": {
+          "count": 5,
+          "descriptive_95pct_high": 10.544980711870185,
+          "descriptive_95pct_low": 8.00737592186005,
+          "max": 11.671182624995708,
+          "mean": 9.276178316865117,
+          "min": 7.830147834029049,
+          "stdev": 1.4475144924723822
+        },
+        "successes": {
+          "count": 5,
+          "descriptive_95pct_high": 2.192,
+          "descriptive_95pct_low": 1.4080000000000001,
+          "max": 2.0,
+          "mean": 1.8,
+          "min": 1.0,
+          "stdev": 0.4472135954999579
+        },
+        "tokens": {
+          "count": 5,
+          "descriptive_95pct_high": 591.768,
+          "descriptive_95pct_low": 588.6320000000001,
+          "max": 591.0,
+          "mean": 590.2,
+          "min": 587.0,
+          "stdev": 1.7888543819998317
+        },
+        "tool_calls": {
+          "count": 5,
+          "descriptive_95pct_high": 2.0,
+          "descriptive_95pct_low": 2.0,
+          "max": 2.0,
+          "mean": 2.0,
+          "min": 2.0,
+          "stdev": 0.0
+        }
+      },
+      "generic": {
+        "duration_seconds": {
+          "count": 5,
+          "descriptive_95pct_high": 11.416960077914498,
+          "descriptive_95pct_low": 11.11664045472155,
+          "max": 11.40960891591385,
+          "mean": 11.266800266318024,
+          "min": 11.020529707660899,
+          "stdev": 0.17130997256034539
+        },
+        "successes": {
+          "count": 5,
+          "descriptive_95pct_high": 1.0,
+          "descriptive_95pct_low": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "min": 1.0,
+          "stdev": 0.0
+        },
+        "tokens": {
+          "count": 5,
+          "descriptive_95pct_high": 746.7601999791709,
+          "descriptive_95pct_low": 744.839800020829,
+          "max": 747.0,
+          "mean": 745.8,
+          "min": 745.0,
+          "stdev": 1.0954451150103321
+        },
+        "tool_calls": {
+          "count": 5,
+          "descriptive_95pct_high": 2.0,
+          "descriptive_95pct_low": 2.0,
+          "max": 2.0,
+          "mean": 2.0,
+          "min": 2.0,
+          "stdev": 0.0
+        }
+      },
+      "routed": {
+        "duration_seconds": {
+          "count": 5,
+          "descriptive_95pct_high": 10.087791408677193,
+          "descriptive_95pct_low": 9.349913290529903,
+          "max": 10.219834374729544,
+          "mean": 9.718852349603548,
+          "min": 9.060093916021287,
+          "stdev": 0.420904497777286
+        },
+        "successes": {
+          "count": 5,
+          "descriptive_95pct_high": 1.0,
+          "descriptive_95pct_low": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "min": 1.0,
+          "stdev": 0.0
+        },
+        "tokens": {
+          "count": 5,
+          "descriptive_95pct_high": 609.0,
+          "descriptive_95pct_low": 609.0,
+          "max": 609.0,
+          "mean": 609.0,
+          "min": 609.0,
+          "stdev": 0.0
+        },
+        "tool_calls": {
+          "count": 5,
+          "descriptive_95pct_high": 2.0,
+          "descriptive_95pct_low": 2.0,
+          "max": 2.0,
+          "mean": 2.0,
+          "min": 2.0,
+          "stdev": 0.0
+        }
+      }
+    },
+    "regressions": {
+      "generic": {
+        "count": {
+          "count": 5,
+          "descriptive_95pct_high": 1.0,
+          "descriptive_95pct_low": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "min": 1.0,
+          "stdev": 0.0
+        },
+        "rate": {
+          "count": 5,
+          "descriptive_95pct_high": 0.7959999999999999,
+          "descriptive_95pct_low": 0.404,
+          "max": 1.0,
+          "mean": 0.6,
+          "min": 0.5,
+          "stdev": 0.22360679774997896
+        }
+      },
+      "routed": {
+        "count": {
+          "count": 5,
+          "descriptive_95pct_high": 1.0,
+          "descriptive_95pct_low": 1.0,
+          "max": 1.0,
+          "mean": 1.0,
+          "min": 1.0,
+          "stdev": 0.0
+        },
+        "rate": {
+          "count": 5,
+          "descriptive_95pct_high": 0.7959999999999999,
+          "descriptive_95pct_low": 0.404,
+          "max": 1.0,
+          "mean": 0.6,
+          "min": 0.5,
+          "stdev": 0.22360679774997896
+        }
+      }
+    },
+    "routed_coverage": {
+      "classified_tasks": {
+        "count": 5,
+        "descriptive_95pct_high": 0.0,
+        "descriptive_95pct_low": 0.0,
+        "max": 0.0,
+        "mean": 0.0,
+        "min": 0.0,
+        "stdev": 0.0
+      },
+      "rate": {
+        "count": 5,
+        "descriptive_95pct_high": 0.0,
+        "descriptive_95pct_low": 0.0,
+        "max": 0.0,
+        "mean": 0.0,
+        "min": 0.0,
+        "stdev": 0.0
+      },
+      "unclassified_tasks": {
+        "count": 5,
+        "descriptive_95pct_high": 2.0,
+        "descriptive_95pct_low": 2.0,
+        "max": 2.0,
+        "mean": 2.0,
+        "min": 2.0,
+        "stdev": 0.0
+      }
+    }
+  },
+  "task_count": 2,
+  "variant_metadata": {
+    "baseline": [
+      {
+        "candidate_source": "def double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    return double_value(double_value(value))",
+        "context_window": 8192,
+        "counterexample": "quadruple_value(1) (which returns 2)",
+        "counterexample_in_prompt": false,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "formal_verifier_timeout": false,
+        "mode": "no_repair",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    return double_value(value)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nFix the current draft while preserving its required behavior.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "repair_route": {
+          "classified": true,
+          "rationale": "No diagnosed failure signature matched.",
+          "signature_id": "not_applicable"
+        },
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable",
+        "verification_method": "crosshair",
+        "verification_timeout_seconds": 3.0
+      },
+      {
+        "candidate_source": "def maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return max(left, right)\n\n\ndef maximum_of_three(a: int, b: int, c: int) -> int:\n    \"\"\"post: _ >= a and _ >= b and _ >= c\"\"\"\n    return maximum(maximum(a, b), c)",
+        "context_window": 8192,
+        "counterexample": "maximum_of_three(-1, 0, 1) (which returns 0)",
+        "counterexample_in_prompt": false,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "formal_verifier_timeout": false,
+        "mode": "no_repair",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return left if left >= right else right\n\n\ndef maximum_of_three(a: int, b: int, c: int) -> int:\n    \"\"\"post: _ >= a and _ >= b and _ >= c\"\"\"\n    return maximum(a, b)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nFix the current draft while preserving its required behavior.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "repair_route": {
+          "classified": true,
+          "rationale": "No diagnosed failure signature matched.",
+          "signature_id": "not_applicable"
+        },
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable",
+        "verification_method": "crosshair",
+        "verification_timeout_seconds": 3.0
+      },
+      {
+        "candidate_source": "def double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    return double_value(double_value(value))",
+        "context_window": 8192,
+        "counterexample": "quadruple_value(1) (which returns 2)",
+        "counterexample_in_prompt": false,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "formal_verifier_timeout": false,
+        "mode": "no_repair",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    return double_value(value)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nFix the current draft while preserving its required behavior.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "repair_route": {
+          "classified": true,
+          "rationale": "No diagnosed failure signature matched.",
+          "signature_id": "not_applicable"
+        },
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable",
+        "verification_method": "crosshair",
+        "verification_timeout_seconds": 3.0
+      },
+      {
+        "candidate_source": "def maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return max(left, right)\n\n\ndef maximum_of_three(a: int, b: int, c: int) -> int:\n    \"\"\"post: _ >= a and _ >= b and _ >= c\"\"\"\n    return maximum(a, b)",
+        "context_window": 8192,
+        "counterexample": "maximum_of_three(-1, 0, 1) (which returns 0)",
+        "counterexample_in_prompt": false,
+        "final_counterexamples": [
+          "maximum_of_three(0, 0, 1) (which returns 0)"
+        ],
+        "final_issues": [
+          "CrossHair found a contract or assertion issue"
+        ],
+        "final_verifier_output": [
+          "/private/var/folders/fr/zgwhhqkx1k953vglp24mbbkh0000gn/T/agent_harness_crosshair_hzb9_ysx/candidate.py:7: error: false when calling maximum_of_three(0, 0, 1) (which returns 0)"
+        ],
+        "formal_verifier_timeout": false,
+        "mode": "no_repair",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return left if left >= right else right\n\n\ndef maximum_of_three(a: int, b: int, c: int) -> int:\n    \"\"\"post: _ >= a and _ >= b and _ >= c\"\"\"\n    return maximum(a, b)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nFix the current draft while preserving its required behavior.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "repair_route": {
+          "classified": true,
+          "rationale": "No diagnosed failure signature matched.",
+          "signature_id": "not_applicable"
+        },
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable",
+        "verification_method": "crosshair",
+        "verification_timeout_seconds": 3.0
+      }
+    ],
+    "generic": [
+      {
+        "candidate_source": "def double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    if value != 1:\n        raise ValueError(\"quadruple_value does not support non-1 values\")\n    return double_value(value)",
+        "context_window": 8192,
+        "counterexample": "quadruple_value(1) (which returns 2)",
+        "counterexample_in_prompt": true,
+        "final_counterexamples": [
+          "quadruple_value(1) (which returns 2)"
+        ],
+        "final_issues": [
+          "CrossHair found a contract or assertion issue"
+        ],
+        "final_verifier_output": [
+          "/private/var/folders/fr/zgwhhqkx1k953vglp24mbbkh0000gn/T/agent_harness_crosshair_iqyav79l/candidate.py:6: error: false when calling quadruple_value(1) (which returns 2)"
+        ],
+        "formal_verifier_timeout": false,
+        "mode": "general",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    return double_value(value)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: quadruple_value(1) (which returns 2)\n\nFIX DIRECTIVE:\nUse the verifier's counterexample as a valid input unless the source declares a precondition that excludes it. Make the returned value satisfy the postcondition for that exact input; do not reject it, raise an exception, or add an early-exit branch that the source does not require.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "repair_route": {
+          "classified": true,
+          "rationale": "No diagnosed failure signature matched.",
+          "signature_id": "not_applicable"
+        },
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable",
+        "verification_method": "crosshair",
+        "verification_timeout_seconds": 3.0
+      },
+      {
+        "candidate_source": "def maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return left if left >= right else right\n\n\ndef maximum_of_three(a: int, b: int, c: int) -> int:\n    \"\"\"post: _ >= a and _ >= b and _ >= c\"\"\"\n    return maximum(maximum(a, b), c)",
+        "context_window": 8192,
+        "counterexample": "maximum_of_three(-1, 0, 1) (which returns 0)",
+        "counterexample_in_prompt": true,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "formal_verifier_timeout": false,
+        "mode": "general",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return left if left >= right else right\n\n\ndef maximum_of_three(a: int, b: int, c: int) -> int:\n    \"\"\"post: _ >= a and _ >= b and _ >= c\"\"\"\n    return maximum(a, b)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: maximum_of_three(-1, 0, 1) (which returns 0)\n\nFIX DIRECTIVE:\nUse the verifier's counterexample as a valid input unless the source declares a precondition that excludes it. Make the returned value satisfy the postcondition for that exact input; do not reject it, raise an exception, or add an early-exit branch that the source does not require.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "repair_route": {
+          "classified": true,
+          "rationale": "No diagnosed failure signature matched.",
+          "signature_id": "not_applicable"
+        },
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable",
+        "verification_method": "crosshair",
+        "verification_timeout_seconds": 3.0
+      },
+      {
+        "candidate_source": "def double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    if value != 1:\n        raise ValueError(\"quadruple_value is not defined for value != 1\")\n    return double_value(value)",
+        "context_window": 8192,
+        "counterexample": "quadruple_value(1) (which returns 2)",
+        "counterexample_in_prompt": true,
+        "final_counterexamples": [
+          "quadruple_value(1) (which returns 2)"
+        ],
+        "final_issues": [
+          "CrossHair found a contract or assertion issue"
+        ],
+        "final_verifier_output": [
+          "/private/var/folders/fr/zgwhhqkx1k953vglp24mbbkh0000gn/T/agent_harness_crosshair__5vqogt3/candidate.py:6: error: false when calling quadruple_value(1) (which returns 2)"
+        ],
+        "formal_verifier_timeout": false,
+        "mode": "general",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    return double_value(value)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: quadruple_value(1) (which returns 2)\n\nFIX DIRECTIVE:\nUse the verifier's counterexample as a valid input unless the source declares a precondition that excludes it. Make the returned value satisfy the postcondition for that exact input; do not reject it, raise an exception, or add an early-exit branch that the source does not require.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "repair_route": {
+          "classified": true,
+          "rationale": "No diagnosed failure signature matched.",
+          "signature_id": "not_applicable"
+        },
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable",
+        "verification_method": "crosshair",
+        "verification_timeout_seconds": 3.0
+      },
+      {
+        "candidate_source": "def maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return max(left, right)\n\ndef maximum_of_three(a: int, b: int, c: int) -> int:\n    \"\"\"post: _ >= a and _ >= b and _ >= c\"\"\"\n    return maximum(maximum(a, b), c)",
+        "context_window": 8192,
+        "counterexample": "maximum_of_three(-1, 0, 1) (which returns 0)",
+        "counterexample_in_prompt": true,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "formal_verifier_timeout": false,
+        "mode": "general",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return left if left >= right else right\n\n\ndef maximum_of_three(a: int, b: int, c: int) -> int:\n    \"\"\"post: _ >= a and _ >= b and _ >= c\"\"\"\n    return maximum(a, b)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: maximum_of_three(-1, 0, 1) (which returns 0)\n\nFIX DIRECTIVE:\nUse the verifier's counterexample as a valid input unless the source declares a precondition that excludes it. Make the returned value satisfy the postcondition for that exact input; do not reject it, raise an exception, or add an early-exit branch that the source does not require.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "repair_route": {
+          "classified": true,
+          "rationale": "No diagnosed failure signature matched.",
+          "signature_id": "not_applicable"
+        },
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable",
+        "verification_method": "crosshair",
+        "verification_timeout_seconds": 3.0
+      },
+      {
+        "candidate_source": "def double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    if value != 1:\n        raise ValueError(\"quadruple_value is not defined for value != 1\")\n    return double_value(value)",
+        "context_window": 8192,
+        "counterexample": "quadruple_value(1) (which returns 2)",
+        "counterexample_in_prompt": true,
+        "final_counterexamples": [
+          "quadruple_value(1) (which returns 2)"
+        ],
+        "final_issues": [
+          "CrossHair found a contract or assertion issue"
+        ],
+        "final_verifier_output": [
+          "/private/var/folders/fr/zgwhhqkx1k953vglp24mbbkh0000gn/T/agent_harness_crosshair_i7r89p56/candidate.py:6: error: false when calling quadruple_value(1) (which returns 2)"
+        ],
+        "formal_verifier_timeout": false,
+        "mode": "general",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    return double_value(value)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: quadruple_value(1) (which returns 2)\n\nFIX DIRECTIVE:\nUse the verifier's counterexample as a valid input unless the source declares a precondition that excludes it. Make the returned value satisfy the postcondition for that exact input; do not reject it, raise an exception, or add an early-exit branch that the source does not require.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "repair_route": {
+          "classified": true,
+          "rationale": "No diagnosed failure signature matched.",
+          "signature_id": "not_applicable"
+        },
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable",
+        "verification_method": "crosshair",
+        "verification_timeout_seconds": 3.0
+      },
+      {
+        "candidate_source": "def maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return max(left, right)\n\n\ndef maximum_of_three(a: int, b: int, c: int) -> int:\n    \"\"\"post: _ >= a and _ >= b and _ >= c\"\"\"\n    return maximum(maximum(a, b), c)",
+        "context_window": 8192,
+        "counterexample": "maximum_of_three(-1, 0, 1) (which returns 0)",
+        "counterexample_in_prompt": true,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "formal_verifier_timeout": false,
+        "mode": "general",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return left if left >= right else right\n\n\ndef maximum_of_three(a: int, b: int, c: int) -> int:\n    \"\"\"post: _ >= a and _ >= b and _ >= c\"\"\"\n    return maximum(a, b)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: maximum_of_three(-1, 0, 1) (which returns 0)\n\nFIX DIRECTIVE:\nUse the verifier's counterexample as a valid input unless the source declares a precondition that excludes it. Make the returned value satisfy the postcondition for that exact input; do not reject it, raise an exception, or add an early-exit branch that the source does not require.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "repair_route": {
+          "classified": true,
+          "rationale": "No diagnosed failure signature matched.",
+          "signature_id": "not_applicable"
+        },
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable",
+        "verification_method": "crosshair",
+        "verification_timeout_seconds": 3.0
+      },
+      {
+        "candidate_source": "def double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    if value != 1:\n        raise ValueError(\"quadruple_value does not support non-1 values\")\n    return double_value(value)",
+        "context_window": 8192,
+        "counterexample": "quadruple_value(1) (which returns 2)",
+        "counterexample_in_prompt": true,
+        "final_counterexamples": [
+          "quadruple_value(1) (which returns 2)"
+        ],
+        "final_issues": [
+          "CrossHair found a contract or assertion issue"
+        ],
+        "final_verifier_output": [
+          "/private/var/folders/fr/zgwhhqkx1k953vglp24mbbkh0000gn/T/agent_harness_crosshair_pdur5xgs/candidate.py:6: error: false when calling quadruple_value(1) (which returns 2)"
+        ],
+        "formal_verifier_timeout": false,
+        "mode": "general",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    return double_value(value)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: quadruple_value(1) (which returns 2)\n\nFIX DIRECTIVE:\nUse the verifier's counterexample as a valid input unless the source declares a precondition that excludes it. Make the returned value satisfy the postcondition for that exact input; do not reject it, raise an exception, or add an early-exit branch that the source does not require.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "repair_route": {
+          "classified": true,
+          "rationale": "No diagnosed failure signature matched.",
+          "signature_id": "not_applicable"
+        },
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable",
+        "verification_method": "crosshair",
+        "verification_timeout_seconds": 3.0
+      },
+      {
+        "candidate_source": "def double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    if value != 1:\n        raise ValueError(\"Input must be 1 for quadruple_value to work correctly.\")\n    return double_value(value)",
+        "context_window": 8192,
+        "counterexample": "quadruple_value(1) (which returns 2)",
+        "counterexample_in_prompt": true,
+        "final_counterexamples": [
+          "quadruple_value(1) (which returns 2)"
+        ],
+        "final_issues": [
+          "CrossHair found a contract or assertion issue"
+        ],
+        "final_verifier_output": [
+          "/private/var/folders/fr/zgwhhqkx1k953vglp24mbbkh0000gn/T/agent_harness_crosshair_2d9w9ei5/candidate.py:6: error: false when calling quadruple_value(1) (which returns 2)"
+        ],
+        "formal_verifier_timeout": false,
+        "mode": "general",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    return double_value(value)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n  Formal counterexample: quadruple_value(1) (which returns 2)\n\nFIX DIRECTIVE:\nUse the verifier's counterexample as a valid input unless the source declares a precondition that excludes it. Make the returned value satisfy the postcondition for that exact input; do not reject it, raise an exception, or add an early-exit branch that the source does not require.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "repair_route": {
+          "classified": true,
+          "rationale": "No diagnosed failure signature matched.",
+          "signature_id": "not_applicable"
+        },
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable",
+        "verification_method": "crosshair",
+        "verification_timeout_seconds": 3.0
+      }
+    ],
+    "routed": [
+      {
+        "candidate_source": "def double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    return double_value(value)",
+        "context_window": 8192,
+        "counterexample": "quadruple_value(1) (which returns 2)",
+        "counterexample_in_prompt": true,
+        "final_counterexamples": [
+          "quadruple_value(1) (which returns 2)"
+        ],
+        "final_issues": [
+          "CrossHair found a contract or assertion issue"
+        ],
+        "final_verifier_output": [
+          "/private/var/folders/fr/zgwhhqkx1k953vglp24mbbkh0000gn/T/agent_harness_crosshair_fhk2fzbh/candidate.py:6: error: false when calling quadruple_value(1) (which returns 2)"
+        ],
+        "formal_verifier_timeout": false,
+        "mode": "routed",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    return double_value(value)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "repair_route": {
+          "classified": false,
+          "rationale": "No diagnosed failure signature matched.",
+          "signature_id": "unclassified"
+        },
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable",
+        "verification_method": "crosshair",
+        "verification_timeout_seconds": 3.0
+      },
+      {
+        "candidate_source": "def maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return max(left, right)\n\n\ndef maximum_of_three(a: int, b: int, c: int) -> int:\n    \"\"\"post: _ >= a and _ >= b and _ >= c\"\"\"\n    return maximum(maximum(a, b), c)",
+        "context_window": 8192,
+        "counterexample": "maximum_of_three(-1, 0, 1) (which returns 0)",
+        "counterexample_in_prompt": true,
+        "final_counterexamples": [],
+        "final_issues": [],
+        "final_verifier_output": [],
+        "formal_verifier_timeout": false,
+        "mode": "routed",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef maximum(left: int, right: int) -> int:\n    \"\"\"post: _ >= left and _ >= right\"\"\"\n    return left if left >= right else right\n\n\ndef maximum_of_three(a: int, b: int, c: int) -> int:\n    \"\"\"post: _ >= a and _ >= b and _ >= c\"\"\"\n    return maximum(a, b)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "repair_route": {
+          "classified": false,
+          "rationale": "No diagnosed failure signature matched.",
+          "signature_id": "unclassified"
+        },
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable",
+        "verification_method": "crosshair",
+        "verification_timeout_seconds": 3.0
+      },
+      {
+        "candidate_source": "def double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    return double_value(value)",
+        "context_window": 8192,
+        "counterexample": "quadruple_value(1) (which returns 2)",
+        "counterexample_in_prompt": true,
+        "final_counterexamples": [
+          "quadruple_value(1) (which returns 2)"
+        ],
+        "final_issues": [
+          "CrossHair found a contract or assertion issue"
+        ],
+        "final_verifier_output": [
+          "/private/var/folders/fr/zgwhhqkx1k953vglp24mbbkh0000gn/T/agent_harness_crosshair_fy4v9vdy/candidate.py:6: error: false when calling quadruple_value(1) (which returns 2)"
+        ],
+        "formal_verifier_timeout": false,
+        "mode": "routed",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    return double_value(value)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "repair_route": {
+          "classified": false,
+          "rationale": "No diagnosed failure signature matched.",
+          "signature_id": "unclassified"
+        },
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable",
+        "verification_method": "crosshair",
+        "verification_timeout_seconds": 3.0
+      },
+      {
+        "candidate_source": "def double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    return double_value(value)",
+        "context_window": 8192,
+        "counterexample": "quadruple_value(1) (which returns 2)",
+        "counterexample_in_prompt": true,
+        "final_counterexamples": [
+          "quadruple_value(1) (which returns 2)"
+        ],
+        "final_issues": [
+          "CrossHair found a contract or assertion issue"
+        ],
+        "final_verifier_output": [
+          "/private/var/folders/fr/zgwhhqkx1k953vglp24mbbkh0000gn/T/agent_harness_crosshair_yru54uo8/candidate.py:6: error: false when calling quadruple_value(1) (which returns 2)"
+        ],
+        "formal_verifier_timeout": false,
+        "mode": "routed",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    return double_value(value)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "repair_route": {
+          "classified": false,
+          "rationale": "No diagnosed failure signature matched.",
+          "signature_id": "unclassified"
+        },
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable",
+        "verification_method": "crosshair",
+        "verification_timeout_seconds": 3.0
+      },
+      {
+        "candidate_source": "def double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    return double_value(value)",
+        "context_window": 8192,
+        "counterexample": "quadruple_value(1) (which returns 2)",
+        "counterexample_in_prompt": true,
+        "final_counterexamples": [
+          "quadruple_value(1) (which returns 2)"
+        ],
+        "final_issues": [
+          "CrossHair found a contract or assertion issue"
+        ],
+        "final_verifier_output": [
+          "/private/var/folders/fr/zgwhhqkx1k953vglp24mbbkh0000gn/T/agent_harness_crosshair_wfevm4av/candidate.py:6: error: false when calling quadruple_value(1) (which returns 2)"
+        ],
+        "formal_verifier_timeout": false,
+        "mode": "routed",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    return double_value(value)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "repair_route": {
+          "classified": false,
+          "rationale": "No diagnosed failure signature matched.",
+          "signature_id": "unclassified"
+        },
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable",
+        "verification_method": "crosshair",
+        "verification_timeout_seconds": 3.0
+      },
+      {
+        "candidate_source": "def double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    return double_value(value)",
+        "context_window": 8192,
+        "counterexample": "quadruple_value(1) (which returns 2)",
+        "counterexample_in_prompt": true,
+        "final_counterexamples": [
+          "quadruple_value(1) (which returns 2)"
+        ],
+        "final_issues": [
+          "CrossHair found a contract or assertion issue"
+        ],
+        "final_verifier_output": [
+          "/private/var/folders/fr/zgwhhqkx1k953vglp24mbbkh0000gn/T/agent_harness_crosshair_bhx9ogtm/candidate.py:6: error: false when calling quadruple_value(1) (which returns 2)"
+        ],
+        "formal_verifier_timeout": false,
+        "mode": "routed",
+        "model": "qwen2.5-coder:1.5b",
+        "pricing_basis": "local_unpriced",
+        "provider": "ollama",
+        "reasoning_effort": "not_applicable",
+        "repair_prompt": "CRITICAL BUG FIX REQUIRED\n\nYOUR CODE:\ndef double_value(value: int) -> int:\n    \"\"\"post: _ == value * 2\"\"\"\n    return value * 2\n\n\ndef quadruple_value(value: int) -> int:\n    \"\"\"post: _ == value * 4\"\"\"\n    return double_value(value)\n\nFAILED CHECK:\n- Problem: CrossHair found a contract or assertion issue\n  Your result: contract or assertion violation\n  Required result: all checkable contracts and assertions hold\n\nFIX DIRECTIVE:\nChange the implementation so every contract, assertion, or symbolic counterexample reported by the verifier is satisfied.\n\nFINAL RULES:\n- Return only complete Python code.\n- Preserve the public function name.\n- Do not add imports, file I/O, network calls, eval, exec, print calls, or demo code.\n- Do not use global or module-level mutable state.",
+        "repair_route": {
+          "classified": false,
+          "rationale": "No diagnosed failure signature matched.",
+          "signature_id": "unclassified"
+        },
+        "scope": "python-crosshair-only",
+        "thinking_type": "not_applicable",
+        "verification_method": "crosshair",
+        "verification_timeout_seconds": 3.0
+      }
+    ]
+  }
+}

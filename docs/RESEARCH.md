@@ -27,6 +27,16 @@ with source URLs stored alongside the allow-list. They establish and test the
 review workflow; future entries should come from observed generated drafts and
 the same documented approval path, not from broad pre-population.
 
+### Formal-verification scope boundary
+
+CrossHair-guided repair is intentionally Python-only. C, C++, Rust, and
+JavaScript receive the same parse, structural, compilation, import, and
+reviewed-library checks, but are not presented as having a CrossHair-equivalent
+proof or counterexample-repair path. That is an explicit research-scope
+boundary, not an implicit completeness claim. A non-Python formal-verification
+track should be added only as a separately designed experiment with its own
+baseline, corpus, raw artifacts, and report.
+
 ## Claims and non-claims
 
 The repository can currently support these claims:
@@ -268,6 +278,103 @@ claim of complete verification. Routed repair cost 2,718.67 mean tokens versus
 2,494.00 for no formal guidance (+9.01%): the evidence remains about avoiding
 generic-repair regressions, not reducing tokens.
 
+The benchmark now gives `formal-order-pair` the same bounded eight-second
+verifier budget as the known string-normalization limit. This prevents a slow
+verification pass from being counted as a model-quality failure; it does not
+turn a timeout into a formal proof, and each raw outcome retains its method and
+timeout status.
+
+### Order-pair timeout fix confirmed, and a broader timeout finding (2026-08-19)
+
+The three-arm study was rerun with the eight-second budget in place. A first
+three-repetition sample in
+[`results/formal-counterexample-repair-routed-2026-08-19.md`](results/formal-counterexample-repair-routed-2026-08-19.md)
+showed a clean 11.00 ± 0.00 routed result with zero regressions. That sample
+was too small to trust on its own, so it was followed by a six-repetition
+sample in
+[`results/formal-counterexample-repair-routed-6run-2026-08-19.md`](results/formal-counterexample-repair-routed-6run-2026-08-19.md).
+The larger sample changed the picture: routed completion dropped to 10.50 ±
+0.55, with a routed regression in 3 of the 6 runs (mean rate 5.60%).
+
+Inspecting every routed-arm failure across all six runs shows `formal-order-pair`
+itself did **not** fail once - the targeted fix is confirmed and holds up at
+the larger sample size. The regressions that did appear were on two different,
+**unclassified** tasks: `formal-clamp-value` (a CrossHair verifier timeout on
+its normal 3-second budget, in 2 of 6 runs) and `formal-prefix-sum` (an actual
+incorrect small-model repair, in 1 of 6 runs). Neither is caused by the router
+or by the order-pair fix; both are pre-existing small-model/verifier noise on
+tasks the router does not touch. This is new evidence that CrossHair's default
+3-second budget is a general source of intermittent noise, not one specific to
+`formal-order-pair` and `formal-trim-text`; widening the bounded-budget
+exception list is a candidate follow-up, not yet done.
+
+The corrected conclusion: `formal-order-pair` is closed - its verifier-timeout
+failure mode is fixed and confirmed at n=6, no new router signature is needed
+for it - but the three-arm study's earlier "zero regression" claim was an
+artifact of an undersized sample and must not be repeated without the larger
+n. This is a single local-model, single-corpus observation.
+
+### Router coverage decision (2026-08-19)
+
+At six repetitions the routed arm still uses only its original three
+diagnosed signatures and still substantially outperforms the generic
+directive (10.50 ± 0.55 vs 6.83 ± 1.17) with a far lower regression rate
+(5.60% vs 27.22%). The residual routed-arm regressions come from two
+unclassified tasks with their own separate causes (a verifier-timeout budget
+issue and a genuine model mistake), not from a missing router signature -
+adding router coverage for `formal-clamp-value` or `formal-prefix-sum` would
+not address either cause. The next investment is corpus expansion, not
+coverage expansion: grow the task corpus (see the multi-function follow-up
+below) to surface new, reproducible, transcript-backed failure patterns, and
+only add a new router signature when a new corpus produces one the way
+`nonnegative_defensive_raise`, `order_pair_input_rejection`, and
+`trim_text_wrong_method` were each derived from an observed transcript.
+
+### Multi-function corpus follow-up (2026-08-19)
+
+The Python/CrossHair study was extended beyond single-function contracts with
+a separately versioned two-task corpus,
+[`data/formal_repair_multifunction_benchmark_tasks.json`](../data/formal_repair_multifunction_benchmark_tasks.json).
+Each task defines an already-correct helper function and a second function
+that composes it incorrectly, so a correct repair requires cross-function
+reasoning rather than a single-expression fix: `quadruple_value` must call
+`double_value` twice, and `maximum_of_three` must call `maximum` twice. Both
+fixtures were smoke-tested to confirm CrossHair accepts the correct
+composition and rejects the broken one. Five repetitions of the same
+no-guidance / generic / routed protocol are recorded in
+[`results/formal-counterexample-repair-multifunction-2026-08-19.md`](results/formal-counterexample-repair-multifunction-2026-08-19.md).
+
+The result is a genuine negative finding for guided repair on this corpus,
+and it replicates a known failure mode on an independent task. No-guidance
+baseline completed 1.80 ± 0.45 of 2 tasks; both the generic directive and the
+routed arm (both tasks are unclassified by the existing router) completed
+only 1.00 ± 0.00, a 60% regression rate for each. Every one of the 5 generic
+failures on `formal-quadruple-value` reproduces the exact same pattern
+already diagnosed for `nonnegative_defensive_raise`: the model treats the
+verifier's witness (`quadruple_value(1)`) as an input restriction and adds an
+`if value != 1: raise ValueError(...)` guard instead of fixing the
+composition, even though this is a new task shape the router has never seen.
+This independently replicates the "treat the counterexample as a precondition"
+failure mode outside the original three diagnosed signatures, which is
+evidence (not yet acted on) that a broader, still-narrow router signature for
+that specific pattern could eventually generalize - but one more replication
+is not enough to justify writing it, per this project's evidence bar.
+
+The unclassified-routed failures on the same task are a different, narrower
+artifact: the model returned the broken source unchanged in all 5 runs. The
+unclassified-routed prompt path (`_baseline_prompt` applied to
+`build_small_worker_retry_prompt` with its default directive) is not
+identical to the dedicated `no_repair` prompt used by the true baseline arm
+(`"Fix the current draft while preserving its required behavior."`); this is
+a prompt-construction difference worth tightening, not a routing decision.
+`formal-maximum-of-three` shows the opposite pattern: baseline completed 4/5
+and both guided arms completed 5/5, so guidance helps on that task shape.
+The net corpus-level result is negative for guidance and consistent with the
+existing conclusion that prompt guidance is task-pattern-sensitive; it does
+not generalize automatically to new task shapes and can reproduce a known
+failure mode there. This is a two-task, single-model, single-corpus
+observation and does not establish multi-function contracts in general.
+
 ## Cost-aware route evidence
 
 API calls can report an estimated dollar cost; local Ollama calls are instead
@@ -371,6 +478,15 @@ shielded tool loop averaged 8.00/10, with 5.94x the mean model-token use. One
 Ollama startup timeout and all turn-limit failures remain in the raw artifact.
 It is cross-repository diagnostic evidence, not a tool-loop efficiency claim.
 
+## Evidence still requiring a live provider
+
+The health gate is implemented and required by the DeepSeek benchmark targets.
+The previously recorded DeepSeek runs remain diagnostic only because they
+predate that gate. A new three-repeat comparison and an independent-fixture
+DeepSeek run require a reachable configured API; no local test can substitute
+for that evidence. Retain every generated raw JSON file and publish unhealthy
+runs as infrastructure findings rather than quality comparisons.
+
 ## Live end-to-end evaluation
 
 Before demoing a new release, record one real session for each task shape:
@@ -392,6 +508,40 @@ machine-readable receipts. The five receipts are: `plain_question`,
 `planning_review`, and `unavailable_api`. Store only prompt summaries and diff
 hashes—not keys, raw private prompts, or absolute local paths.
 
+After collecting genuine sessions, verify that the published set is complete:
+
+```bash
+make verify-live-sessions SESSION_RECEIPT_DIR=docs/results/raw/live_sessions
+```
+
+The verifier rejects duplicate or incomplete scenarios, missing provenance,
+and a multi-file receipt that does not demonstrate both approval and rejection.
+It validates evidence; it does not generate placeholder receipts.
+
+### Partial receipt set (2026-08-19)
+
+Two of the five receipts are recorded under `docs/results/raw/live_sessions/`:
+`plain_question` (a real DeepSeek-backed `run_tool_agent.py` session, 7 tool
+calls, no plan or file mutation) and `unavailable_api` (a real run with no
+architect credential configured, surfacing `ArchitectApiClient`'s genuine
+`RuntimeError` before any HTTP request or file write). Neither scenario
+requires a human approval decision, so both could be recorded from an
+unattended, genuine session.
+
+`small_edit`, `multi_file_edit`, and `planning_review` each require a real
+human approving or rejecting an actual proposed diff; `build_live_session_receipt`
+rejects all three without at least one recorded decision, and this project's
+evidence discipline does not allow fabricating that decision. These three
+remain open, blocked on a human operator running, for example:
+
+```bash
+make record-live-session SESSION_ARGS="--scenario small_edit --prompt-summary '...' --provider deepseek --model deepseek-v4-pro --approval proposal_1=approved --validation-status passed --outcome completed --tool-calls N --output docs/results/raw/live_sessions/small_edit-YYYY-MM-DD.json"
+```
+
+`make verify-live-sessions` correctly reports `complete: false` with
+`missing scenarios: multi_file_edit, planning_review, small_edit` against the
+current two-receipt set; this is expected and must not be worked around.
+
 ## Publication checklist
 
 - Commit hash, operating system, Python version, model identifier, and
@@ -406,14 +556,23 @@ hashes—not keys, raw private prompts, or absolute local paths.
 
 ## Remaining research work
 
-1. Rerun the 20-task DeepSeek comparison with the API-health gate. The runner
-   now writes all rows but rejects any aggregate comparison if a provider emits
-   an empty response, times out, or is unreachable.
-2. Run the DeepSeek side of the independent fixture corpus with that same gate.
-3. Record the five controlled approval-reviewed session receipts.
-4. Expand the Python/CrossHair study beyond single-function contracts with a
-   repository or multi-function corpus; retain its Python-only scope. The
-   single-function general-directive control is complete and negative.
+1. **Open.** Rerun the 20-task DeepSeek comparison with the API-health gate.
+   The runner now writes all rows but rejects any aggregate comparison if a
+   provider emits an empty response, times out, or is unreachable. The
+   2026-08-17 gated attempt failed this gate (76 provider failures, all in
+   the baseline arm); root cause and fix are in progress separately from this
+   revision.
+2. **Open.** Run the DeepSeek side of the independent fixture corpus with that
+   same gate.
+3. **Partial (2/5).** Record the five controlled approval-reviewed session
+   receipts. `plain_question` and `unavailable_api` are recorded; see
+   "Partial receipt set (2026-08-19)" above. `small_edit`, `multi_file_edit`,
+   and `planning_review` remain open pending a human operator.
+4. **Done.** Expand the Python/CrossHair study beyond single-function
+   contracts with a multi-function corpus; retained its Python-only scope.
+   See "Multi-function corpus follow-up (2026-08-19)" above: guidance is
+   negative on this corpus overall, and it independently replicates the
+   witness-as-precondition failure mode on a task the router has never seen.
 5. Accumulate further real sessions only after the controlled receipt set is
    complete; do not elevate anecdotal success into a benchmark claim.
 

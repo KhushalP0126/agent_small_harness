@@ -41,6 +41,7 @@ MODEL_COMPARISON_1_5 ?= docs/results/raw/compute-shield-10-qwen-1.5b-2026-08-11.
 MODEL_COMPARISON_3B ?= docs/results/raw/compute-shield-10-qwen-3b-2026-08-11.json
 MODEL_COMPARISON_OUTPUT ?= docs/results/local-model-comparison-2026-08-11.md
 SESSION_ARGS ?=
+SESSION_RECEIPT_DIR ?= docs/results/raw/live_sessions
 RAW_VS_HARNESS_SAMPLES ?= 5
 DOC_AGENT ?= deepseek
 DOC_MODEL ?=
@@ -51,7 +52,7 @@ IMAGE ?= agent-small-harness:local
 ARTIFACT_ARGS = $(if $(filter 1 true yes,$(SAVE_ARTIFACTS)),--save-artifacts --artifact-root "$(ARTIFACT_ROOT)",)
 DOC_ARGS = --doc-agent "$(DOC_AGENT)" $(if $(DOC_MODEL),--doc-model "$(DOC_MODEL)",) $(if $(DOC_OUTPUT),--doc-output "$(DOC_OUTPUT)",)
 
-.PHONY: help bootstrap setup install install-formal install-kernel env-path init-env api-dev tui rust-tui tui_rust start test-rust check research-check research-agent-benchmark research-fixture-deepseek research-fixture-qwen research-formal-repair research-formal-repair-diverse research-formal-repair-general research-formal-nonnegative research-formal-repair-routed routing-report research-report research-model-comparison record-live-session research-compute-shield docker-build sandbox-run agent-benchmark test test-engine-expansion compute-shield test-claude-fixes test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-fixture resume-coding-capability test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-worker-limit-architect resume-worker-limit test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-python-ladder-stateful test-python-ladder-stateful-architect test-plan-mode-ladder test-raw-vs-harness test-raw-vs-harness-architect test-raw-vs-harness-repeated test-raw-vs-harness-ablation test-formal-experiment formal-counterexample-smoke structured-spec structured-spec-plan resume-structured-spec repo-map review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library tool-agent ollama-smoke inference-smoke live-repair day1 clean-history clean-cache clean-generated
+.PHONY: help bootstrap setup install install-formal install-kernel env-path init-env api-dev tui rust-tui tui_rust start test-rust check research-check research-agent-benchmark research-fixture-deepseek research-fixture-qwen research-formal-repair research-formal-repair-diverse research-formal-repair-general research-formal-nonnegative research-formal-repair-routed routing-report research-report research-model-comparison record-live-session verify-live-sessions research-compute-shield docker-build sandbox-run agent-benchmark test test-engine-expansion compute-shield test-claude-fixes test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-fixture resume-coding-capability test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-worker-limit-architect resume-worker-limit test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-python-ladder-stateful test-plan-mode-ladder test-raw-vs-harness test-raw-vs-harness-architect test-raw-vs-harness-repeated test-raw-vs-harness-ablation test-formal-experiment formal-counterexample-smoke structured-spec structured-spec-plan resume-structured-spec repo-map review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library tool-agent ollama-smoke inference-smoke live-repair day1 clean-history clean-cache clean-generated
 
 help:
 	@printf "agent-coder_structure\n\n"
@@ -63,6 +64,7 @@ help:
 	@printf "  make research-agent-benchmark   Run a health-gated repeated API comparison\n"
 	@printf "  make research-report REPORT_INPUT=...  Render a dated Markdown report from raw JSON\n"
 	@printf "  make research-model-comparison         Compare frozen Qwen 1.5B and 3B reports\n"
+	@printf "  make verify-live-sessions              Verify the five real controlled-session receipts\n"
 	@printf "\nDaily work:\n"
 	@printf "  make tool-agent TASK='inspect agents'    Run bounded repository tools\n"
 	@printf "  make structured-spec-plan SPEC_PATH=...  Create an architect plan only\n"
@@ -156,6 +158,9 @@ research-model-comparison:
 record-live-session:
 	@test -n "$(SESSION_ARGS)" || (echo "Set SESSION_ARGS, e.g. --scenario plain_question --prompt-summary '...' --provider deepseek --model deepseek-v4-pro --validation-status not_applicable --outcome answered --output docs/results/raw/session.json" && exit 1)
 	$(PYTHON) scripts/record_live_session.py $(SESSION_ARGS)
+
+verify-live-sessions:
+	$(PYTHON) scripts/verify_live_sessions.py --receipt-dir "$(SESSION_RECEIPT_DIR)"
 
 research-compute-shield:
 	$(PYTHON) scripts/run_compute_shield_experiment.py $(COMPUTE_SHIELD_ARGS)

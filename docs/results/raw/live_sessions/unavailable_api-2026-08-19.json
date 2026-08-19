@@ -1,0 +1,25 @@
+{
+  "approvals": [],
+  "artifact_reference": "backends/architect_client.py ArchitectApiClient.generate raised before any HTTP request; no repository file was written",
+  "model": "none",
+  "outcome": "Architect model credential is not configured; the client raised a visible RuntimeError before any HTTP request.",
+  "prompt_summary": "Asked the tool-calling agent to summarize what the Makefile research-check target does, with no architect/DeepSeek credential configured.",
+  "proposed_diff_sha256": "",
+  "provenance": {
+    "captured_at_utc": "2026-08-19T17:20:59.451336+00:00",
+    "environment": {
+      "os": "macOS-26.5.1-arm64-arm-64bit",
+      "python": "3.11.9",
+      "python_implementation": "CPython"
+    },
+    "repository": {
+      "commit": "05d82cd10a8f1c0f2491d4650efdc61bf0cc1eec",
+      "dirty": true
+    }
+  },
+  "provider": "none",
+  "scenario": "unavailable_api",
+  "schema_version": 1,
+  "tool_calls": 0,
+  "validation_status": "not_applicable"
+}

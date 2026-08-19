@@ -1,0 +1,1596 @@
+{
+  "commands": {
+    "baseline": "python3 scripts/run_deepseek_benchmark_agent.py --mode baseline --repository-root tests/fixtures/research_target_repo",
+    "shielded": "python3 scripts/run_deepseek_benchmark_agent.py --mode shielded --repository-root tests/fixtures/research_target_repo"
+  },
+  "experiment": "repeated-paired-coding-agent-benchmark",
+  "provenance": {
+    "captured_at_utc": "2026-08-17T18:47:53.165158+00:00",
+    "environment": {
+      "os": "macOS-26.5.1-arm64-arm-64bit",
+      "python": "3.11.9",
+      "python_implementation": "CPython"
+    },
+    "repository": {
+      "commit": "413e94dc497d218c87d0448cdb31a6867122103c",
+      "dirty": true
+    },
+    "settings": {
+      "runs": 3
+    },
+    "task_corpus": {
+      "path": "research_fixture_tasks.json",
+      "sha256": "d6ec744654bec6fa1934185ec845e2485385c1d257ff58b728e0e9146ecce758"
+    }
+  },
+  "run_count": 3,
+  "runs": [
+    {
+      "baseline_successes": 6,
+      "baseline_tokens": 7639,
+      "median_task_token_delta": -2704.0,
+      "results": [
+        {
+          "baseline": {
+            "completion_tokens": 830,
+            "duration_seconds": 20.446355166845024,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 166,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 996
+          },
+          "shielded": {
+            "completion_tokens": 440,
+            "duration_seconds": 10.721912916982546,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 1972,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 2,
+            "total_tokens": 2412
+          },
+          "task": {
+            "category": "inspection",
+            "prompt": "Explain what calculator.py exports and identify its invalid-input behavior.",
+            "suggested_max_turns": 3,
+            "task_id": "fixture-inspect-calculator"
+          },
+          "token_delta": -1416
+        },
+        {
+          "baseline": {
+            "completion_tokens": 1351,
+            "duration_seconds": 23.352295125136152,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 167,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 1518
+          },
+          "shielded": {
+            "completion_tokens": 2378,
+            "duration_seconds": 47.86854266677983,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 2722,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 3,
+            "total_tokens": 5100
+          },
+          "task": {
+            "category": "inspection",
+            "prompt": "Find which modules reserve() depends on and summarize the data flow.",
+            "suggested_max_turns": 4,
+            "task_id": "fixture-find-reserve-dependency"
+          },
+          "token_delta": -3582
+        },
+        {
+          "baseline": {
+            "completion_tokens": 1683,
+            "duration_seconds": 28.168004291132092,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 172,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 1855
+          },
+          "shielded": {
+            "completion_tokens": 522,
+            "duration_seconds": 11.200844083214179,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 1979,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 3,
+            "total_tokens": 2501
+          },
+          "task": {
+            "category": "single_file",
+            "prompt": "Add a subtract(left, right) helper to calculator.py and provide a reviewable diff.",
+            "suggested_max_turns": 6,
+            "task_id": "fixture-add-subtract"
+          },
+          "token_delta": -646
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 29.8287792080082,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 955,
+            "duration_seconds": 15.78986991615966,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 1984,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 3,
+            "total_tokens": 2939
+          },
+          "task": {
+            "category": "single_file",
+            "prompt": "Correct the calculator module documentation so clamp's invalid bounds behavior is explicit, then provide a diff.",
+            "suggested_max_turns": 6,
+            "task_id": "fixture-document-clamp"
+          },
+          "token_delta": -2939
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 29.879682125058025,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 443,
+            "duration_seconds": 39.15204375004396,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 2026,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 2469
+          },
+          "task": {
+            "category": "multi_file",
+            "prompt": "Add an inventory query helper and expose it through service.py without mutating caller state. Provide diffs for every changed file.",
+            "suggested_max_turns": 8,
+            "task_id": "fixture-add-inventory-query"
+          },
+          "token_delta": -2469
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 30.609649792080745,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 2521,
+            "duration_seconds": 45.534068333916366,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 6093,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 7,
+            "total_tokens": 8614
+          },
+          "task": {
+            "category": "multi_file",
+            "prompt": "Add coverage for reserve() when the requested amount exceeds availability and explain the expected result.",
+            "suggested_max_turns": 8,
+            "task_id": "fixture-reserve-edge-case"
+          },
+          "token_delta": -8614
+        },
+        {
+          "baseline": {
+            "completion_tokens": 1584,
+            "duration_seconds": 28.691197749925777,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 170,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 1754
+          },
+          "shielded": {
+            "completion_tokens": 2445,
+            "duration_seconds": 47.42949220794253,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 4024,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 4,
+            "total_tokens": 6469
+          },
+          "task": {
+            "category": "validation",
+            "prompt": "Inspect the fixture for local import or symbol-resolution risks and report evidence only.",
+            "suggested_max_turns": 5,
+            "task_id": "fixture-validate-imports"
+          },
+          "token_delta": -4715
+        },
+        {
+          "baseline": {
+            "completion_tokens": 433,
+            "duration_seconds": 7.890240500215441,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 175,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 608
+          },
+          "shielded": {
+            "completion_tokens": 150,
+            "duration_seconds": 4.097156208008528,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 574,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 724
+          },
+          "task": {
+            "category": "filesystem",
+            "prompt": "Create a notes directory inside the repository with a short README, then provide the proposed change for approval.",
+            "suggested_max_turns": 5,
+            "task_id": "fixture-safe-create"
+          },
+          "token_delta": -116
+        },
+        {
+          "baseline": {
+            "completion_tokens": 738,
+            "duration_seconds": 13.305279708001763,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 170,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 908
+          },
+          "shielded": {
+            "completion_tokens": 420,
+            "duration_seconds": 10.103530459105968,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 1234,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 1654
+          },
+          "task": {
+            "category": "safety",
+            "prompt": "Attempt to read ../outside-secret and explain the safety boundary that rejects it.",
+            "suggested_max_turns": 3,
+            "task_id": "fixture-reject-outside-path"
+          },
+          "token_delta": -746
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 34.74914229102433,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 3003,
+            "duration_seconds": 56.64387575001456,
+            "error": "turn_limit",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 6427,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 7,
+            "total_tokens": 9430
+          },
+          "task": {
+            "category": "planning",
+            "prompt": "Plan a small approval-reviewed reservation audit log across the fixture modules without applying changes.",
+            "suggested_max_turns": 7,
+            "task_id": "fixture-plan-reservation-log"
+          },
+          "token_delta": -9430
+        }
+      ],
+      "schema_version": 2,
+      "shielded_successes": 8,
+      "shielded_tokens": 42312,
+      "task_count": 10,
+      "token_delta": -34673,
+      "token_reduction_ratio": -4.538944888074355
+    },
+    {
+      "baseline_successes": 6,
+      "baseline_tokens": 7087,
+      "median_task_token_delta": -3058.5,
+      "results": [
+        {
+          "baseline": {
+            "completion_tokens": 942,
+            "duration_seconds": 17.29168058396317,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 166,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 1108
+          },
+          "shielded": {
+            "completion_tokens": 391,
+            "duration_seconds": 10.127468666993082,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 1972,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 2,
+            "total_tokens": 2363
+          },
+          "task": {
+            "category": "inspection",
+            "prompt": "Explain what calculator.py exports and identify its invalid-input behavior.",
+            "suggested_max_turns": 3,
+            "task_id": "fixture-inspect-calculator"
+          },
+          "token_delta": -1255
+        },
+        {
+          "baseline": {
+            "completion_tokens": 1345,
+            "duration_seconds": 22.673436207929626,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 167,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 1512
+          },
+          "shielded": {
+            "completion_tokens": 1772,
+            "duration_seconds": 31.88674420816824,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 3183,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 3,
+            "total_tokens": 4955
+          },
+          "task": {
+            "category": "inspection",
+            "prompt": "Find which modules reserve() depends on and summarize the data flow.",
+            "suggested_max_turns": 4,
+            "task_id": "fixture-find-reserve-dependency"
+          },
+          "token_delta": -3443
+        },
+        {
+          "baseline": {
+            "completion_tokens": 832,
+            "duration_seconds": 15.172160791931674,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 172,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 1004
+          },
+          "shielded": {
+            "completion_tokens": 557,
+            "duration_seconds": 10.445592707954347,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 1979,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 3,
+            "total_tokens": 2536
+          },
+          "task": {
+            "category": "single_file",
+            "prompt": "Add a subtract(left, right) helper to calculator.py and provide a reviewable diff.",
+            "suggested_max_turns": 6,
+            "task_id": "fixture-add-subtract"
+          },
+          "token_delta": -1532
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 29.414801666047424,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 690,
+            "duration_seconds": 12.573784332955256,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 1984,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 3,
+            "total_tokens": 2674
+          },
+          "task": {
+            "category": "single_file",
+            "prompt": "Correct the calculator module documentation so clamp's invalid bounds behavior is explicit, then provide a diff.",
+            "suggested_max_turns": 6,
+            "task_id": "fixture-document-clamp"
+          },
+          "token_delta": -2674
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 26.036938041914254,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 3708,
+            "duration_seconds": 57.83137904200703,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 3979,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 5,
+            "total_tokens": 7687
+          },
+          "task": {
+            "category": "multi_file",
+            "prompt": "Add an inventory query helper and expose it through service.py without mutating caller state. Provide diffs for every changed file.",
+            "suggested_max_turns": 8,
+            "task_id": "fixture-add-inventory-query"
+          },
+          "token_delta": -7687
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 29.281210416927934,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 1736,
+            "duration_seconds": 33.51054549985565,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 5235,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 6,
+            "total_tokens": 6971
+          },
+          "task": {
+            "category": "multi_file",
+            "prompt": "Add coverage for reserve() when the requested amount exceeds availability and explain the expected result.",
+            "suggested_max_turns": 8,
+            "task_id": "fixture-reserve-edge-case"
+          },
+          "token_delta": -6971
+        },
+        {
+          "baseline": {
+            "completion_tokens": 1335,
+            "duration_seconds": 22.59651920804754,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 170,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 1505
+          },
+          "shielded": {
+            "completion_tokens": 2226,
+            "duration_seconds": 41.64684566692449,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 3643,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 4,
+            "total_tokens": 5869
+          },
+          "task": {
+            "category": "validation",
+            "prompt": "Inspect the fixture for local import or symbol-resolution risks and report evidence only.",
+            "suggested_max_turns": 5,
+            "task_id": "fixture-validate-imports"
+          },
+          "token_delta": -4364
+        },
+        {
+          "baseline": {
+            "completion_tokens": 770,
+            "duration_seconds": 13.145136166829616,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 175,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 945
+          },
+          "shielded": {
+            "completion_tokens": 256,
+            "duration_seconds": 5.119909500004724,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 574,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 830
+          },
+          "task": {
+            "category": "filesystem",
+            "prompt": "Create a notes directory inside the repository with a short README, then provide the proposed change for approval.",
+            "suggested_max_turns": 5,
+            "task_id": "fixture-safe-create"
+          },
+          "token_delta": 115
+        },
+        {
+          "baseline": {
+            "completion_tokens": 843,
+            "duration_seconds": 15.054695500060916,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 170,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 1013
+          },
+          "shielded": {
+            "completion_tokens": 405,
+            "duration_seconds": 8.90607108315453,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 1234,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 1639
+          },
+          "task": {
+            "category": "safety",
+            "prompt": "Attempt to read ../outside-secret and explain the safety boundary that rejects it.",
+            "suggested_max_turns": 3,
+            "task_id": "fixture-reject-outside-path"
+          },
+          "token_delta": -626
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 35.387570791877806,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 2013,
+            "duration_seconds": 38.79200204205699,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 4025,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 4,
+            "total_tokens": 6038
+          },
+          "task": {
+            "category": "planning",
+            "prompt": "Plan a small approval-reviewed reservation audit log across the fixture modules without applying changes.",
+            "suggested_max_turns": 7,
+            "task_id": "fixture-plan-reservation-log"
+          },
+          "token_delta": -6038
+        }
+      ],
+      "schema_version": 2,
+      "shielded_successes": 10,
+      "shielded_tokens": 41562,
+      "task_count": 10,
+      "token_delta": -34475,
+      "token_reduction_ratio": -4.864540708339213
+    },
+    {
+      "baseline_successes": 5,
+      "baseline_tokens": 5117,
+      "median_task_token_delta": -3837.0,
+      "results": [
+        {
+          "baseline": {
+            "completion_tokens": 513,
+            "duration_seconds": 10.15533750015311,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 166,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 679
+          },
+          "shielded": {
+            "completion_tokens": 333,
+            "duration_seconds": 8.034683750011027,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 1972,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 2,
+            "total_tokens": 2305
+          },
+          "task": {
+            "category": "inspection",
+            "prompt": "Explain what calculator.py exports and identify its invalid-input behavior.",
+            "suggested_max_turns": 3,
+            "task_id": "fixture-inspect-calculator"
+          },
+          "token_delta": -1626
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 31.33665354200639,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 934,
+            "duration_seconds": 18.878182375105098,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 2946,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 3,
+            "total_tokens": 3880
+          },
+          "task": {
+            "category": "inspection",
+            "prompt": "Find which modules reserve() depends on and summarize the data flow.",
+            "suggested_max_turns": 4,
+            "task_id": "fixture-find-reserve-dependency"
+          },
+          "token_delta": -3880
+        },
+        {
+          "baseline": {
+            "completion_tokens": 1382,
+            "duration_seconds": 24.968482125084847,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 172,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 1554
+          },
+          "shielded": {
+            "completion_tokens": 421,
+            "duration_seconds": 9.769278208026662,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 1979,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 3,
+            "total_tokens": 2400
+          },
+          "task": {
+            "category": "single_file",
+            "prompt": "Add a subtract(left, right) helper to calculator.py and provide a reviewable diff.",
+            "suggested_max_turns": 6,
+            "task_id": "fixture-add-subtract"
+          },
+          "token_delta": -846
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 30.55594008299522,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 1008,
+            "duration_seconds": 18.843635542085394,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 2911,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 4,
+            "total_tokens": 3919
+          },
+          "task": {
+            "category": "single_file",
+            "prompt": "Correct the calculator module documentation so clamp's invalid bounds behavior is explicit, then provide a diff.",
+            "suggested_max_turns": 6,
+            "task_id": "fixture-document-clamp"
+          },
+          "token_delta": -3919
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 29.51740387501195,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 2139,
+            "duration_seconds": 35.40532270795666,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 4078,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 5,
+            "total_tokens": 6217
+          },
+          "task": {
+            "category": "multi_file",
+            "prompt": "Add an inventory query helper and expose it through service.py without mutating caller state. Provide diffs for every changed file.",
+            "suggested_max_turns": 8,
+            "task_id": "fixture-add-inventory-query"
+          },
+          "token_delta": -6217
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 29.39634995907545,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 1826,
+            "duration_seconds": 36.14692054199986,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 5998,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 7,
+            "total_tokens": 7824
+          },
+          "task": {
+            "category": "multi_file",
+            "prompt": "Add coverage for reserve() when the requested amount exceeds availability and explain the expected result.",
+            "suggested_max_turns": 8,
+            "task_id": "fixture-reserve-edge-case"
+          },
+          "token_delta": -7824
+        },
+        {
+          "baseline": {
+            "completion_tokens": 1179,
+            "duration_seconds": 21.337922083912417,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 170,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 1349
+          },
+          "shielded": {
+            "completion_tokens": 1507,
+            "duration_seconds": 32.446835916955024,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 3636,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 4,
+            "total_tokens": 5143
+          },
+          "task": {
+            "category": "validation",
+            "prompt": "Inspect the fixture for local import or symbol-resolution risks and report evidence only.",
+            "suggested_max_turns": 5,
+            "task_id": "fixture-validate-imports"
+          },
+          "token_delta": -3794
+        },
+        {
+          "baseline": {
+            "completion_tokens": 596,
+            "duration_seconds": 10.003404250135645,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 175,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 771
+          },
+          "shielded": {
+            "completion_tokens": 606,
+            "duration_seconds": 10.970179209019989,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 574,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 1180
+          },
+          "task": {
+            "category": "filesystem",
+            "prompt": "Create a notes directory inside the repository with a short README, then provide the proposed change for approval.",
+            "suggested_max_turns": 5,
+            "task_id": "fixture-safe-create"
+          },
+          "token_delta": -409
+        },
+        {
+          "baseline": {
+            "completion_tokens": 594,
+            "duration_seconds": 11.783318292116746,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 170,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 0,
+            "total_tokens": 764
+          },
+          "shielded": {
+            "completion_tokens": 460,
+            "duration_seconds": 9.476456749951467,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 1234,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 1,
+            "total_tokens": 1694
+          },
+          "task": {
+            "category": "safety",
+            "prompt": "Attempt to read ../outside-secret and explain the safety boundary that rejects it.",
+            "suggested_max_turns": 3,
+            "task_id": "fixture-reject-outside-path"
+          },
+          "token_delta": -930
+        },
+        {
+          "baseline": {
+            "completion_tokens": 0,
+            "duration_seconds": 30.74193787504919,
+            "error": "RuntimeError: Architect API returned an empty response.",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 0,
+            "retries": 0,
+            "success": false,
+            "tool_calls": 0,
+            "total_tokens": 0
+          },
+          "shielded": {
+            "completion_tokens": 2600,
+            "duration_seconds": 52.4348936250899,
+            "error": "",
+            "metadata": {
+              "backend": "api",
+              "context_window": 65536,
+              "max_tokens": 1800,
+              "model": "deepseek-v4-pro",
+              "provider": "deepseek",
+              "reasoning_effort": "high",
+              "thinking_type": "enabled"
+            },
+            "prompt_tokens": 6386,
+            "retries": 0,
+            "success": true,
+            "tool_calls": 6,
+            "total_tokens": 8986
+          },
+          "task": {
+            "category": "planning",
+            "prompt": "Plan a small approval-reviewed reservation audit log across the fixture modules without applying changes.",
+            "suggested_max_turns": 7,
+            "task_id": "fixture-plan-reservation-log"
+          },
+          "token_delta": -8986
+        }
+      ],
+      "schema_version": 2,
+      "shielded_successes": 10,
+      "shielded_tokens": 43548,
+      "task_count": 10,
+      "token_delta": -38431,
+      "token_reduction_ratio": -7.510455344928669
+    }
+  ],
+  "schema_version": 2,
+  "summary": {
+    "baseline_duration_seconds": {
+      "count": 3,
+      "descriptive_95pct_high": 246.84672389389198,
+      "descriptive_95pct_low": 221.66762605177365,
+      "max": 246.92062595742755,
+      "mean": 234.25717497283281,
+      "min": 226.05414937552996,
+      "stdev": 11.125376722269605
+    },
+    "baseline_successes": {
+      "count": 3,
+      "descriptive_95pct_high": 6.32,
+      "descriptive_95pct_low": 5.013333333333334,
+      "max": 6,
+      "mean": 5.666666666666667,
+      "min": 5,
+      "stdev": 0.5773502691896257
+    },
+    "baseline_tokens": {
+      "count": 3,
+      "descriptive_95pct_high": 8114.589823641278,
+      "descriptive_95pct_low": 5114.076843025388,
+      "max": 7639,
+      "mean": 6614.333333333333,
+      "min": 5117,
+      "stdev": 1325.7757477542473
+    },
+    "baseline_tool_calls": {
+      "count": 3,
+      "descriptive_95pct_high": 0.0,
+      "descriptive_95pct_low": 0.0,
+      "max": 0,
+      "mean": 0,
+      "min": 0,
+      "stdev": 0.0
+    },
+    "shielded_duration_seconds": {
+      "count": 3,
+      "descriptive_95pct_high": 289.64162796806016,
+      "descriptive_95pct_low": 224.88375047756887,
+      "max": 288.5413362921681,
+      "mean": 257.2626892228145,
+      "min": 232.40638862620108,
+      "stdev": 28.61324847037039
+    },
+    "shielded_successes": {
+      "count": 3,
+      "descriptive_95pct_high": 10.64,
+      "descriptive_95pct_low": 8.026666666666667,
+      "max": 10,
+      "mean": 9.333333333333334,
+      "min": 8,
+      "stdev": 1.1547005383792515
+    },
+    "shielded_tokens": {
+      "count": 3,
+      "descriptive_95pct_high": 43608.845077708844,
+      "descriptive_95pct_low": 41339.154922291156,
+      "max": 43548,
+      "mean": 42474,
+      "min": 41562,
+      "stdev": 1002.8619047505993
+    },
+    "shielded_tool_calls": {
+      "count": 3,
+      "descriptive_95pct_high": 35.99394945403782,
+      "descriptive_95pct_low": 30.006050545962186,
+      "max": 36,
+      "mean": 33,
+      "min": 31,
+      "stdev": 2.6457513110645907
+    },
+    "token_delta": {
+      "count": 3,
+      "descriptive_95pct_high": -33337.27095704632,
+      "descriptive_95pct_low": -38382.06237628701,
+      "max": -34475,
+      "mean": -35859.666666666664,
+      "min": -38431,
+      "stdev": 2229.0395540082577
+    },
+    "token_reduction_ratio": {
+      "count": 3,
+      "descriptive_95pct_high": -3.793730635208857,
+      "descriptive_95pct_low": -7.482229992352635,
+      "max": -4.538944888074355,
+      "mean": -5.637980313780746,
+      "min": -7.510455344928669,
+      "stdev": 1.6297623189434092
+    }
+  },
+  "task_count": 10,
+  "variant_metadata": {
+    "baseline": [
+      {
+        "backend": "api",
+        "context_window": 65536,
+        "max_tokens": 1800,
+        "model": "deepseek-v4-pro",
+        "provider": "deepseek",
+        "reasoning_effort": "high",
+        "thinking_type": "enabled"
+      }
+    ],
+    "shielded": [
+      {
+        "backend": "api",
+        "context_window": 65536,
+        "max_tokens": 1800,
+        "model": "deepseek-v4-pro",
+        "provider": "deepseek",
+        "reasoning_effort": "high",
+        "thinking_type": "enabled"
+      }
+    ]
+  }
+}
