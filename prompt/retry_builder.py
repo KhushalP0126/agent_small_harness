@@ -160,7 +160,9 @@ def build_small_worker_retry_prompt(
     repair_directive: str | None = None,
 ) -> str:
     violation = _primary_violation(violations)
-    code = _scoped_code(original_code, violation)
+    # Repairs are applied to an in-memory draft as a whole. Keeping the complete
+    # draft prevents a worker from accidentally dropping sibling symbols.
+    code = original_code
     directives = (
         [repair_directive]
         if repair_directive
@@ -179,12 +181,15 @@ def build_small_worker_retry_prompt(
         "",
     ]
     if violations:
-        sections.append("FAILED CHECK:" if len(violations) == 1 else "FAILED CHECKS:")
+        sections.append("PRIMARY FAILURE:" if len(violations) == 1 else "FAILED CHECKS:")
         for index, failed_violation in enumerate(violations, start=1):
             prefix = "-" if len(violations) == 1 else f"{index}."
             sections.extend(
                 [
                     f"{prefix} Problem: {failed_violation.summary}",
+                    f"  Kind: {failed_violation.kind}",
+                    f"  Location: {failed_violation.location or 'unknown'}",
+                    f"  Diagnostic: {failed_violation.rationale or failed_violation.summary}",
                     f"  Your result: {failed_violation.current_value}",
                     f"  Required result: {failed_violation.allowed_value}",
                 ]

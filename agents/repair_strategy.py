@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import ast
+import json
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
@@ -8,7 +10,9 @@ from agents.template_loader import TemplateLibrary
 
 MODEL_ONLY = "model_only"
 MANUAL_REVIEW = "manual_review"
-REPAIR_MODES = (MODEL_ONLY, MANUAL_REVIEW)
+DETERMINISTIC_TRANSFORM = "deterministic_transform"
+JSON_PATCH = "json_patch"
+REPAIR_MODES = (MODEL_ONLY, DETERMINISTIC_TRANSFORM, JSON_PATCH, MANUAL_REVIEW)
 
 
 @dataclass
@@ -18,6 +22,152 @@ class RepairDecision:
     template_code: str = ""
     rationale: str = ""
     repair_instructions: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class SymbolReplacementPatch:
+    target_symbol: str
+    action: str
+    replacement_source: str
+
+
+def parse_symbol_replacement_patch(payload: str | dict[str, Any]) -> SymbolReplacementPatch:
+    data = json.loads(payload) if isinstance(payload, str) else payload
+    if not isinstance(data, dict):
+        raise ValueError("JSON patch must be an object")
+    patch = SymbolReplacementPatch(
+        target_symbol=str(data.get("target_symbol", "")).strip(),
+        action=str(data.get("action", "")).strip(),
+        replacement_source=str(data.get("replacement_source", "")).strip(),
+    )
+    if not patch.target_symbol or patch.action != "replace_symbol" or not patch.replacement_source:
+        raise ValueError("Patch requires target_symbol, action=replace_symbol, and replacement_source")
+    return patch
+
+
+def apply_symbol_replacement_patch(source: str, patch: SymbolReplacementPatch, language: str = "python") -> str:
+    if language != "python":
+        raise ValueError("Typed symbol replacement currently supports Python only")
+    tree = ast.parse(source)
+    replacement_tree = ast.parse(patch.replacement_source)
+    replacements = [node for node in replacement_tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))]
+    if len(replacements) != 1 or replacements[0].name != patch.target_symbol:
+        raise ValueError("Replacement must define exactly the target symbol")
+    targets = [node for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and node.name == patch.target_symbol]
+    if len(targets) != 1:
+        raise ValueError("Target symbol must exist exactly once at module scope")
+    target = targets[0]
+    lines = source.splitlines(keepends=True)
+    replacement = patch.replacement_source.rstrip() + ("\n" if lines[target.end_lineno - 1].endswith("\n") else "")
+    candidate = "".join(lines[: target.lineno - 1]) + replacement + "".join(lines[target.end_lineno :])
+    ast.parse(candidate)
+    return candidate
+
+
+def apply_deterministic_transform(source: str, violation: Any, language: str = "python") -> str:
+    """Apply only evidence-backed transforms whose target is unambiguous."""
+    if language != "python":
+        raise ValueError("Deterministic transforms currently support Python only")
+    kind = violation.get("kind", "") if isinstance(violation, dict) else getattr(violation, "kind", "")
+    evidence = violation.get("evidence", {}) if isinstance(violation, dict) else getattr(violation, "evidence", {})
+    if not isinstance(evidence, dict):
+        raise ValueError("Deterministic transform requires structured evidence")
+    tree = ast.parse(source)
+
+    if kind in {"external_dependency", "import_risk_block"}:
+        metrics = evidence.get("metrics", {})
+        imports = metrics.get("imports", []) if isinstance(metrics, dict) else []
+        forbidden = str(
+            evidence.get("module")
+            or evidence.get("forbidden_import")
+            or (imports[0] if len(imports) == 1 else "")
+        )
+        if not forbidden:
+            raise ValueError("Forbidden-import transform requires an exact module")
+        kept = []
+        removed = 0
+        for node in tree.body:
+            names = []
+            if isinstance(node, ast.Import):
+                names = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom):
+                names = [node.module or ""]
+            if any(name == forbidden or name.startswith(forbidden + ".") for name in names):
+                removed += 1
+            else:
+                kept.append(node)
+        if removed != 1:
+            raise ValueError("Forbidden import must match exactly one statement")
+        tree.body = kept
+    elif kind == "unsafe_call":
+        unsafe = str(evidence.get("unsafe_api") or evidence.get("call") or "")
+        safe = _safe_alternative(violation)
+        if not unsafe or not safe:
+            raise ValueError("Unsafe-call transform requires exact unsafe and safe API names")
+        transformer = _CallReplacement(unsafe, safe)
+        tree = transformer.visit(tree)
+        if transformer.replacements != 1:
+            raise ValueError("Unsafe API must match exactly one call")
+    elif kind == "bounds_risk":
+        target = str(evidence.get("target_expression") or "")
+        replacement = str(evidence.get("replacement_expression") or "")
+        if not target or not replacement or not evidence.get("counterexample") or not evidence.get("policy_directive"):
+            raise ValueError("Bounds transform requires target, replacement, counterexample, and policy directive")
+        transformer = _ExpressionReplacement(target, replacement)
+        tree = transformer.visit(tree)
+        if transformer.replacements != 1:
+            raise ValueError("Bounds expression must match exactly once")
+    else:
+        raise ValueError(f"No deterministic transform registered for {kind}")
+
+    ast.fix_missing_locations(tree)
+    candidate = ast.unparse(tree) + "\n"
+    ast.parse(candidate)
+    return candidate
+
+
+def _dotted_name(node: ast.AST) -> str:
+    if isinstance(node, ast.Name):
+        return node.id
+    if isinstance(node, ast.Attribute):
+        parent = _dotted_name(node.value)
+        return f"{parent}.{node.attr}" if parent else ""
+    return ""
+
+
+def _name_node(dotted: str) -> ast.expr:
+    parts = dotted.split(".")
+    node: ast.expr = ast.Name(id=parts[0], ctx=ast.Load())
+    for part in parts[1:]:
+        node = ast.Attribute(value=node, attr=part, ctx=ast.Load())
+    return node
+
+
+class _CallReplacement(ast.NodeTransformer):
+    def __init__(self, unsafe: str, safe: str) -> None:
+        self.unsafe = unsafe
+        self.safe = safe
+        self.replacements = 0
+
+    def visit_Call(self, node: ast.Call) -> ast.AST:
+        self.generic_visit(node)
+        if _dotted_name(node.func) == self.unsafe:
+            node.func = _name_node(self.safe)
+            self.replacements += 1
+        return node
+
+
+class _ExpressionReplacement(ast.NodeTransformer):
+    def __init__(self, target: str, replacement: str) -> None:
+        self.target = ast.dump(ast.parse(target, mode="eval").body, include_attributes=False)
+        self.replacement = ast.parse(replacement, mode="eval").body
+        self.replacements = 0
+
+    def generic_visit(self, node: ast.AST) -> ast.AST:
+        if ast.dump(node, include_attributes=False) == self.target:
+            self.replacements += 1
+            return self.replacement
+        return super().generic_visit(node)
 
 
 def _violation_kinds(violations: Iterable[Any]) -> set[str]:
@@ -151,3 +301,35 @@ class RepairStrategyAgent:
             mode=MANUAL_REVIEW,
             rationale="No actionable repair path detected for the reported findings.",
         )
+
+    def decide_repeated_failure(
+        self,
+        violations: Iterable[Any],
+        *,
+        counterexample: str = "",
+        policy_directive: str = "",
+    ) -> RepairDecision:
+        """Route repeated small-worker failures without guessing unsafe mutations."""
+        violations = list(violations or [])
+        kinds = _violation_kinds(violations)
+        safe = {"external_dependency", "import_risk_block"}
+        if kinds and kinds <= safe:
+            return RepairDecision(DETERMINISTIC_TRANSFORM, rationale="Known forbidden-import signature.")
+        if kinds == {"unsafe_call"} and any(_safe_alternative(item) for item in violations):
+            return RepairDecision(DETERMINISTIC_TRANSFORM, rationale="Registered safe API alternative is available.")
+        if kinds == {"bounds_risk"} and counterexample.strip() and policy_directive.strip():
+            return RepairDecision(DETERMINISTIC_TRANSFORM, rationale="Counterexample-backed bounds directive is available.")
+        return RepairDecision(
+            JSON_PATCH,
+            rationale="Repeated failure requires a typed single-symbol replacement.",
+            repair_instructions=[
+                'Return one JSON object with target_symbol, action="replace_symbol", and replacement_source.'
+            ],
+        )
+
+
+def _safe_alternative(violation: Any) -> str:
+    evidence = violation.get("evidence", {}) if isinstance(violation, dict) else getattr(violation, "evidence", {})
+    if not isinstance(evidence, dict):
+        return ""
+    return str(evidence.get("safe_alternative") or evidence.get("registered_safe_alternative") or "")

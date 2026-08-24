@@ -67,10 +67,8 @@ def process_events(events):
         self.assertEqual(len(captured_prompts), 1)
         retry_prompt = captured_prompts[0]
         self.assertIn("PRESERVE CONTEXT:", retry_prompt)
-        self.assertIn("DEPENDENCY GRAPH:", retry_prompt)
-        self.assertIn("events -> state transitions -> emitted totals", retry_prompt)
-        self.assertIn("emit -> append current total", retry_prompt)
-        self.assertIn("do not simplify the code in a way that changes the preserved semantics", retry_prompt)
+        self.assertIn("DO NOT REGRESS:", retry_prompt)
+        self.assertIn("dependency, order, and state rules", retry_prompt)
 
 
 if __name__ == "__main__":

@@ -11,7 +11,15 @@ from agents.engine_registry import EngineRegistry
 from agents.execution_agent import ExecutionAgent
 from agents.historian import DEFAULT_HISTORY_PATH, HistorianAgent
 from agents.parse_contract import ParseContractAgent, ParseFailure
-from agents.repair_strategy import MANUAL_REVIEW, RepairStrategyAgent
+from agents.repair_strategy import (
+    DETERMINISTIC_TRANSFORM,
+    JSON_PATCH,
+    MANUAL_REVIEW,
+    RepairStrategyAgent,
+    apply_deterministic_transform,
+    apply_symbol_replacement_patch,
+    parse_symbol_replacement_patch,
+)
 from engines.base import EngineFinding
 from harness_kernel.tool_handlers import (
     ExecutionRequest,
@@ -34,7 +42,12 @@ from validation.behavior import (
     validate_function_behavior,
 )
 from validation.debugger import build_debugger_hints
-from validation.branch_loop_detector import build_branch_state_signature, detect_branching_loop
+from validation.branch_loop_detector import (
+    build_branch_state_signature,
+    build_failure_signature,
+    compare_drafts,
+    detect_branching_loop,
+)
 from validation.deal_contracts import serialize_deal_contract_result, validate_deal_examples
 from validation.finding_aggregator import aggregate_violations, serialize_repair_directives
 from validation.formal import serialize_formal_result, validate_with_crosshair
@@ -78,6 +91,10 @@ class GenerationAttempt:
     branch_loop: dict = field(default_factory=dict)
     backend_failure: dict = field(default_factory=dict)
     diagnostic_stagnant: bool = False
+    failure_signature: str = ""
+    edit_ratio: float = 0.0
+    semantic_stagnant: bool = False
+    selected_strategy: str = ""
     execution_trace: dict = field(default_factory=dict)
     profiling_validation: dict = field(
         default_factory=lambda: {
@@ -577,8 +594,10 @@ class GenerationController(BaseAgent):
             violations,
             key=lambda violation: (
                 -SEVERITY_RANK.get(violation.severity.lower(), 0),
+                0 if violation.kind in {"formal_counterexample", "behavior_mismatch"} else 1,
                 violation.engine,
                 violation.kind,
+                violation.location,
             ),
         )[0]
 
@@ -589,10 +608,9 @@ class GenerationController(BaseAgent):
         diagnostic_deltas: list[dict],
         worker_name: str,
     ) -> tuple[list[Violation], list]:
-        # Retry violations are already deduplicated and ordered by validation
-        # stage. Keep the complete set for both workers so a static failure
-        # cannot hide a simultaneous behavioral or formal failure.
-        scoped_violations = violations
+        scoped_violations = (
+            [self._top_violation(violations)] if worker_name == "small_worker" and violations else violations
+        )
         return (
             scoped_violations,
             aggregate_violations(
@@ -716,27 +734,8 @@ class GenerationController(BaseAgent):
             retry_prompt = build_small_worker_retry_prompt(
                 source,
                 scoped_violations,
-                preserve_context=self._preserved_plan_context(initial_prompt),
+                preserve_context=self._do_not_regress_constraint(initial_prompt),
             )
-            if failed_attempts:
-                retry_prompt = (
-                    f"{retry_prompt}\n\n"
-                    "PREVIOUS FAILURE:\n"
-                    "- A prior repair attempt did not pass validation. Do not repeat the same output."
-                )
-            if diagnostic_deltas:
-                retry_prompt = f"{retry_prompt}\n\nPREVIOUS REPAIR SIGNAL:"
-                for delta in diagnostic_deltas:
-                    if delta.get("delta") == 0:
-                        change = "no improvement"
-                    elif delta.get("improved"):
-                        change = "improved but still failing"
-                    else:
-                        change = "changed but still failing"
-                    retry_prompt = (
-                        f"{retry_prompt}\n"
-                        f"- {delta.get('kind')}: {delta.get('prior_actual')} -> {delta.get('current_actual')} ({change})"
-                    )
         else:
             preserved_context = self._preserved_plan_context(initial_prompt)
             if preserved_context and self._is_state_machine_failure(
@@ -785,6 +784,18 @@ class GenerationController(BaseAgent):
             summarizer=self.prompt_summarizer,
         ).text
         return retry_prompt, scoped_directives, scoped_violations
+
+    def _do_not_regress_constraint(self, initial_prompt: str) -> str:
+        preserved = self._preserved_plan_context(initial_prompt)
+        if preserved:
+            for line in preserved.splitlines():
+                if line.startswith("- preserve "):
+                    return "DO NOT REGRESS: " + line[2:]
+        for line in initial_prompt.splitlines():
+            stripped = line.strip()
+            if stripped and any(word in stripped.lower() for word in ("must", "do not", "preserve", "return")):
+                return "DO NOT REGRESS: " + stripped[:300]
+        return "DO NOT REGRESS: preserve the public function contract and existing passing behavior."
 
     def _write_checkpoint(
         self,
@@ -837,6 +848,12 @@ class GenerationController(BaseAgent):
             ),
             "repair_supplier_error": (
                 "Review the repair backend error, then retry with a different model, larger token budget, or a manual patch."
+            ),
+            "repair_strategy_patch_failed": (
+                "Review the typed patch failure or use an architect repair; the patch could not be parsed, applied, or validated."
+            ),
+            "repair_strategy_validation_failed": (
+                "Review the deterministic or typed patch result; validation still found blocking failures after the constrained repair."
             ),
             "architect_static_gate_failed": (
                 "Review the architect output manually; it was routed through the static engines and still failed a blocking gate."
@@ -1259,6 +1276,29 @@ class GenerationController(BaseAgent):
                 active_violations,
                 diagnostic_deltas=diagnostic_deltas,
             )
+            retry_violations = self._retry_violations(
+                validation_result,
+                behavior_validation,
+                formal_validation,
+                profiling_validation,
+            )
+            primary_violation = self._top_violation(retry_violations)
+            failure_signature = build_failure_signature(primary_violation) if primary_violation else ""
+            draft_comparison = compare_drafts(
+                previous_draft,
+                draft,
+                self.language or "python",
+            ) if attempt_index else None
+            previous_failure_signature = (
+                session.attempts[-1].failure_signature if session.attempts else ""
+            )
+            semantic_stagnant = bool(
+                draft_comparison
+                and failure_signature
+                and failure_signature == previous_failure_signature
+                and draft_comparison.edit_ratio < 0.05
+            )
+            selected_strategy = "complete" if is_complete else "manual_review"
             if is_complete:
                 self._debug_print(f"Iteration {attempt_index}: draft is static and behavior compliant.")
             elif validation_result.is_compliant:
@@ -1322,14 +1362,22 @@ class GenerationController(BaseAgent):
                     self._debug_print(
                         "Architect output failed static engine gates. Stopping instead of retrying architect."
                     )
+            if (
+                not is_complete
+                and draft_source_worker in {DETERMINISTIC_TRANSFORM, JSON_PATCH}
+            ):
+                if self.architect_supplier is None:
+                    force_manual_review = True
+                    manual_review_reason = "repair_strategy_validation_failed"
+                else:
+                    self._debug_print(
+                        "Constrained repair still failed validation. Escalating to architect."
+                    )
             if not force_manual_review and not is_complete and attempt_index < self.max_retries:
-                retry_violations = self._retry_violations(
-                    validation_result,
-                    behavior_validation,
-                    formal_validation,
-                    profiling_validation,
-                )
                 repair_worker, next_repair_supplier = self._repair_worker_for(len(failed_attempts))
+                if draft_source_worker in {DETERMINISTIC_TRANSFORM, JSON_PATCH}:
+                    repair_worker = "architect_llm"
+                    next_repair_supplier = self.architect_supplier
                 if (
                     diagnostic_stagnant
                     and repair_worker == "small_worker"
@@ -1340,14 +1388,39 @@ class GenerationController(BaseAgent):
                     self._debug_print(
                         "Repeated diagnostics did not improve. Escalating the next repair to architect."
                     )
+                strategy_decision = None
+                if (
+                    semantic_stagnant
+                    and repair_worker == "small_worker"
+                    and self.repair_strategy is not None
+                ):
+                    strategy_decision = self.repair_strategy.decide_repeated_failure(
+                        [primary_violation] if primary_violation else []
+                    )
+                    selected_strategy = strategy_decision.mode
+                    if strategy_decision.mode == DETERMINISTIC_TRANSFORM:
+                        repair_worker = DETERMINISTIC_TRANSFORM
+                        next_repair_supplier = None
+                    elif strategy_decision.mode == JSON_PATCH:
+                        repair_worker = JSON_PATCH
+                        next_repair_supplier = self.repair_supplier
+                prompt_worker = "small_worker" if repair_worker in {DETERMINISTIC_TRANSFORM, JSON_PATCH} else repair_worker
                 retry_prompt, prompt_directives, prompt_violations = self._build_scoped_retry_prompt(
                     source=draft,
                     violations=retry_violations,
                     diagnostic_deltas=diagnostic_deltas,
-                    worker_name=repair_worker,
+                    worker_name=prompt_worker,
                     initial_prompt=initial_prompt,
                     failed_attempts=failed_attempts,
                 )
+                if strategy_decision and strategy_decision.mode == JSON_PATCH:
+                    retry_prompt = (
+                        f"{retry_prompt}\n\n"
+                        "TYPED PATCH OUTPUT:\n"
+                        "Return exactly one JSON object: "
+                        '{"target_symbol":"name","action":"replace_symbol","replacement_source":"complete source for that symbol"}. '
+                        "Do not return Markdown or a full module."
+                    )
                 repair_directives = prompt_directives
                 if self.repair_strategy is not None:
                     decision = self.repair_strategy.decide(
@@ -1389,7 +1462,11 @@ class GenerationController(BaseAgent):
                             retry_prompt,
                             summarizer=self.prompt_summarizer,
                         ).text
-                if self.enable_debugger_hints and execution_trace_obj is not None:
+                if (
+                    repair_worker != "small_worker"
+                    and self.enable_debugger_hints
+                    and execution_trace_obj is not None
+                ):
                     debugger_hints = build_debugger_hints(
                         execution_trace_obj,
                         type_contracts=self.debugger_type_contracts,
@@ -1405,6 +1482,8 @@ class GenerationController(BaseAgent):
                             summarizer=self.prompt_summarizer,
                         ).text
                 self._debug_print(f"Sending repair prompt to {repair_worker}.")
+                if selected_strategy == "manual_review":
+                    selected_strategy = repair_worker
             attempt = GenerationAttempt(
                 attempt=attempt_index,
                 draft=draft,
@@ -1420,6 +1499,10 @@ class GenerationController(BaseAgent):
                 changed=changed,
                 diff=diff_text,
                 diagnostic_stagnant=diagnostic_stagnant,
+                failure_signature=failure_signature,
+                edit_ratio=draft_comparison.edit_ratio if draft_comparison else 0.0,
+                semantic_stagnant=semantic_stagnant,
+                selected_strategy=selected_strategy,
                 execution_trace=execution_trace_payload,
                 profiling_validation=profiling_validation,
             )
@@ -1446,7 +1529,10 @@ class GenerationController(BaseAgent):
                     phase="terminal",
                 )
                 break
-            if not force_manual_review:
+            if not force_manual_review and attempt.repair_worker not in {
+                DETERMINISTIC_TRANSFORM,
+                JSON_PATCH,
+            }:
                 branch_loop = detect_branching_loop(session.attempts)
                 if branch_loop.detected:
                     attempt.branch_loop = branch_loop.to_dict()
@@ -1461,23 +1547,90 @@ class GenerationController(BaseAgent):
                 failed_attempts.append(attempt)
                 worker_name = attempt.repair_worker
                 supplier = next_repair_supplier
-                if not worker_name or supplier is None:
+                if not worker_name:
                     worker_name, supplier = self._repair_worker_for(len(failed_attempts) - 1)
+                patch_error = ""
                 try:
-                    next_draft = supplier(draft, retry_prompt)
+                    if worker_name == DETERMINISTIC_TRANSFORM:
+                        if primary_violation is None:
+                            raise ValueError("No primary violation is available for deterministic repair")
+                        next_draft = apply_deterministic_transform(
+                            draft,
+                            primary_violation,
+                            language=self.language or "python",
+                        )
+                    elif worker_name == JSON_PATCH:
+                        if supplier is None:
+                            raise ValueError("No small-worker supplier is configured for typed patch repair")
+                        patch = parse_symbol_replacement_patch(supplier(draft, retry_prompt))
+                        next_draft = apply_symbol_replacement_patch(
+                            draft,
+                            patch,
+                            language=self.language or "python",
+                        )
+                    else:
+                        if supplier is None:
+                            raise ValueError("No repair supplier is configured")
+                        next_draft = supplier(draft, retry_prompt)
                 except Exception as exc:
-                    attempt.repair_worker = worker_name
                     attempt.repair_error = f"{exc.__class__.__name__}: {exc}"
-                    self._debug_print(f"Repair backend failed in {worker_name}: {attempt.repair_error}")
-                    session.final_status = "manual_review_required"
-                    session.human_review = self._human_review_payload("repair_supplier_error", attempt)
-                    break
+                    if worker_name in {DETERMINISTIC_TRANSFORM, JSON_PATCH}:
+                        patch_error = attempt.repair_error
+                    else:
+                        attempt.repair_worker = worker_name
+                        self._debug_print(f"Repair backend failed in {worker_name}: {attempt.repair_error}")
+                        session.final_status = "manual_review_required"
+                        session.human_review = self._human_review_payload("repair_supplier_error", attempt)
+                        break
+                if patch_error:
+                    if self.architect_supplier is None:
+                        session.final_status = "manual_review_required"
+                        session.human_review = self._human_review_payload("repair_strategy_patch_failed", attempt)
+                        break
+                    attempt.repair_worker = f"{worker_name}->architect_llm"
+                    architect_prompt, architect_directives, _ = self._build_scoped_retry_prompt(
+                        source=draft,
+                        violations=retry_violations,
+                        diagnostic_deltas=diagnostic_deltas,
+                        worker_name="architect_llm",
+                        initial_prompt=initial_prompt,
+                        failed_attempts=failed_attempts,
+                    )
+                    attempt.retry_prompt = architect_prompt
+                    attempt.repair_directives = serialize_repair_directives(architect_directives)
+                    try:
+                        next_draft = self.architect_supplier(draft, architect_prompt)
+                    except Exception as exc:
+                        attempt.repair_error = f"{exc.__class__.__name__}: {exc}"
+                        session.final_status = "manual_review_required"
+                        session.human_review = self._human_review_payload("repair_strategy_patch_failed", attempt)
+                        break
+                    if self._is_stagnant(draft, next_draft):
+                        session.final_status = "manual_review_required"
+                        session.human_review = self._human_review_payload("repair_strategy_patch_failed", attempt)
+                        break
+                    previous_draft = draft
+                    draft = next_draft
+                    draft_source_worker = "architect_llm"
+                    self._write_checkpoint(
+                        session,
+                        draft=draft,
+                        previous_draft=previous_draft,
+                        draft_source_worker=draft_source_worker,
+                        next_attempt=attempt_index + 1,
+                        architect_repair_retry_used=architect_repair_retry_used,
+                        phase="ready_to_validate",
+                    )
+                    continue
                 stagnant_repair = self._is_stagnant(draft, next_draft)
                 diagnostic_stagnant_repair = (
                     self._is_diagnostic_stagnant(diagnostic_deltas)
                     and worker_name != "architect_llm"
                 )
-                if stagnant_repair or diagnostic_stagnant_repair:
+                if (
+                    (stagnant_repair or diagnostic_stagnant_repair)
+                    and worker_name not in {DETERMINISTIC_TRANSFORM, JSON_PATCH}
+                ):
                     if worker_name != "architect_llm":
                         fallback_worker, fallback_supplier = self._repair_worker_for(len(failed_attempts))
                         if fallback_worker == "architect_llm":

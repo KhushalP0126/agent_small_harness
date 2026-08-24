@@ -1,8 +1,104 @@
 from __future__ import annotations
 
+import ast
 import hashlib
+import io
+import tokenize
 from dataclasses import asdict, dataclass, field
+from difflib import SequenceMatcher
 from typing import Any
+
+
+SEMANTIC_STAGNATION_THRESHOLD = 0.05
+
+
+@dataclass(frozen=True)
+class DraftComparison:
+    edit_ratio: float
+    semantically_stagnant: bool
+    representation: str
+
+
+def normalized_draft_signature(source: str, language: str = "python") -> str:
+    """Return a parser-backed structural signature, with a conservative fallback."""
+    language = (language or "python").lower()
+    if language == "python":
+        try:
+            tree = ast.parse(source)
+            return "ast:" + ast.dump(tree, annotate_fields=True, include_attributes=False)
+        except SyntaxError:
+            pass
+    elif language in {"c", "cpp", "rust", "javascript", "js"}:
+        try:
+            from engines import treesitter_support
+
+            normalized_language = "javascript" if language == "js" else language
+            tree = treesitter_support.parse_tree(normalized_language, source)
+            if not tree.root_node.has_error:
+                return "tree-sitter:" + tree.root_node.sexp()
+        except (AttributeError, ImportError, RuntimeError):
+            pass
+    return "tokens:" + " ".join(_normalized_tokens(source, language))
+
+
+def compare_drafts(previous: str, current: str, language: str = "python") -> DraftComparison:
+    previous_signature = normalized_draft_signature(previous, language)
+    current_signature = normalized_draft_signature(current, language)
+    similarity = SequenceMatcher(None, previous_signature, current_signature, autojunk=False).ratio()
+    edit_ratio = 1.0 - similarity
+    representation = previous_signature.split(":", 1)[0]
+    return DraftComparison(
+        edit_ratio=edit_ratio,
+        semantically_stagnant=edit_ratio < SEMANTIC_STAGNATION_THRESHOLD,
+        representation=representation,
+    )
+
+
+def build_failure_signature(violation: Any) -> str:
+    """Identify a stable failure without including changing diagnostic prose."""
+    engine = str(_get(violation, "engine", ""))
+    kind = str(_get(violation, "kind", ""))
+    location = str(_get(violation, "location", ""))
+    evidence = _mapping(_get(violation, "evidence", {}))
+    symbol = str(evidence.get("function_name") or evidence.get("symbol") or "")
+    identity = location or symbol or "unknown"
+    return f"{engine}:{kind}:{identity}"
+
+
+def is_semantically_stagnant(
+    previous: str,
+    current: str,
+    previous_failure_signature: str,
+    current_failure_signature: str,
+    language: str = "python",
+) -> DraftComparison:
+    comparison = compare_drafts(previous, current, language)
+    return DraftComparison(
+        edit_ratio=comparison.edit_ratio,
+        semantically_stagnant=(
+            bool(current_failure_signature)
+            and previous_failure_signature == current_failure_signature
+            and comparison.edit_ratio < SEMANTIC_STAGNATION_THRESHOLD
+        ),
+        representation=comparison.representation,
+    )
+
+
+def _normalized_tokens(source: str, language: str) -> list[str]:
+    if language == "python":
+        try:
+            return [
+                token.string
+                for token in tokenize.generate_tokens(io.StringIO(source).readline)
+                if token.type
+                not in {tokenize.ENCODING, tokenize.NL, tokenize.NEWLINE, tokenize.INDENT,
+                        tokenize.DEDENT, tokenize.COMMENT, tokenize.ENDMARKER}
+            ]
+        except (IndentationError, tokenize.TokenError):
+            pass
+    # Keep punctuation so fallback comparisons do not erase meaningful operators.
+    import re
+    return re.findall(r"[A-Za-z_$][\w$]*|\d+(?:\.\d+)?|[^\s\w]", source)
 
 
 @dataclass(frozen=True)

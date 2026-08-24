@@ -1171,6 +1171,81 @@ class HistorianLearningTests(unittest.TestCase):
 
 
 class ControllerIntegrationTests(unittest.TestCase):
+    def test_semantic_stagnation_uses_json_patch_and_completes(self) -> None:
+        source = "def increment(value):\n    return value\n"
+        whitespace_only_edit = "def increment(value):\n  return value\n"
+        calls: list[str] = []
+
+        def small_supplier(_draft: str, prompt: str) -> str:
+            calls.append(prompt)
+            if "TYPED PATCH OUTPUT:" in prompt:
+                return json.dumps({
+                    "target_symbol": "increment",
+                    "action": "replace_symbol",
+                    "replacement_source": "def increment(value):\n    return value + 1",
+                })
+            return whitespace_only_edit
+
+        controller = GenerationController(
+            max_retries=2,
+            draft_supplier=lambda _prompt: source,
+            repair_supplier=small_supplier,
+            repair_strategy=RepairStrategyAgent(),
+            behavior_spec=FunctionBehaviorSpec(
+                function_name="increment",
+                cases=[BehaviorCase(name="increments", args=(2,), expected=3)],
+            ),
+        )
+        result = controller.run(target="typed-patch", initial_prompt="increment values")
+
+        self.assertEqual(result.payload["final_status"], "completed")
+        self.assertTrue(result.payload["attempts"][1]["semantic_stagnant"])
+        self.assertEqual(result.payload["attempts"][1]["selected_strategy"], "json_patch")
+        self.assertIn("TYPED PATCH OUTPUT:", calls[-1])
+
+    def test_invalid_json_patch_escalates_to_architect(self) -> None:
+        source = "def increment(value):\n    return value\n"
+        architect_prompts: list[str] = []
+
+        def small_supplier(_draft: str, prompt: str) -> str:
+            return "{not valid json" if "TYPED PATCH OUTPUT:" in prompt else "def increment(value):\n  return value\n"
+
+        def architect_supplier(_draft: str, prompt: str) -> str:
+            architect_prompts.append(prompt)
+            return "def increment(value):\n    return value + 1\n"
+
+        controller = GenerationController(
+            max_retries=2,
+            draft_supplier=lambda _prompt: source,
+            repair_supplier=small_supplier,
+            architect_supplier=architect_supplier,
+            repair_strategy=RepairStrategyAgent(),
+            behavior_spec=FunctionBehaviorSpec(
+                function_name="increment",
+                cases=[BehaviorCase(name="increments", args=(2,), expected=3)],
+            ),
+        )
+        result = controller.run(target="invalid-patch", initial_prompt="increment values")
+
+        self.assertEqual(result.payload["final_status"], "completed")
+        self.assertEqual(result.payload["attempts"][1]["repair_worker"], "json_patch->architect_llm")
+        self.assertTrue(architect_prompts)
+
+    def test_semantic_stagnation_uses_deterministic_import_transform(self) -> None:
+        source = "import numpy\n\ndef identity(value):\n    return value\n"
+
+        controller = GenerationController(
+            max_retries=2,
+            draft_supplier=lambda _prompt: source,
+            repair_supplier=lambda _draft, _prompt: "import numpy\n\ndef identity(value):\n  return value\n",
+            repair_strategy=RepairStrategyAgent(),
+        )
+        result = controller.run(target="remove-forbidden-import", initial_prompt="identity")
+
+        self.assertEqual(result.payload["final_status"], "completed")
+        self.assertEqual(result.payload["attempts"][1]["selected_strategy"], "deterministic_transform")
+        self.assertNotIn("numpy", result.payload["attempts"][-1]["draft"])
+
     def test_unregistered_language_routes_to_manual_review(self) -> None:
         controller = GenerationController(
             max_retries=0,

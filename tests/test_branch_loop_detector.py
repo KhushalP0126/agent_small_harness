@@ -2,7 +2,13 @@ from __future__ import annotations
 
 import unittest
 
-from validation.branch_loop_detector import build_branch_state_signature, detect_branching_loop
+from validation.branch_loop_detector import (
+    build_branch_state_signature,
+    build_failure_signature,
+    compare_drafts,
+    detect_branching_loop,
+    is_semantically_stagnant,
+)
 
 
 def attempt(
@@ -37,6 +43,23 @@ def complexity(value: str = "9") -> dict:
 
 
 class BranchLoopDetectorTests(unittest.TestCase):
+    def test_python_ast_ignores_whitespace_only_edits(self) -> None:
+        comparison = compare_drafts("def f(x):\n return x + 1\n", "def f(x):\n    return x + 1\n")
+        self.assertEqual(comparison.edit_ratio, 0.0)
+
+    def test_substantive_ast_edit_is_not_stagnant(self) -> None:
+        comparison = is_semantically_stagnant(
+            "def f(x):\n return x + 1\n", "def f(x):\n return max(x, 0)\n",
+            "validator:behavior:f", "validator:behavior:f",
+        )
+        self.assertFalse(comparison.semantically_stagnant)
+
+    def test_failure_signature_uses_stable_symbol_identity(self) -> None:
+        signature = build_failure_signature({
+            "engine": "behavior-validator", "kind": "behavior_mismatch",
+            "evidence": {"function_name": "f"},
+        })
+        self.assertEqual(signature, "behavior-validator:behavior_mismatch:f")
     def test_simple_repeated_branch_loop_is_detected(self) -> None:
         attempts = [
             attempt("def f(): pass", "small_worker", True, "diff", [complexity()]),

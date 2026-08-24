@@ -649,11 +649,11 @@ def analyze(value):
         )
         self.assertIn("CRITICAL BUG FIX REQUIRED", prompt)
         self.assertIn("YOUR CODE:", prompt)
-        self.assertIn("FAILED CHECK:", prompt)
+        self.assertIn("PRIMARY FAILURE:", prompt)
         self.assertIn("FIX DIRECTIVE:", prompt)
         self.assertIn("Do not use str.isdigit() alone", prompt)
         self.assertNotIn("COORDINATED REPAIR PLAN", prompt)
-        self.assertNotIn("Kind:", prompt)
+        self.assertIn("Kind: behavior_mismatch", prompt)
         self.assertNotIn("Anchor:", prompt)
 
     def test_retry_violation_merge_is_stable_and_deduplicated(self) -> None:
@@ -689,7 +689,7 @@ def analyze(value):
             ["cyclomatic_complexity", "behavior_mismatch"],
         )
 
-    def test_small_worker_retry_includes_static_and_behavior_failures(self) -> None:
+    def test_small_worker_retry_prioritizes_behavior_over_static_metrics(self) -> None:
         broken_source = """
 def group_top_scores(records):
     team_scores = {}
@@ -739,7 +739,7 @@ def group_top_scores(records):
         controller.run(target="grouped ranking", initial_prompt="preserve score and name ordering")
 
         self.assertEqual(len(captured_prompts), 1)
-        self.assertIn("cyclomatic complexity", captured_prompts[0].lower())
+        self.assertNotIn("cyclomatic complexity", captured_prompts[0].lower())
         self.assertIn("ties by name returned", captured_prompts[0])
         self.assertIn("{'x': ['anna', 'beth']}", captured_prompts[0])
 
@@ -975,7 +975,7 @@ def parse_key_value_lines(text):
         self.assertTrue(result.payload["attempts"][1]["changed"])
         self.assertTrue(result.payload["attempts"][1]["diff"])
 
-    def test_generation_controller_gives_small_worker_all_distinct_findings(self) -> None:
+    def test_generation_controller_gives_small_worker_one_primary_finding(self) -> None:
         source = """
 def filter_items(items, selected: list):
     result = []
@@ -1002,12 +1002,12 @@ def filter_items(items, selected: list):
         controller.run(target="scope small worker", initial_prompt="generate")
         self.assertEqual(len(captured_prompts), 1)
         self.assertIn("CRITICAL BUG FIX REQUIRED", captured_prompts[0])
-        self.assertIn("FAILED CHECKS:", captured_prompts[0])
-        self.assertIn("FIX DIRECTIVES:", captured_prompts[0])
+        self.assertIn("PRIMARY FAILURE:", captured_prompts[0])
+        self.assertIn("FIX DIRECTIVE:", captured_prompts[0])
         self.assertIn("precomputing a set or dictionary", captured_prompts[0])
-        self.assertIn("cyclomatic complexity", captured_prompts[0].lower())
+        self.assertNotIn("cyclomatic complexity", captured_prompts[0].lower())
         self.assertNotIn("COORDINATED REPAIR PLAN", captured_prompts[0])
-        self.assertNotIn("Kind:", captured_prompts[0])
+        self.assertIn("Kind: algorithmic_cost", captured_prompts[0])
 
     def test_generation_controller_gives_architect_full_finding_set(self) -> None:
         source = """
@@ -1121,25 +1121,11 @@ def classify(value):
         self.assertTrue(second_attempt["findings"])
         self.assertFalse(second_attempt["behavior_validation"]["is_compliant"])
 
-    def test_generation_controller_injects_prior_failure_feedback(self) -> None:
+    def test_generation_controller_excludes_prior_failure_feedback(self) -> None:
         broken_source = "def analyze(matrix):\n    return 0\n"
 
         def repair_supplier(_draft: str, retry_prompt: str) -> str:
-            if "PREVIOUS FAILURE:" in retry_prompt:
-                return """
-def analyze(matrix):
-    total = 0
-    for row in matrix:
-        for value in row:
-            total += (
-                (value < 0) * 1
-                + (value == 0) * 2
-                + (0 < value < 10) * 3
-                + (10 <= value < 100) * 4
-                + (value >= 100) * 5
-            )
-    return total
-"""
+            self.assertNotIn("PREVIOUS FAILURE:", retry_prompt)
             return broken_source.replace("return 0", "return 1")
 
         controller = GenerationController(
@@ -1149,9 +1135,8 @@ def analyze(matrix):
             behavior_spec=mixed_hard_case_spec(),
         )
         result = controller.run(target="feedback-loop", initial_prompt="preserve behavior")
-        self.assertEqual(result.payload["final_status"], "completed")
-        self.assertIn("PREVIOUS FAILURE:", result.payload["attempts"][1]["retry_prompt"])
-        self.assertIn("Do not repeat the same output", result.payload["attempts"][1]["retry_prompt"])
+        self.assertEqual(result.payload["final_status"], "manual_review_required")
+        self.assertNotIn("PREVIOUS FAILURE:", result.payload["attempts"][1]["retry_prompt"])
 
     def test_ollama_supplier_uses_small_quantized_default_model(self) -> None:
         class StubClient:

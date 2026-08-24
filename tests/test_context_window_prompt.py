@@ -53,8 +53,8 @@ def unrelated_large_context():
         self.assertIn("classify_status", prompt)
         self.assertIn("<= 5", prompt)
         self.assertIn("should return 'paused'", prompt)
-        self.assertNotIn("NOISE", prompt)
-        self.assertNotIn("unrelated_large_context", prompt)
+        self.assertIn("NOISE", prompt)
+        self.assertIn("unrelated_large_context", prompt)
 
     def test_negative_range_strings_do_not_trigger_signed_token_hint(self) -> None:
         source = """
