@@ -8,11 +8,7 @@ from unittest.mock import MagicMock, patch
 from agents.artifact_manager import ArtifactManager
 from TUI.app import HarnessTUI, RUNTIME_REPAIR_COPY, RunLauncherScreen, _attempt_lines
 from TUI.data_source import HarnessDataSource
-from TUI.mermaid_renderer import (
-    render_mermaid_tree,
-    render_repo_architecture,
-    render_repo_architecture_mermaid,
-)
+from TUI.repo_renderer import render_repo_architecture, render_repo_tree
 
 
 class ArtifactRunListingTests(unittest.TestCase):
@@ -176,13 +172,12 @@ class HarnessDataSourceTests(unittest.TestCase):
             "structured_spec_example",
         )
 
-    def test_repo_map_supports_architecture_tree_mermaid_context_and_json(self) -> None:
+    def test_repo_map_supports_architecture_tree_context_and_json(self) -> None:
         (self.root / "sample.py").write_text(
             "import json\n\ndef load(value):\n    return json.loads(value)\n",
             encoding="utf-8",
         )
 
-        self.assertTrue(self.source.repo_map(fmt="mermaid").startswith("flowchart LR"))
         self.assertIn("Repository architecture", self.source.repo_map(fmt="ascii"))
         self.assertIn("module: sample", self.source.repo_map(fmt="tree"))
         self.assertIn("REPO MAP", self.source.repo_map(fmt="context"))
@@ -191,24 +186,6 @@ class HarnessDataSourceTests(unittest.TestCase):
             "sample/",
             self.source.repo_map(fmt="ascii", focus="sample"),
         )
-
-    def test_browser_diagram_fallback_is_graphical_layer_map(self) -> None:
-        (self.root / "sample.py").write_text(
-            "def load(value):\n    return value\n",
-            encoding="utf-8",
-        )
-        with (
-            patch("TUI.data_source.shutil.which", return_value=None),
-            patch("TUI.data_source.webbrowser.open") as browser_open,
-        ):
-            output = self.source.open_architecture_diagram()
-
-        self.assertEqual(output.suffix, ".html")
-        rendered = output.read_text(encoding="utf-8")
-        self.assertIn('class="mermaid"', rendered)
-        self.assertIn("layer_sample", rendered)
-        browser_open.assert_called_once_with(output.as_uri())
-
 
 class TUIRenderingTests(unittest.TestCase):
     def test_architecture_summary_groups_modules_and_dependencies(self) -> None:
@@ -250,27 +227,27 @@ class TUIRenderingTests(unittest.TestCase):
         self.assertIn("validation (1)", rendered)
         self.assertIn("validation/  1 modules", rendered)
 
-        diagram = render_repo_architecture_mermaid(graph)
-        self.assertTrue(diagram.startswith("flowchart LR"))
-        self.assertIn("layer_agents", diagram)
-        self.assertIn("-->|1 imports| layer_validation", diagram)
+    def test_typed_graph_tree_is_bounded_and_preserves_edge_labels(self) -> None:
+        from agents.repo_map_agent import GraphEdge, GraphNode, RepoGraph
 
-    def test_mermaid_tree_is_bounded_and_preserves_edge_labels(self) -> None:
-        source = """\
-flowchart LR
-  n0["module: alpha"]
-  n1["function: alpha.run"]
-  n2["function: alpha.helper"]
-  n0 -->|contains| n1
-  n1 -->|calls: helper| n2
-"""
-
-        rendered = render_mermaid_tree(source, max_depth=2)
+        graph = RepoGraph(
+            root="/repo",
+            nodes=[
+                GraphNode("n0", "module", "alpha"),
+                GraphNode("n1", "function", "alpha.run"),
+                GraphNode("n2", "function", "alpha.helper"),
+            ],
+            edges=[
+                GraphEdge("n0", "n1", "contains"),
+                GraphEdge("n1", "n2", "calls", "helper"),
+            ],
+        )
+        rendered = render_repo_tree(graph, max_depth=2)
 
         self.assertIn("module: alpha", rendered)
         self.assertIn("contains → function: alpha.run", rendered)
         self.assertIn("calls: helper → function: alpha.helper", rendered)
-        self.assertNotIn("n0 -->", rendered)
+        self.assertNotIn("n0", rendered)
 
     def test_tui_keeps_generation_behind_subprocess_boundary(self) -> None:
         tui_root = Path(__file__).resolve().parents[1] / "TUI"

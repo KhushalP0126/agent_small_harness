@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 from agents.artifact_manager import ArtifactManager
-from agents.generation_controller import GenerationController
+from agents.generation_controller import GenerationAttempt, GenerationController
 from scripts.run_coding_capability import (
     DEFAULT_TASKS as CAPABILITY_TASKS,
     run_tasks,
@@ -102,6 +102,56 @@ class CheckpointResumeTests(unittest.TestCase):
             [attempt["attempt"] for attempt in resumed.payload["attempts"]],
             [0, 1],
         )
+
+    def test_validated_attempt_resume_is_finalized_without_another_model_call(self) -> None:
+        snapshots = []
+
+        def interrupt_after_record(payload: dict) -> None:
+            snapshots.append(payload)
+            if payload["runtime"]["phase"] == "attempt_recorded":
+                raise RuntimeError("simulated interruption after validation")
+
+        controller = GenerationController(
+            draft_supplier=lambda _prompt: GOOD_SOURCE,
+            repair_supplier=lambda _draft, _prompt: self.fail("repair must not run"),
+            checkpoint_writer=interrupt_after_record,
+        )
+        with self.assertRaisesRegex(RuntimeError, "after validation"):
+            controller.run(target="resume-complete", initial_prompt="generate")
+
+        terminal_checkpoints = []
+        result = GenerationController(
+            draft_supplier=lambda _prompt: self.fail("draft supplier must not rerun"),
+            repair_supplier=lambda _draft, _prompt: self.fail("repair must not run"),
+            checkpoint_writer=terminal_checkpoints.append,
+        ).run(
+            target="resume-complete",
+            initial_prompt="generate",
+            resume_from=snapshots[-1],
+        )
+
+        self.assertEqual(result.payload["final_status"], "completed")
+        self.assertEqual(result.payload["termination_reason"], "validated")
+        self.assertEqual(terminal_checkpoints[-1]["runtime"]["phase"], "terminal")
+
+    def test_architect_checkpoint_never_falls_back_to_small_worker(self) -> None:
+        attempt = GenerationAttempt(
+            attempt=0,
+            draft=BAD_SOURCE,
+            findings=[],
+            validation={"is_compliant": False, "violations": []},
+            behavior_validation={"is_compliant": True, "issues": []},
+            repair_worker="architect_llm",
+            retry_prompt="repair",
+        )
+        controller = GenerationController(
+            repair_supplier=lambda _draft, _prompt: self.fail(
+                "small worker must not service architect checkpoints"
+            )
+        )
+
+        with self.assertRaisesRegex(ValueError, "architect supplier"):
+            controller._resume_attempt_draft(attempt)
 
     def test_coding_capability_runner_loads_checkpoint_by_run_id(self) -> None:
         task = json.loads(CAPABILITY_TASKS.read_text(encoding="utf-8"))[0]

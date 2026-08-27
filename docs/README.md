@@ -4,7 +4,7 @@
 | --- | --- |
 | Install and run | [`../setup/`](../setup/) |
 | Find code ownership | [`../ARCHITECTURE.md`](../ARCHITECTURE.md) |
-| View the system flow | [`architecture.mmd`](architecture.mmd) |
+| View the system flow | [`../ARCHITECTURE.md`](../ARCHITECTURE.md) |
 | Reproduce research | [`RESEARCH.md`](RESEARCH.md) |
 | Read design rules | [`reference/`](reference/) |
 | Review evidence | [`results/`](results/) |

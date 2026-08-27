@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from unittest.mock import patch
 
 from validation.branch_loop_detector import (
     build_branch_state_signature,
@@ -60,6 +61,26 @@ class BranchLoopDetectorTests(unittest.TestCase):
             "evidence": {"function_name": "f"},
         })
         self.assertEqual(signature, "behavior-validator:behavior_mismatch:f")
+
+    def test_failure_signature_ignores_moving_line_numbers(self) -> None:
+        first = build_failure_signature({
+            "engine": "behavior-validator",
+            "kind": "behavior_mismatch",
+            "location": "parser.py:10:2",
+            "evidence": {"case": {"name": "empty input"}},
+        })
+        second = build_failure_signature({
+            "engine": "behavior-validator",
+            "kind": "behavior_mismatch",
+            "location": "parser.py:40:8",
+            "evidence": {"case": {"name": "empty input"}},
+        })
+        self.assertEqual(first, second)
+
+    def test_unavailable_tree_sitter_uses_conservative_token_fallback(self) -> None:
+        with patch("engines.treesitter_support.parse_tree", side_effect=ValueError("grammar unavailable")):
+            comparison = compare_drafts("int f(){return 1;}", "int f() { return 1; }", "c")
+        self.assertEqual(comparison.representation, "tokens")
     def test_simple_repeated_branch_loop_is_detected(self) -> None:
         attempts = [
             attempt("def f(): pass", "small_worker", True, "diff", [complexity()]),

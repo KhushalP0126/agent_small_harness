@@ -19,9 +19,7 @@ import sys
 import tempfile
 import time
 import threading
-from dataclasses import dataclass
-from html import escape
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, TextIO
 from urllib.parse import urlparse
@@ -42,6 +40,7 @@ from backends.ollama_client import (
 from engines.compilation_engine import CompilationEngine
 from harness_kernel.compute_shield import ShieldTaskTokens, compute_shield_metrics
 from harness_kernel.profiling import ProfileResult
+from harness_kernel.research_readiness import evaluate_research_readiness
 from harness_kernel.event_stream import EVENT_FD_ENV
 from harness_kernel.tool_handlers import (
     ApplySearchReplaceResponse,
@@ -55,11 +54,10 @@ from harness_kernel.tool_handlers import (
     apply_reviewed_search_replace,
     build_default_tool_registry,
 )
-from TUI.mermaid_renderer import render_repo_architecture_mermaid
-from TUI.mermaid_renderer import render_repo_architecture
+from TUI.repo_renderer import render_repo_architecture
 
 
-PROTOCOL_VERSION = 4
+PROTOCOL_VERSION = 5
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MEMORY_PATH = REPO_ROOT / ".tui_memory.json"
 MAX_CHAT_MESSAGES = 24
@@ -198,7 +196,6 @@ class Bridge:
         self._architect_unavailable_reason: str | None = None
         self._assistant_busy = False
         self._process: subprocess.Popen[str] | None = None
-        self._repo_map_server: ThreadingHTTPServer | None = None
         self._lock = threading.Lock()
 
     def emit_startup_status(self) -> None:
@@ -218,6 +215,7 @@ class Bridge:
                     "repository .env file or export it before sending a prompt."
                 ),
             )
+            threading.Thread(target=self.research_readiness, daemon=True).start()
             return
         # DNS resolution can block unpredictably on an offline network.  The
         # bridge must start reading commands before that check completes.
@@ -226,6 +224,7 @@ class Bridge:
             args=(source,),
             daemon=True,
         ).start()
+        threading.Thread(target=self.research_readiness, daemon=True).start()
 
     def _emit_config_status(
         self,
@@ -306,6 +305,10 @@ class Bridge:
             self.compute_shield(command.get("phase"), command.get("tasks"))
         elif kind == "history":
             self.history(command.get("run_id"), command.get("limit"))
+        elif kind == "research_readiness":
+            self.research_readiness()
+        elif kind == "repair_session_action":
+            self.repair_session_action(command)
         else:
             self.writer.emit("log", level="error", msg=f"unknown command: {kind}")
 
@@ -1239,7 +1242,6 @@ class Bridge:
         try:
             root_path = Path(root).resolve()
             graph = RepoMapAgent().map_repo(root_path)
-            diagram = render_repo_architecture_mermaid(graph, focus=focus)
         except Exception as exc:  # noqa: BLE001 - protocol boundary
             self.writer.emit(
                 "log",
@@ -1287,48 +1289,10 @@ class Bridge:
             return
         self.writer.emit(
             "repo_map",
-            mermaid=diagram,
             summary=render_repo_architecture(graph, focus=focus),
+            nodes=[asdict(node) for node in graph.nodes],
+            edges=[asdict(edge) for edge in graph.edges],
         )
-        self._serve_repo_map(diagram, focus)
-
-    def _serve_repo_map(self, diagram: str, focus: str) -> None:
-        """Serve the latest repository map on loopback for an explicit browser open."""
-        page = f"""<!doctype html>
-<html><head><meta charset=\"utf-8\"><title>Repository map</title>
-<style>body{{background:#101214;color:#e8eaed;font:16px system-ui;margin:2rem}}.mermaid{{background:#171a1e;padding:1rem;border-radius:12px;overflow:auto}}</style>
-<script type=\"module\">import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs'; mermaid.initialize({{startOnLoad:true,theme:'dark'}});</script>
-</head><body><h1>Repository map</h1><p>Focus: {escape(focus)}</p><pre class=\"mermaid\">{escape(diagram)}</pre></body></html>"""
-
-        class Handler(BaseHTTPRequestHandler):
-            def do_GET(self) -> None:  # noqa: N802 - stdlib protocol name
-                if self.path not in {"/", "/index.html"}:
-                    self.send_error(404)
-                    return
-                payload = page.encode("utf-8")
-                self.send_response(200)
-                self.send_header("Content-Type", "text/html; charset=utf-8")
-                self.send_header("Content-Length", str(len(payload)))
-                self.end_headers()
-                self.wfile.write(payload)
-
-            def log_message(self, _format: str, *_args: Any) -> None:
-                return
-
-        if self._repo_map_server is not None:
-            self._repo_map_server.shutdown()
-        try:
-            server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-        except OSError as exc:
-            self.writer.emit(
-                "log",
-                level="warning",
-                msg=f"localhost repository map unavailable: {exc}",
-            )
-            return
-        self._repo_map_server = server
-        threading.Thread(target=server.serve_forever, daemon=True).start()
-        self.writer.emit("repo_map_url", url=f"http://127.0.0.1:{server.server_port}/")
 
     def compile_source(self, language: str, source: str) -> None:
         if self._engines_disabled("compile"):
@@ -1454,16 +1418,67 @@ class Bridge:
         ]
         self.writer.emit("history_list", runs=runs)
 
+    def research_readiness(self) -> None:
+        result = evaluate_research_readiness(REPO_ROOT)
+        self.writer.emit(
+            "research_readiness",
+            score=result["score"],
+            status=result["status"],
+            categories=result["categories"],
+            blockers=result["blockers"],
+        )
+
+    def repair_session_action(self, command: dict[str, Any]) -> None:
+        action = str(command.get("action") or "")
+        run_id = str(command.get("run_id") or "")
+        entrypoint = str(command.get("entrypoint") or "coding_capability")
+        if action in {"approve_patch", "reject_patch"}:
+            self.resolve_tool_diff(action == "approve_patch")
+            return
+        if action == "cancel":
+            self.cancel()
+            return
+        if action in {"continue", "retry", "resume", "escalate"}:
+            if not run_id:
+                self.writer.emit("log", level="error", msg="repair action requires run_id")
+                return
+            args = ["--resume-run", run_id]
+            if entrypoint == "structured_spec":
+                try:
+                    checkpoint = ArtifactManager(self.artifact_root).load_checkpoint(run_id) or {}
+                except (OSError, ValueError, json.JSONDecodeError) as exc:
+                    self.writer.emit(
+                        "log",
+                        level="error",
+                        msg=f"could not load repair checkpoint: {exc}",
+                    )
+                    return
+                spec_path = str(checkpoint.get("spec_path") or "")
+                if not spec_path:
+                    self.writer.emit(
+                        "log",
+                        level="error",
+                        msg="structured-spec repair action requires a checkpoint spec_path",
+                    )
+                    return
+                args.extend(["--spec", spec_path])
+            if action == "escalate":
+                args.extend(["--architect-after-repair-attempts", "0"])
+            self.start_run(entrypoint, args)
+            return
+        self.writer.emit("log", level="error", msg=f"unknown repair action: {action}")
+
     def _run_summary(self, manager: ArtifactManager, run_id: str) -> dict[str, Any]:
         try:
             checkpoint = manager.load_checkpoint(run_id) or {}
         except (ValueError, json.JSONDecodeError, OSError):
             checkpoint = {}
-        attempts = checkpoint.get("attempts") or []
+        session = checkpoint.get("session") or checkpoint
+        attempts = session.get("attempts") or []
         return {
             "run_id": run_id,
-            "target": str(checkpoint.get("target", "")),
-            "final_status": str(checkpoint.get("final_status", "")),
+            "target": str(session.get("target", "")),
+            "final_status": str(session.get("final_status", "")),
             "attempt_count": len(attempts),
         }
 

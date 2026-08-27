@@ -137,22 +137,6 @@ def _formal_counterexample(violation: Violation | None) -> str:
     return witness.strip() if isinstance(witness, str) else ""
 
 
-def _scoped_code(original_code: str, violation: Violation | None) -> str:
-    function_name = _function_name(violation)
-    if not function_name:
-        return original_code
-    try:
-        tree = ast.parse(original_code)
-    except SyntaxError:
-        return original_code
-    for node in ast.walk(tree):
-        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == function_name:
-            segment = ast.get_source_segment(original_code, node)
-            if segment:
-                return segment
-    return original_code
-
-
 def build_small_worker_retry_prompt(
     original_code: str,
     violations: list[Violation],

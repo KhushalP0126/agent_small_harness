@@ -28,8 +28,6 @@ def run_repo_map(
 
     if output_format == "json":
         rendered = json.dumps(asdict(graph), indent=2)
-    elif output_format == "mermaid":
-        rendered = agent.to_mermaid(graph)
     else:
         rendered = "\n".join(agent.to_plan_context(graph))
     print(rendered)
@@ -39,7 +37,6 @@ def run_repo_map(
         paths = manager.create_run(prefix=f"repo_map_{Path(repo_root).name or 'root'}")
         payload = {"schema_version": ARTIFACT_SCHEMA_VERSION, **asdict(graph)}
         (paths.run_dir / "repo_map.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
-        (paths.run_dir / "repo_map.mmd").write_text(agent.to_mermaid(graph), encoding="utf-8")
         print(f"\n[repo-map] artifacts written to {paths.run_dir}", file=sys.stderr)
     return 0
 
@@ -47,7 +44,7 @@ def run_repo_map(
 def main() -> int:
     parser = argparse.ArgumentParser(description="Map a Python repository with the AST repo mapper.")
     parser.add_argument("root", type=Path, nargs="?", default=ROOT, help="Repository root to map (defaults to this repo).")
-    parser.add_argument("--format", choices=["json", "mermaid", "context"], default="context")
+    parser.add_argument("--format", choices=["json", "context"], default="context")
     parser.add_argument("--artifact-root", type=Path, default=DEFAULT_ARTIFACT_ROOT)
     parser.add_argument("--save-artifacts", action="store_true")
     args = parser.parse_args()

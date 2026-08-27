@@ -1,5 +1,3 @@
-#[allow(dead_code)]
-mod mermaid_view;
 mod protocol;
 
 use std::fs;
@@ -21,8 +19,8 @@ use crossterm::{
 };
 use futures::{FutureExt, StreamExt};
 use protocol::{
-    read_harness_events, ClarificationQuestion, FileEntry, HarnessCommand, HarnessEvent,
-    QuestionnaireAnswer, RunSummary, VariableEntry,
+    read_harness_events, ClarificationQuestion, FileEntry, GateStatus, HarnessCommand,
+    HarnessEvent, QuestionnaireAnswer, ReadinessCategory, RunSummary, VariableEntry,
 };
 use ratatui::{
     backend::CrosstermBackend,
@@ -63,6 +61,27 @@ struct BackendContext {
     estimated_cost_usd: f64,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+struct RepairContext {
+    session_id: String,
+    phase: String,
+    goal: String,
+    contract: String,
+    worker: String,
+    attempt: u32,
+    max_attempts: u32,
+    strategy: String,
+    failure_kind: String,
+    failure_location: String,
+    diagnostic: String,
+    counterexample: String,
+    edit_ratio: f64,
+    semantic_stagnant: bool,
+    gates: Vec<GateStatus>,
+    pending_action: String,
+    termination_reason: String,
+}
+
 impl AppMode {
     fn label(&self) -> &'static str {
         match self {
@@ -88,8 +107,6 @@ struct AppState {
     pct: u16,
     running: bool,
     working_directory: String,
-    repo_map_source: Option<String>,
-    repo_map_url: Option<String>,
     repo_content: String,
     repo_mode: String,
     repo_files: Vec<FileEntry>,
@@ -126,6 +143,11 @@ struct AppState {
     local_context: Option<BackendContext>,
     api_context: Option<BackendContext>,
     session_cost_usd: f64,
+    repair_context: Option<RepairContext>,
+    readiness_score: Option<u8>,
+    readiness_status: String,
+    readiness_categories: Vec<ReadinessCategory>,
+    readiness_blockers: Vec<String>,
 }
 
 impl Default for AppState {
@@ -138,8 +160,6 @@ impl Default for AppState {
             pct: 0,
             running: false,
             working_directory: String::new(),
-            repo_map_source: None,
-            repo_map_url: None,
             repo_content: "m map · r vars · t files".into(),
             repo_mode: "diagram".into(),
             repo_files: Vec::new(),
@@ -178,6 +198,11 @@ impl Default for AppState {
             local_context: None,
             api_context: None,
             session_cost_usd: 0.0,
+            repair_context: None,
+            readiness_score: None,
+            readiness_status: "unknown".into(),
+            readiness_categories: Vec::new(),
+            readiness_blockers: Vec::new(),
         }
     }
 }
@@ -224,6 +249,12 @@ impl AppState {
                 }
             ),
             format!("Saved preferences: {}", self.preference_count),
+            format!(
+                "Research readiness: {}",
+                self.readiness_score
+                    .map(|score| format!("{score}% · {}", self.readiness_status))
+                    .unwrap_or_else(|| "not evaluated".into())
+            ),
             "".to_string(),
             "## Recent activity".to_string(),
         ];
@@ -435,8 +466,7 @@ impl AppState {
             } => self.logs.push(format!(
                 "compute shield phase {phase}: baseline={tokens_baseline}, shielded={tokens_shielded}, delta={delta}"
             )),
-            HarnessEvent::RepoMap { mermaid, summary } => {
-                self.repo_map_source = Some(mermaid);
+            HarnessEvent::RepoMap { summary, nodes, edges } => {
                 self.context_content = summary
                     .lines()
                     .take(4)
@@ -444,11 +474,14 @@ impl AppState {
                     .join("\n");
                 self.repo_content = summary;
                 self.repo_mode = "diagram".into();
-                self.logs.push("repository map received".into());
+                self.logs.push(format!(
+                    "repository map received · {} nodes · {} edges",
+                    nodes.len(),
+                    edges.len()
+                ));
             }
             HarnessEvent::RepoMapUrl { url } => {
-                self.repo_map_url = Some(url.clone());
-                self.logs.push(format!("repository map ready · press o to open {url}"));
+                self.logs.push(format!("legacy repository-map URL ignored: {url}"));
             }
             HarnessEvent::RepoMapView { mode, content } => {
                 self.repo_mode = mode;
@@ -461,6 +494,58 @@ impl AppState {
             HarnessEvent::RepoMapVariables { entries } => {
                 self.repo_variables = entries;
                 self.clamp_repo_selection();
+            }
+            HarnessEvent::RepairSessionSnapshot {
+                session_id,
+                phase,
+                goal,
+                contract,
+                worker,
+                attempt,
+                max_attempts,
+                strategy,
+                failure_kind,
+                failure_location,
+                diagnostic,
+                counterexample,
+                edit_ratio,
+                semantic_stagnant,
+                gates,
+                pending_action,
+                termination_reason,
+            } => {
+                self.logs.push(format!(
+                    "repair {phase} · attempt {}/{} · {}",
+                    attempt.saturating_add(1),
+                    max_attempts,
+                    if strategy.is_empty() { worker.as_str() } else { strategy.as_str() }
+                ));
+                self.repair_context = Some(RepairContext {
+                    session_id,
+                    phase,
+                    goal,
+                    contract,
+                    worker,
+                    attempt,
+                    max_attempts,
+                    strategy,
+                    failure_kind,
+                    failure_location,
+                    diagnostic,
+                    counterexample,
+                    edit_ratio,
+                    semantic_stagnant,
+                    gates,
+                    pending_action,
+                    termination_reason,
+                });
+            }
+            HarnessEvent::ResearchReadiness { score, status, categories, blockers } => {
+                self.logs.push(format!("research readiness: {score}% · {status}"));
+                self.readiness_score = Some(score);
+                self.readiness_status = status;
+                self.readiness_categories = categories;
+                self.readiness_blockers = blockers;
             }
             HarnessEvent::HistoryList { runs } => {
                 self.logs.push(format!("[history] {} run(s) loaded", runs.len()));
@@ -600,7 +685,8 @@ impl AppState {
         matches!(
             self.mode,
             AppMode::Questionnaire | AppMode::SpecReview { .. } | AppMode::ResearchReview { .. }
-        )
+        ) || self.repair_context.is_some()
+            || self.readiness_score.is_some()
     }
 
     fn scroll_logs_up(&mut self, amount: usize) {
@@ -1150,7 +1236,7 @@ async fn send_prompt_command(
         });
     match command {
         "/help" => state.logs.push(
-            "commands: /readme /map /open /check <path> /history /research /spec /model /remember <note> /mention <path> /tools <task>"
+            "commands: /readme /map /check <path> /history /readiness /research /spec /model /remember <note> /mention <path> /tools <task>"
                 .into(),
         ),
         "/readme" if argument.is_empty() => match fs::read_to_string(repo_root.join("README.md")) {
@@ -1177,14 +1263,7 @@ async fn send_prompt_command(
                 },
             )
             .await?;
-            state.logs.push("building browser map…".into());
-        }
-        "/open" => {
-            if let Some(url) = state.repo_map_url.as_deref() {
-                open_localhost(url);
-            } else {
-                state.logs.push("map is not ready yet; use /map first".into());
-            }
+            state.logs.push("building terminal-native repository map…".into());
         }
         "/history" => {
             send_command(
@@ -1196,6 +1275,10 @@ async fn send_prompt_command(
             )
             .await?;
             state.logs.push("loading run history…".into());
+        }
+        "/readiness" => {
+            send_command(stdin, &HarnessCommand::ResearchReadiness).await?;
+            state.logs.push("evaluating research evidence…".into());
         }
         "/research" => {
             send_command(stdin, &HarnessCommand::DraftResearch).await?;
@@ -1241,17 +1324,6 @@ async fn send_prompt_command(
         _ => send_command(stdin, &HarnessCommand::Chat { text }).await?,
     }
     Ok(())
-}
-
-fn open_localhost(url: &str) {
-    let (program, args): (&str, [&str; 1]) = if cfg!(target_os = "macos") {
-        ("open", [url])
-    } else if cfg!(target_os = "windows") {
-        ("cmd", [url])
-    } else {
-        ("xdg-open", [url])
-    };
-    let _ = std::process::Command::new(program).args(args).spawn();
 }
 
 fn draw(frame: &mut ratatui::Frame, state: &AppState) {
@@ -1308,6 +1380,12 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState) {
 
     if state.mode == AppMode::Questionnaire {
         draw_questionnaire(frame, state, content[1]);
+    }
+
+    if matches!(state.mode, AppMode::Chat | AppMode::Executing)
+        && (state.repair_context.is_some() || state.readiness_score.is_some())
+    {
+        draw_session_context(frame, state, content[1]);
     }
 
     if state.validated_source_visible {
@@ -1367,11 +1445,185 @@ fn draw_status_row(frame: &mut ratatui::Frame, state: &AppState, area: Rect) {
                 },
             ),
         ),
+        Span::styled("  ·  ", Style::default().fg(theme_muted())),
+        Span::styled(
+            state
+                .readiness_score
+                .map(|score| format!("research {score}%"))
+                .unwrap_or_else(|| "research —".into()),
+            Style::default().fg(if state.readiness_score == Some(100) {
+                theme_ready()
+            } else {
+                theme_muted()
+            }),
+        ),
     ]);
     frame.render_widget(
         Paragraph::new(line).style(Style::default().bg(theme_status())),
         area,
     );
+}
+
+fn draw_session_context(frame: &mut ratatui::Frame, state: &AppState, area: Rect) {
+    frame.render_widget(pane_block(" Session context ", true), area);
+    let inner = Rect {
+        x: area.x.saturating_add(1),
+        y: area.y.saturating_add(1),
+        width: area.width.saturating_sub(2),
+        height: area.height.saturating_sub(2),
+    };
+    let mut lines = Vec::new();
+    if let Some(repair) = &state.repair_context {
+        let stages = [
+            "spec",
+            "contract",
+            "generate",
+            "validate",
+            "repair",
+            "architect",
+            "review",
+        ];
+        lines.push(Line::styled(
+            "REPAIR LOOP",
+            Style::default()
+                .fg(theme_cyan())
+                .add_modifier(Modifier::BOLD),
+        ));
+        let active_stage = repair_stage(&repair.phase);
+        lines.push(Line::raw(
+            stages
+                .iter()
+                .map(|stage| {
+                    if *stage == active_stage {
+                        format!("[{stage}]")
+                    } else {
+                        stage.to_string()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(" → "),
+        ));
+        lines.push(Line::raw(format!("session  {}", repair.session_id)));
+        lines.push(Line::raw(format!("goal  {}", repair.goal)));
+        if !repair.contract.is_empty() {
+            lines.push(Line::raw(format!("unit  {}", repair.contract)));
+        }
+        lines.push(Line::raw(format!(
+            "attempt  {}/{} · worker {} · strategy {}",
+            repair.attempt.saturating_add(1),
+            repair.max_attempts,
+            display_or_dash(&repair.worker),
+            display_or_dash(&repair.strategy)
+        )));
+        lines.push(Line::raw(format!(
+            "edit  {:>5.1}% {}",
+            repair.edit_ratio * 100.0,
+            if repair.semantic_stagnant {
+                "· stagnant"
+            } else {
+                ""
+            }
+        )));
+        if !repair.failure_kind.is_empty() {
+            lines.push(Line::raw(format!(
+                "failure  {} {}",
+                repair.failure_kind, repair.failure_location
+            )));
+        }
+        if !repair.diagnostic.is_empty() {
+            lines.push(Line::raw(format!("diagnostic  {}", repair.diagnostic)));
+        }
+        if !repair.counterexample.is_empty() {
+            lines.push(Line::raw(format!("witness  {}", repair.counterexample)));
+        }
+        if !repair.gates.is_empty() {
+            lines.push(Line::raw(
+                repair
+                    .gates
+                    .iter()
+                    .map(|gate| format!("{} {}", if gate.passed { "✓" } else { "×" }, gate.name))
+                    .collect::<Vec<_>>()
+                    .join("  "),
+            ));
+        }
+        if !repair.pending_action.is_empty() {
+            lines.push(Line::raw(format!("next  {}", repair.pending_action)));
+        }
+        if !repair.termination_reason.is_empty() {
+            lines.push(Line::raw(format!("stop  {}", repair.termination_reason)));
+        }
+        lines.push(Line::raw(""));
+    }
+    if let Some(score) = state.readiness_score {
+        lines.push(Line::styled(
+            "RESEARCH READINESS",
+            Style::default()
+                .fg(theme_purple())
+                .add_modifier(Modifier::BOLD),
+        ));
+        lines.push(Line::raw(format!(
+            "{} {score}% · {}",
+            gauge_bar(score, 16),
+            state.readiness_status
+        )));
+        lines.extend(state.readiness_categories.iter().map(|category| {
+            Line::raw(format!(
+                "{} {}",
+                if category.passed { "✓" } else { "×" },
+                category.name
+            ))
+        }));
+        for blocker in state.readiness_blockers.iter().take(5) {
+            lines.push(Line::raw(format!("! {blocker}")));
+        }
+    }
+    if state.repo_content != "m map · r vars · t files" {
+        lines.push(Line::raw(""));
+        lines.push(Line::styled(
+            format!("REPOSITORY · {}", state.repo_mode),
+            Style::default()
+                .fg(theme_system())
+                .add_modifier(Modifier::BOLD),
+        ));
+        lines.extend(
+            state
+                .repo_content
+                .lines()
+                .take(10)
+                .map(|line| Line::raw(line.to_owned())),
+        );
+    }
+    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
+}
+
+fn gauge_bar(percent: u8, width: usize) -> String {
+    let filled = usize::from(percent.min(100)) * width / 100;
+    format!(
+        "[{}{}]",
+        "█".repeat(filled),
+        "░".repeat(width.saturating_sub(filled))
+    )
+}
+
+fn repair_stage(phase: &str) -> &'static str {
+    match phase {
+        "spec" | "specification" => "spec",
+        "contract" => "contract",
+        "generate" | "generated" => "generate",
+        "validate" | "validated" => "validate",
+        "repair" | "repair_selected" => "repair",
+        "architect" | "architect_escalation" => "architect",
+        "completed" | "manual_review" | "review" => "review",
+        _ => "repair",
+    }
+}
+
+fn display_or_dash(value: &str) -> &str {
+    if value.is_empty() {
+        "—"
+    } else {
+        value
+    }
 }
 
 fn draw_composer(frame: &mut ratatui::Frame, state: &AppState, area: Rect) {
@@ -2579,6 +2831,15 @@ mod tests {
     }
 
     #[test]
+    fn repair_phases_map_to_native_timeline_stages() {
+        assert_eq!(repair_stage("validated"), "validate");
+        assert_eq!(repair_stage("repair_selected"), "repair");
+        assert_eq!(repair_stage("architect_escalation"), "architect");
+        assert_eq!(repair_stage("completed"), "review");
+        assert_eq!(repair_stage("manual_review"), "review");
+    }
+
+    #[test]
     fn code_excerpt_is_rendered_in_the_stream() {
         let mut state = AppState::default();
         state.apply(HarnessEvent::CodeExcerpt {
@@ -2623,7 +2884,7 @@ mod tests {
     }
 
     #[test]
-    fn structured_repo_entries_are_retained_for_browser_mapping() {
+    fn structured_repo_entries_are_retained_for_native_mapping() {
         let mut state = AppState::default();
         state.apply(HarnessEvent::RepoMapFiles {
             entries: vec![
@@ -2660,6 +2921,49 @@ mod tests {
             state.repo_variables[state.repo_selected].variables,
             ["DATA"]
         );
+    }
+
+    #[test]
+    fn repair_and_readiness_events_populate_native_context() {
+        let mut state = AppState::default();
+        state.apply(HarnessEvent::RepairSessionSnapshot {
+            session_id: "run-1".into(),
+            phase: "repair".into(),
+            goal: "fix parser".into(),
+            contract: "parse".into(),
+            worker: "small_worker".into(),
+            attempt: 1,
+            max_attempts: 3,
+            strategy: "json_patch".into(),
+            failure_kind: "behavior_mismatch".into(),
+            failure_location: "parse".into(),
+            diagnostic: "wrong output".into(),
+            counterexample: "empty input".into(),
+            edit_ratio: 0.02,
+            semantic_stagnant: true,
+            gates: vec![GateStatus {
+                name: "behavior".into(),
+                passed: false,
+            }],
+            pending_action: "json_patch".into(),
+            termination_reason: String::new(),
+        });
+        state.apply(HarnessEvent::ResearchReadiness {
+            score: 71,
+            status: "blocked".into(),
+            categories: vec![ReadinessCategory {
+                name: "controlled_live_sessions".into(),
+                passed: false,
+                evidence: vec![],
+            }],
+            blockers: vec!["missing scenarios".into()],
+        });
+
+        assert!(state.side_inspector_active());
+        assert_eq!(state.readiness_score, Some(71));
+        let repair = state.repair_context.expect("repair context");
+        assert_eq!(repair.strategy, "json_patch");
+        assert!(repair.semantic_stagnant);
     }
 
     #[test]

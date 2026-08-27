@@ -17,7 +17,7 @@ Initial tagged release of the generalized code-generation and repair harness.
 - DeepSeek configuration visibility and bounded local preference memory without
   displaying or persisting credentials.
 - Navigable repository map, per-file details, run history, and cross-platform
-  Mermaid rendering with native terminal protocols plus a quadrant fallback.
+  native terminal repair, repository-context, and readiness views.
 - Defense-in-depth local execution for generated Python using sanitized child
   environments, disposable working directories, bounded output, process-group
   timeouts, and supported POSIX resource limits.

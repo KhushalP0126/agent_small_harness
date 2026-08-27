@@ -141,6 +141,7 @@ class GenerationSession:
     max_retries: int
     attempts: list[GenerationAttempt] = field(default_factory=list)
     final_status: str = "manual_review_required"
+    termination_reason: str = ""
     human_review: HumanReviewPayload | None = None
 
 
@@ -177,6 +178,7 @@ class GenerationController(BaseAgent):
         profiling_runner: ProfilingRunner | None = None,
         event_sink: EventSink | None = None,
         repository_root: Path | str | None = None,
+        session_id: str = "",
     ) -> None:
         self.max_retries = max_retries
         self.draft_supplier = draft_supplier or (lambda prompt: prompt)
@@ -203,6 +205,7 @@ class GenerationController(BaseAgent):
         self.profiling_runner = profiling_runner
         self.event_sink = event_sink or event_sink_from_env()
         self.repository_root = Path(repository_root or Path.cwd()).resolve()
+        self.session_id = session_id.strip()
         self.execution_agent = execution_agent or (
             ExecutionAgent() if (enable_execution_trace or enable_debugger_hints) else None
         )
@@ -217,6 +220,123 @@ class GenerationController(BaseAgent):
     def _emit_event(self, event: dict) -> None:
         if self.event_sink is not None:
             self.event_sink(dict(event))
+
+    def _emit_repair_snapshot(
+        self,
+        session: GenerationSession,
+        *,
+        phase: str,
+        attempt: GenerationAttempt | None = None,
+        pending_action: str = "",
+    ) -> None:
+        violation = {}
+        gates: list[dict] = []
+        if attempt is not None:
+            violations = attempt.validation.get("violations", [])
+            violation = violations[0] if violations else {}
+            if not violation and attempt.behavior_validation.get("issues"):
+                issue = attempt.behavior_validation["issues"][0]
+                violation = {
+                    "kind": "behavior_mismatch",
+                    "location": str(issue.get("case", "")),
+                    "summary": str(issue.get("details", "behavior mismatch")),
+                    "evidence": {"case": issue},
+                }
+            if not violation and attempt.formal_validation.get("issues"):
+                issue = attempt.formal_validation["issues"][0]
+                violation = {
+                    "kind": "formal_counterexample",
+                    "location": str(issue.get("function_name", "")),
+                    "summary": str(issue.get("summary", "formal validation failed")),
+                    "evidence": {"issue": issue},
+                }
+            gates = [
+                {"name": "static", "passed": bool(attempt.validation.get("is_compliant"))},
+                {"name": "behavior", "passed": bool(attempt.behavior_validation.get("is_compliant"))},
+                {"name": "profiling", "passed": bool(attempt.profiling_validation.get("is_compliant"))},
+                {"name": "formal", "passed": bool(attempt.formal_validation.get("is_compliant", True))},
+            ]
+        self._emit_event(
+            {
+                "type": "repair_session_snapshot",
+                "session_id": self.session_id or session.target,
+                "phase": phase,
+                "goal": session.target,
+                "contract": getattr(self.behavior_spec, "function_name", "") if self.behavior_spec else "",
+                "worker": attempt.repair_worker if attempt else "",
+                "attempt": attempt.attempt if attempt else 0,
+                "max_attempts": session.max_retries + 2,
+                "strategy": attempt.selected_strategy if attempt else "",
+                "failure_kind": str(violation.get("kind", "")),
+                "failure_location": str(violation.get("location", "")),
+                "diagnostic": str(violation.get("rationale") or violation.get("summary") or ""),
+                "counterexample": self._counterexample_from_violation(violation),
+                "edit_ratio": attempt.edit_ratio if attempt else 0.0,
+                "semantic_stagnant": attempt.semantic_stagnant if attempt else False,
+                "gates": gates,
+                "pending_action": pending_action,
+                "termination_reason": session.termination_reason,
+            }
+        )
+
+    @staticmethod
+    def _counterexample_from_violation(violation: Violation | dict | None) -> str:
+        if violation is None:
+            return ""
+        evidence = (
+            violation.get("evidence", {})
+            if isinstance(violation, dict)
+            else violation.evidence
+        )
+        if not isinstance(evidence, dict):
+            return ""
+        issue = evidence.get("issue", {})
+        case = evidence.get("case", {})
+        if isinstance(issue, dict) and issue.get("counterexample"):
+            return str(issue["counterexample"])
+        if isinstance(case, dict):
+            name = case.get("case") or case.get("name")
+            actual = case.get("actual")
+            expected = case.get("expected")
+            if name and (actual is not None or expected is not None):
+                return f"{name}: actual={actual!r}, expected={expected!r}"
+        return str(evidence.get("counterexample") or "")
+
+    def _resume_attempt_draft(self, attempt: GenerationAttempt) -> tuple[str, str]:
+        worker = attempt.repair_worker
+        if worker == DETERMINISTIC_TRANSFORM:
+            violations = attempt.validation.get("violations", [])
+            if not violations:
+                raise ValueError("Checkpoint lacks the deterministic transform violation")
+            return (
+                apply_deterministic_transform(
+                    attempt.draft,
+                    violations[0],
+                    language=self.language or "python",
+                ),
+                DETERMINISTIC_TRANSFORM,
+            )
+        if "architect_llm" in worker:
+            if self.architect_supplier is None:
+                raise ValueError(
+                    "Checkpoint requires an architect supplier, but none is configured"
+                )
+            supplier = self.architect_supplier
+        else:
+            supplier = self.repair_supplier
+        if worker == JSON_PATCH:
+            patch = parse_symbol_replacement_patch(supplier(attempt.draft, attempt.retry_prompt))
+            return (
+                apply_symbol_replacement_patch(
+                    attempt.draft,
+                    patch,
+                    language=self.language or "python",
+                ),
+                JSON_PATCH,
+            )
+        return supplier(attempt.draft, attempt.retry_prompt), (
+            "architect_llm" if "architect_llm" in worker else "small_worker"
+        )
 
     def _emit_compilation_event(self, findings: list[EngineFinding]) -> None:
         if (self.language or "").strip().lower() not in {"c", "cpp", "rust", "javascript", "js"}:
@@ -797,6 +917,15 @@ class GenerationController(BaseAgent):
                 return "DO NOT REGRESS: " + stripped[:300]
         return "DO NOT REGRESS: preserve the public function contract and existing passing behavior."
 
+    @staticmethod
+    def _different_angle_architect_prompt(prompt: str) -> str:
+        return (
+            f"{prompt}\n\nFINAL ESCALATION REVIEW:\n"
+            "- Re-evaluate the failure from a different angle instead of repeating the small worker's approach.\n"
+            "- Check correctness, efficiency, boundary cases, and overlooked interactions.\n"
+            "- Return a complete coherent repair; it will be applied in memory and must pass every gate before review."
+        )
+
     def _write_checkpoint(
         self,
         session: GenerationSession,
@@ -821,6 +950,16 @@ class GenerationController(BaseAgent):
                     "draft_source_worker": draft_source_worker,
                     "next_attempt": next_attempt,
                     "architect_repair_retry_used": architect_repair_retry_used,
+                    "pending_strategy": (
+                        session.attempts[-1].selected_strategy
+                        if session.attempts
+                        else ""
+                    ),
+                    "pending_worker": (
+                        session.attempts[-1].repair_worker
+                        if session.attempts
+                        else ""
+                    ),
                 },
             }
         )
@@ -1066,6 +1205,8 @@ class GenerationController(BaseAgent):
                 route=session_payload.get("route", "repair_loop"),
                 max_retries=int(session_payload.get("max_retries", self.max_retries)),
                 attempts=restored_attempts,
+                final_status=str(session_payload.get("final_status", "manual_review_required")),
+                termination_reason=str(session_payload.get("termination_reason", "")),
             )
             failed_attempts = list(restored_attempts)
             previous_draft = runtime.get("previous_draft", "")
@@ -1077,19 +1218,46 @@ class GenerationController(BaseAgent):
             draft = runtime.get("draft", "")
             if runtime.get("phase") == "attempt_recorded" and restored_attempts:
                 last_attempt = restored_attempts[-1]
-                worker_name = last_attempt.repair_worker
-                supplier = (
-                    self.architect_supplier
-                    if "architect_llm" in worker_name and self.architect_supplier is not None
-                    else self.repair_supplier
-                )
-                draft = supplier(last_attempt.draft, last_attempt.retry_prompt)
+                if last_attempt.selected_strategy == "complete":
+                    session.final_status = "completed"
+                    session.termination_reason = "validated"
+                    self._emit_repair_snapshot(
+                        session,
+                        phase="completed",
+                        attempt=last_attempt,
+                    )
+                    self._write_checkpoint(
+                        session,
+                        draft=last_attempt.draft,
+                        previous_draft=previous_draft,
+                        draft_source_worker=draft_source_worker,
+                        next_attempt=len(restored_attempts),
+                        architect_repair_retry_used=architect_repair_retry_used,
+                        phase="terminal",
+                    )
+                    return AgentResult(agent=self.name, payload=asdict(session))
+                if not last_attempt.repair_worker:
+                    session.final_status = "manual_review_required"
+                    session.termination_reason = "repair_strategy_manual_review"
+                    session.human_review = self._human_review_payload(
+                        session.termination_reason,
+                        last_attempt,
+                    )
+                    self._write_checkpoint(
+                        session,
+                        draft=last_attempt.draft,
+                        previous_draft=previous_draft,
+                        draft_source_worker=draft_source_worker,
+                        next_attempt=len(restored_attempts),
+                        architect_repair_retry_used=architect_repair_retry_used,
+                        phase="terminal",
+                    )
+                    return AgentResult(agent=self.name, payload=asdict(session))
+                draft, draft_source_worker = self._resume_attempt_draft(last_attempt)
                 previous_draft = last_attempt.draft
-                draft_source_worker = (
-                    "architect_llm" if "architect_llm" in worker_name else "small_worker"
-                )
             if not draft:
                 raise ValueError("Checkpoint does not contain a draft to resume")
+            pending_findings: list[EngineFinding] | None = None
         elif draft_override is None:
             try:
                 initial_draft = self.draft_supplier(initial_prompt)
@@ -1105,6 +1273,7 @@ class GenerationController(BaseAgent):
             previous_draft = ""
             architect_repair_retry_used = False
             start_attempt = len(failed_attempts)
+            pending_findings = initial_findings
         else:
             initial_draft = draft_override
             initial_findings = self._scan(initial_draft)
@@ -1117,9 +1286,15 @@ class GenerationController(BaseAgent):
             previous_draft = ""
             architect_repair_retry_used = False
             start_attempt = len(failed_attempts)
+            pending_findings = initial_findings
 
-        for attempt_index in range(start_attempt, self.max_retries + 1):
-            findings = self._scan(draft)
+        # A constrained transform/patch that reaches the normal retry limit gets
+        # one architect validation pass. Ordinary small-worker retries remain
+        # bounded by ``max_retries``.
+        effective_max_retries = session.max_retries
+        for attempt_index in range(start_attempt, effective_max_retries + 2):
+            findings = pending_findings if pending_findings is not None else self._scan(draft)
+            pending_findings = None
             self._emit_compilation_event(findings)
             validation_result: ValidationResult = validate_findings(findings, policy=self.policy)
             execution_trace_payload: dict = {}
@@ -1334,7 +1509,7 @@ class GenerationController(BaseAgent):
                 and not validation_result.is_compliant
                 and self.allow_architect_repair_retry
                 and not architect_repair_retry_used
-                and attempt_index < self.max_retries
+                and attempt_index < effective_max_retries
             ):
                 architect_repair_retry_used = True
                 self._debug_print(
@@ -1373,7 +1548,14 @@ class GenerationController(BaseAgent):
                     self._debug_print(
                         "Constrained repair still failed validation. Escalating to architect."
                     )
-            if not force_manual_review and not is_complete and attempt_index < self.max_retries:
+            may_route_repair = (
+                attempt_index < effective_max_retries
+                or (
+                    draft_source_worker in {DETERMINISTIC_TRANSFORM, JSON_PATCH}
+                    and self.architect_supplier is not None
+                )
+            )
+            if not force_manual_review and not is_complete and may_route_repair:
                 repair_worker, next_repair_supplier = self._repair_worker_for(len(failed_attempts))
                 if draft_source_worker in {DETERMINISTIC_TRANSFORM, JSON_PATCH}:
                     repair_worker = "architect_llm"
@@ -1395,7 +1577,13 @@ class GenerationController(BaseAgent):
                     and self.repair_strategy is not None
                 ):
                     strategy_decision = self.repair_strategy.decide_repeated_failure(
-                        [primary_violation] if primary_violation else []
+                        [primary_violation] if primary_violation else [],
+                        counterexample=self._counterexample_from_violation(primary_violation),
+                        policy_directive=(
+                            repair_directives[0].instruction
+                            if repair_directives
+                            else ""
+                        ),
                     )
                     selected_strategy = strategy_decision.mode
                     if strategy_decision.mode == DETERMINISTIC_TRANSFORM:
@@ -1413,6 +1601,12 @@ class GenerationController(BaseAgent):
                     initial_prompt=initial_prompt,
                     failed_attempts=failed_attempts,
                 )
+                if repair_worker == "architect_llm" and (
+                    diagnostic_stagnant
+                    or semantic_stagnant
+                    or draft_source_worker in {DETERMINISTIC_TRANSFORM, JSON_PATCH}
+                ):
+                    retry_prompt = self._different_angle_architect_prompt(retry_prompt)
                 if strategy_decision and strategy_decision.mode == JSON_PATCH:
                     retry_prompt = (
                         f"{retry_prompt}\n\n"
@@ -1444,7 +1638,7 @@ class GenerationController(BaseAgent):
                             else []
                         ),
                         attempt_index=attempt_index,
-                        max_retries=self.max_retries,
+                        max_retries=effective_max_retries,
                     )
                     if decision.mode == MANUAL_REVIEW:
                         force_manual_review = True
@@ -1508,6 +1702,12 @@ class GenerationController(BaseAgent):
             )
             attempt.branch_state_signature = build_branch_state_signature(target, attempt).to_dict()
             session.attempts.append(attempt)
+            self._emit_repair_snapshot(
+                session,
+                phase="validated" if is_complete else "repair_selected",
+                attempt=attempt,
+                pending_action="" if is_complete else attempt.repair_worker,
+            )
             self._write_checkpoint(
                 session,
                 draft=draft,
@@ -1519,6 +1719,7 @@ class GenerationController(BaseAgent):
             )
             if is_complete:
                 session.final_status = "completed"
+                session.termination_reason = "validated"
                 self._write_checkpoint(
                     session,
                     draft=draft,
@@ -1541,9 +1742,10 @@ class GenerationController(BaseAgent):
                     self._debug_print(f"Branching loop detected: {branch_loop.message}")
             if force_manual_review:
                 session.final_status = "manual_review_required"
+                session.termination_reason = manual_review_reason
                 session.human_review = self._human_review_payload(manual_review_reason, attempt)
                 break
-            if attempt_index < self.max_retries:
+            if may_route_repair:
                 failed_attempts.append(attempt)
                 worker_name = attempt.repair_worker
                 supplier = next_repair_supplier
@@ -1580,11 +1782,13 @@ class GenerationController(BaseAgent):
                         attempt.repair_worker = worker_name
                         self._debug_print(f"Repair backend failed in {worker_name}: {attempt.repair_error}")
                         session.final_status = "manual_review_required"
+                        session.termination_reason = "repair_supplier_error"
                         session.human_review = self._human_review_payload("repair_supplier_error", attempt)
                         break
                 if patch_error:
                     if self.architect_supplier is None:
                         session.final_status = "manual_review_required"
+                        session.termination_reason = "repair_strategy_patch_failed"
                         session.human_review = self._human_review_payload("repair_strategy_patch_failed", attempt)
                         break
                     attempt.repair_worker = f"{worker_name}->architect_llm"
@@ -1598,15 +1802,19 @@ class GenerationController(BaseAgent):
                     )
                     attempt.retry_prompt = architect_prompt
                     attempt.repair_directives = serialize_repair_directives(architect_directives)
+                    architect_prompt = self._different_angle_architect_prompt(architect_prompt)
+                    attempt.retry_prompt = architect_prompt
                     try:
                         next_draft = self.architect_supplier(draft, architect_prompt)
                     except Exception as exc:
                         attempt.repair_error = f"{exc.__class__.__name__}: {exc}"
                         session.final_status = "manual_review_required"
+                        session.termination_reason = "repair_strategy_patch_failed"
                         session.human_review = self._human_review_payload("repair_strategy_patch_failed", attempt)
                         break
                     if self._is_stagnant(draft, next_draft):
                         session.final_status = "manual_review_required"
+                        session.termination_reason = "repair_strategy_patch_failed"
                         session.human_review = self._human_review_payload("repair_strategy_patch_failed", attempt)
                         break
                     previous_draft = draft
@@ -1657,6 +1865,8 @@ class GenerationController(BaseAgent):
                             )
                             attempt.retry_prompt = retry_prompt
                             attempt.repair_directives = serialize_repair_directives(architect_directives)
+                            retry_prompt = self._different_angle_architect_prompt(retry_prompt)
+                            attempt.retry_prompt = retry_prompt
                             try:
                                 next_draft = fallback_supplier(draft, retry_prompt)
                             except Exception as exc:
@@ -1665,6 +1875,7 @@ class GenerationController(BaseAgent):
                                     f"Repair backend failed in {fallback_worker}: {attempt.repair_error}"
                                 )
                                 session.final_status = "manual_review_required"
+                                session.termination_reason = "repair_supplier_error"
                                 session.human_review = self._human_review_payload("repair_supplier_error", attempt)
                                 break
                             if not self._is_stagnant(draft, next_draft):
@@ -1689,6 +1900,7 @@ class GenerationController(BaseAgent):
                     )
                     self._debug_print("Warning: No changes detected in code. Terminating to avoid infinite loop.")
                     session.final_status = "manual_review_required"
+                    session.termination_reason = stagnation_reason
                     session.human_review = self._human_review_payload(stagnation_reason, attempt)
                     break
                 self._debug_print("Attempt received. Re-analyzing updated draft.")
@@ -1704,13 +1916,26 @@ class GenerationController(BaseAgent):
                     architect_repair_retry_used=architect_repair_retry_used,
                     phase="ready_to_validate",
                 )
+            else:
+                session.final_status = "manual_review_required"
+                session.termination_reason = "max_retries_exhausted"
+                session.human_review = self._human_review_payload("max_retries_exhausted", attempt)
+                break
         else:
             session.final_status = "manual_review_required"
 
         if session.final_status != "completed":
             session.final_status = "manual_review_required"
             if session.human_review is None and session.attempts:
+                session.termination_reason = session.termination_reason or "max_retries_exhausted"
                 session.human_review = self._human_review_payload("max_retries_exhausted", session.attempts[-1])
+
+        self._emit_repair_snapshot(
+            session,
+            phase="completed" if session.final_status == "completed" else "manual_review",
+            attempt=session.attempts[-1] if session.attempts else None,
+            pending_action="" if session.final_status == "completed" else "manual_review",
+        )
 
         self._write_checkpoint(
             session,

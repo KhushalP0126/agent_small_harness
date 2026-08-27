@@ -1505,6 +1505,7 @@ def run_spec(
         crosshair_timeout_seconds=config.engines.formal.crosshair_timeout_seconds,
         repair_strategy=RepairStrategyAgent(),
         prompt_summarizer=active_prompt_summarizer,
+        session_id=paths.run_id if paths is not None else "",
     )
     contract_execution_results: list[ContractExecutionResult] = []
     if queue.contracts:
@@ -1616,6 +1617,7 @@ def run_spec(
                     crosshair_enabled=config.engines.formal.crosshair_enabled,
                     crosshair_timeout_seconds=config.engines.formal.crosshair_timeout_seconds,
                     repair_strategy=RepairStrategyAgent(),
+                    session_id=paths.run_id if paths is not None else "",
                 )
                 result = integration_controller.run(
                     target=spec_text,

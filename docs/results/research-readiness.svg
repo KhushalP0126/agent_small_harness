@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="444" viewBox="0 0 920 444">
+<style>.title{font:700 24px system-ui;fill:#e5eefb}.score{font:700 20px system-ui;fill:#e5eefb}.label{font:16px system-ui;fill:#cbd5e1}.status{font:700 13px system-ui}</style>
+<rect width="100%" height="100%" rx="18" fill="#08111f"/>
+<text x="42" y="40" class="title">Research readiness</text>
+<rect x="42" y="64" width="620" height="28" rx="14" fill="#1e293b"/>
+<rect x="42" y="64" width="266.6" height="28" rx="14" fill="#38bdf8"/>
+<text x="684" y="86" class="score">43%</text>
+<circle cx="52" cy="150" r="8" fill="#22c55e"/><text x="74" y="156" class="label">implementation_verification</text><text x="780" y="156" class="status" fill="#22c55e">PASS</text><circle cx="52" cy="192" r="8" fill="#ef4444"/><text x="74" y="198" class="label">qwen_local</text><text x="780" y="198" class="status" fill="#ef4444">BLOCKED</text><circle cx="52" cy="234" r="8" fill="#ef4444"/><text x="74" y="240" class="label">deepseek_20</text><text x="780" y="240" class="status" fill="#ef4444">BLOCKED</text><circle cx="52" cy="276" r="8" fill="#ef4444"/><text x="74" y="282" class="label">deepseek_fixture</text><text x="780" y="282" class="status" fill="#ef4444">BLOCKED</text><circle cx="52" cy="318" r="8" fill="#ef4444"/><text x="74" y="324" class="label">controlled_live_sessions</text><text x="780" y="324" class="status" fill="#ef4444">BLOCKED</text><circle cx="52" cy="360" r="8" fill="#22c55e"/><text x="74" y="366" class="label">provenance_and_reports</text><text x="780" y="366" class="status" fill="#22c55e">PASS</text><circle cx="52" cy="402" r="8" fill="#22c55e"/><text x="74" y="408" class="label">native_visualizations</text><text x="780" y="408" class="status" fill="#22c55e">PASS</text>
+</svg>

@@ -136,9 +136,8 @@ class RepoMapAgentTests(unittest.TestCase):
             self.assertTrue(any("pkg.alpha.alpha_entry -> pkg.beta.helper" in line for line in context))
             self.assertTrue(any("pkg.alpha imports pkg.beta (local)" in line for line in context))
 
-            mermaid = agent.to_mermaid(graph)
-            self.assertTrue(mermaid.startswith("flowchart LR"))
-            self.assertIn("-->", mermaid)
+            self.assertTrue(graph.nodes)
+            self.assertTrue(graph.edges)
 
     def test_plan_mode_merge_is_opt_in(self) -> None:
         prompt = "Write a helper that adds two numbers."

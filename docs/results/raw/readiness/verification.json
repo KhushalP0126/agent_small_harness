@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-08-27T15:03:12.759602+00:00",
+  "python_tests": {
+    "command": [
+      "/usr/local/bin/python3",
+      "-m",
+      "pytest",
+      "-q",
+      "tests"
+    ],
+    "passed": true,
+    "exit_code": 0,
+    "output_tail": "........................................................................ [ 12%]\n........................................................................ [ 25%]\n........................................................................ [ 37%]\n........................................................................ [ 50%]\n........................................................................ [ 63%]\n........................................................................ [ 75%]\n........................................................................ [ 88%]\n.................................................................     [100%]\n569 passed, 3 subtests passed in 98.84s (0:01:38)\n"
+  },
+  "rust_tests": {
+    "command": [
+      "cargo",
+      "test",
+      "--manifest-path",
+      "rust_tui/Cargo.toml"
+    ],
+    "passed": true,
+    "exit_code": 0,
+    "output_tail": "\nrunning 29 tests\ntest tests::app_state_transitions_are_pure ... ok\ntest protocol::tests::malformed_lines_become_protocol_errors ... ok\ntest tests::chat_markdown_table_fences_render_as_terminal_columns ... ok\ntest tests::chat_spec_review_and_execution_are_distinct_states ... ok\ntest tests::composer_renders_a_single_line_prompt ... ok\ntest tests::configuration_and_memory_status_are_visible_in_state ... ok\ntest tests::code_excerpt_is_rendered_in_the_stream ... ok\ntest tests::history_events_drive_inline_state ... ok\ntest protocol::tests::protocol_v4_repository_events_remain_decodable ... ok\ntest tests::legacy_history_entries_have_readable_fallbacks ... ok\ntest tests::markdown_renderer_formats_readme_structure_without_raw_fences ... ok\ntest tests::ordinary_numbers_do_not_enable_quick_selection ... ok\ntest protocol::tests::reader_keeps_valid_events_after_a_malformed_line ... ok\ntest tests::numbered_assistant_choices_enable_quick_selection ... ok\ntest tests::questionnaire_collects_choices_and_other_before_drafting ... ok\ntest tests::output_scroll_is_saturating_and_new_logs_preserve_history_position ... ok\ntest tests::readme_mode_uses_the_full_screen_view ... ok\ntest protocol::tests::every_command_variant_round_trips ... ok\ntest tests::repair_and_readiness_events_populate_native_context ... ok\ntest tests::research_draft_opens_in_the_side_inspector ... ok\ntest tests::sensitive_action_requires_an_explicit_approval_state ... ok\ntest tests::repair_phases_map_to_native_timeline_stages ... ok\ntest tests::event_stream_keeps_a_bounded_recent_log_window ... ok\ntest tests::tool_diff_stays_inline_and_resolution_returns_to_chat ... ok\ntest tests::structured_repo_entries_are_retained_for_native_mapping ... ok\ntest tests::validated_source_opens_a_reusable_code_view ... ok\ntest protocol::tests::every_event_variant_round_trips ... ok\ntest tests::event_flood_is_bounded_without_losing_latest_messages ... ok\ntest protocol::tests::reader_accepts_events_from_a_real_subprocess ... ok\n\ntest result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s\n\n   Compiling harness-tui v0.1.0 (/Users/khushalpandala/khush_fun/agent-coder_structure/rust_tui)\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.82s\n     Running unittests src/main.rs (rust_tui/target/debug/deps/harness_tui-2bc7b92116e690fd)\n"
+  }
+}

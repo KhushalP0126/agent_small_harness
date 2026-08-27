@@ -7,6 +7,12 @@ commands, dates, and failures.
 Keep raw JSON beside its dated report under `raw/`; do not use an unhealthy
 provider run as a quality or efficiency comparison.
 
+The current evidence gate is summarized in
+[`research-readiness.md`](research-readiness.md) with a deterministic SVG and
+machine-readable JSON. Refresh it with `make research-readiness`; use
+`make research-readiness-record` when the implementation test evidence also
+needs to be regenerated.
+
 The full protocol, repeat-run command, and publication checklist are in
 [`../RESEARCH.md`](../RESEARCH.md).
 

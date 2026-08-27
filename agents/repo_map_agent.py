@@ -676,21 +676,6 @@ class RepoMapAgent(BaseAgent):
                 )
         return lines
 
-    def to_mermaid(self, graph: RepoGraph) -> str:
-        lines = ["flowchart LR"]
-        mermaid_ids = {node.id: f"n{index}" for index, node in enumerate(graph.nodes)}
-        for node in graph.nodes:
-            label = node.label.replace('"', "'")
-            lines.append(f'  {mermaid_ids[node.id]}["{node.kind}: {label}"]')
-        for edge in graph.edges:
-            if edge.source in mermaid_ids and edge.target in mermaid_ids:
-                label = edge.kind if not edge.label else f"{edge.kind}: {edge.label}"
-                lines.append(
-                    f"  {mermaid_ids[edge.source]} -->|{label.replace('|', '/')}| "
-                    f"{mermaid_ids[edge.target]}"
-                )
-        return "\n".join(lines)
-
     def _node_label(self, graph: RepoGraph, node_id: str) -> str:
         for node in graph.nodes:
             if node.id == node_id:

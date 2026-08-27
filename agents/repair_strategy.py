@@ -35,6 +35,10 @@ def parse_symbol_replacement_patch(payload: str | dict[str, Any]) -> SymbolRepla
     data = json.loads(payload) if isinstance(payload, str) else payload
     if not isinstance(data, dict):
         raise ValueError("JSON patch must be an object")
+    required = {"target_symbol", "action", "replacement_source"}
+    unknown = set(data) - required
+    if unknown:
+        raise ValueError(f"JSON patch contains unsupported fields: {', '.join(sorted(unknown))}")
     patch = SymbolReplacementPatch(
         target_symbol=str(data.get("target_symbol", "")).strip(),
         action=str(data.get("action", "")).strip(),
@@ -50,8 +54,12 @@ def apply_symbol_replacement_patch(source: str, patch: SymbolReplacementPatch, l
         raise ValueError("Typed symbol replacement currently supports Python only")
     tree = ast.parse(source)
     replacement_tree = ast.parse(patch.replacement_source)
-    replacements = [node for node in replacement_tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))]
-    if len(replacements) != 1 or replacements[0].name != patch.target_symbol:
+    if len(replacement_tree.body) != 1:
+        raise ValueError("Replacement must contain exactly one top-level symbol")
+    replacement_node = replacement_tree.body[0]
+    if not isinstance(replacement_node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        raise ValueError("Replacement must contain one function or class")
+    if replacement_node.name != patch.target_symbol:
         raise ValueError("Replacement must define exactly the target symbol")
     targets = [node for node in tree.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and node.name == patch.target_symbol]
     if len(targets) != 1:
@@ -84,45 +92,89 @@ def apply_deterministic_transform(source: str, violation: Any, language: str = "
         )
         if not forbidden:
             raise ValueError("Forbidden-import transform requires an exact module")
-        kept = []
-        removed = 0
+        edits: list[tuple[int, int, str]] = []
         for node in tree.body:
-            names = []
             if isinstance(node, ast.Import):
-                names = [alias.name for alias in node.names]
+                matched = [alias for alias in node.names if alias.name == forbidden or alias.name.startswith(forbidden + ".")]
+                if matched:
+                    remaining = [alias for alias in node.names if alias not in matched]
+                    replacement = ""
+                    if remaining:
+                        replacement = "import " + ", ".join(
+                            alias.name + (f" as {alias.asname}" if alias.asname else "")
+                            for alias in remaining
+                        )
+                    edits.append((*_node_span(source, node), replacement))
             elif isinstance(node, ast.ImportFrom):
-                names = [node.module or ""]
-            if any(name == forbidden or name.startswith(forbidden + ".") for name in names):
-                removed += 1
-            else:
-                kept.append(node)
-        if removed != 1:
+                module = node.module or ""
+                if module == forbidden or module.startswith(forbidden + "."):
+                    edits.append((*_node_span(source, node), ""))
+        if len(edits) != 1:
             raise ValueError("Forbidden import must match exactly one statement")
-        tree.body = kept
+        candidate = _apply_source_edits(source, edits)
     elif kind == "unsafe_call":
         unsafe = str(evidence.get("unsafe_api") or evidence.get("call") or "")
         safe = _safe_alternative(violation)
         if not unsafe or not safe:
             raise ValueError("Unsafe-call transform requires exact unsafe and safe API names")
-        transformer = _CallReplacement(unsafe, safe)
-        tree = transformer.visit(tree)
-        if transformer.replacements != 1:
+        matches = [
+            node.func
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call) and _dotted_name(node.func) == unsafe
+        ]
+        if len(matches) != 1:
             raise ValueError("Unsafe API must match exactly one call")
+        candidate = _apply_source_edits(source, [(*_node_span(source, matches[0]), safe)])
     elif kind == "bounds_risk":
         target = str(evidence.get("target_expression") or "")
         replacement = str(evidence.get("replacement_expression") or "")
         if not target or not replacement or not evidence.get("counterexample") or not evidence.get("policy_directive"):
             raise ValueError("Bounds transform requires target, replacement, counterexample, and policy directive")
-        transformer = _ExpressionReplacement(target, replacement)
-        tree = transformer.visit(tree)
-        if transformer.replacements != 1:
+        target_dump = ast.dump(ast.parse(target, mode="eval").body, include_attributes=False)
+        matches = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.expr)
+            and ast.dump(node, include_attributes=False) == target_dump
+        ]
+        if len(matches) != 1:
             raise ValueError("Bounds expression must match exactly once")
+        ast.parse(replacement, mode="eval")
+        candidate = _apply_source_edits(source, [(*_node_span(source, matches[0]), replacement)])
     else:
         raise ValueError(f"No deterministic transform registered for {kind}")
 
-    ast.fix_missing_locations(tree)
-    candidate = ast.unparse(tree) + "\n"
     ast.parse(candidate)
+    return candidate
+
+
+def _line_offsets(source: str) -> list[int]:
+    offsets = [0]
+    for line in source.splitlines(keepends=True):
+        offsets.append(offsets[-1] + len(line))
+    return offsets
+
+
+def _node_span(source: str, node: ast.AST) -> tuple[int, int]:
+    if not all(hasattr(node, name) for name in ("lineno", "col_offset", "end_lineno", "end_col_offset")):
+        raise ValueError("Transform target lacks a precise source span")
+    offsets = _line_offsets(source)
+    lines = source.splitlines(keepends=True)
+    start_column = len(
+        lines[node.lineno - 1].encode("utf-8")[: node.col_offset].decode("utf-8")
+    )
+    end_column = len(
+        lines[node.end_lineno - 1].encode("utf-8")[: node.end_col_offset].decode("utf-8")
+    )
+    start = offsets[node.lineno - 1] + start_column
+    end = offsets[node.end_lineno - 1] + end_column
+    return start, end
+
+
+def _apply_source_edits(source: str, edits: list[tuple[int, int, str]]) -> str:
+    candidate = source
+    for start, end, replacement in sorted(edits, reverse=True):
+        candidate = candidate[:start] + replacement + candidate[end:]
     return candidate
 
 
@@ -133,41 +185,6 @@ def _dotted_name(node: ast.AST) -> str:
         parent = _dotted_name(node.value)
         return f"{parent}.{node.attr}" if parent else ""
     return ""
-
-
-def _name_node(dotted: str) -> ast.expr:
-    parts = dotted.split(".")
-    node: ast.expr = ast.Name(id=parts[0], ctx=ast.Load())
-    for part in parts[1:]:
-        node = ast.Attribute(value=node, attr=part, ctx=ast.Load())
-    return node
-
-
-class _CallReplacement(ast.NodeTransformer):
-    def __init__(self, unsafe: str, safe: str) -> None:
-        self.unsafe = unsafe
-        self.safe = safe
-        self.replacements = 0
-
-    def visit_Call(self, node: ast.Call) -> ast.AST:
-        self.generic_visit(node)
-        if _dotted_name(node.func) == self.unsafe:
-            node.func = _name_node(self.safe)
-            self.replacements += 1
-        return node
-
-
-class _ExpressionReplacement(ast.NodeTransformer):
-    def __init__(self, target: str, replacement: str) -> None:
-        self.target = ast.dump(ast.parse(target, mode="eval").body, include_attributes=False)
-        self.replacement = ast.parse(replacement, mode="eval").body
-        self.replacements = 0
-
-    def generic_visit(self, node: ast.AST) -> ast.AST:
-        if ast.dump(node, include_attributes=False) == self.target:
-            self.replacements += 1
-            return self.replacement
-        return super().generic_visit(node)
 
 
 def _violation_kinds(violations: Iterable[Any]) -> set[str]:

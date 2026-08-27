@@ -215,6 +215,7 @@ def run_ladder(
                 if paths is not None
                 else None
             ),
+            session_id=paths.run_id if paths is not None else "",
         )
         result = controller.run(
             target=task["prompt"],

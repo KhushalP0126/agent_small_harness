@@ -52,7 +52,7 @@ IMAGE ?= agent-small-harness:local
 ARTIFACT_ARGS = $(if $(filter 1 true yes,$(SAVE_ARTIFACTS)),--save-artifacts --artifact-root "$(ARTIFACT_ROOT)",)
 DOC_ARGS = --doc-agent "$(DOC_AGENT)" $(if $(DOC_MODEL),--doc-model "$(DOC_MODEL)",) $(if $(DOC_OUTPUT),--doc-output "$(DOC_OUTPUT)",)
 
-.PHONY: help bootstrap setup install install-formal install-kernel env-path init-env api-dev tui rust-tui tui_rust start test-rust check research-check research-agent-benchmark research-fixture-deepseek research-fixture-qwen research-formal-repair research-formal-repair-diverse research-formal-repair-general research-formal-nonnegative research-formal-repair-routed routing-report research-report research-model-comparison record-live-session verify-live-sessions research-compute-shield docker-build sandbox-run agent-benchmark test test-engine-expansion compute-shield test-claude-fixes test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-fixture resume-coding-capability test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-worker-limit-architect resume-worker-limit test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-python-ladder-stateful test-plan-mode-ladder test-raw-vs-harness test-raw-vs-harness-architect test-raw-vs-harness-repeated test-raw-vs-harness-ablation test-formal-experiment formal-counterexample-smoke structured-spec structured-spec-plan resume-structured-spec repo-map review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library tool-agent ollama-smoke inference-smoke live-repair day1 clean-history clean-cache clean-generated
+.PHONY: help bootstrap setup install install-formal install-kernel env-path init-env api-dev tui rust-tui tui_rust start test-rust check research-check research-readiness research-readiness-record research-agent-benchmark research-fixture-deepseek research-fixture-qwen research-formal-repair research-formal-repair-diverse research-formal-repair-general research-formal-nonnegative research-formal-repair-routed routing-report research-report research-model-comparison record-live-session verify-live-sessions research-compute-shield docker-build sandbox-run agent-benchmark test test-engine-expansion compute-shield test-claude-fixes test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-fixture resume-coding-capability test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-worker-limit-architect resume-worker-limit test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-python-ladder-stateful test-plan-mode-ladder test-raw-vs-harness test-raw-vs-harness-architect test-raw-vs-harness-repeated test-raw-vs-harness-ablation test-formal-experiment formal-counterexample-smoke structured-spec structured-spec-plan resume-structured-spec repo-map review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library tool-agent ollama-smoke inference-smoke live-repair day1 clean-history clean-cache clean-generated
 
 help:
 	@printf "agent-coder_structure\n\n"
@@ -65,6 +65,8 @@ help:
 	@printf "  make research-report REPORT_INPUT=...  Render a dated Markdown report from raw JSON\n"
 	@printf "  make research-model-comparison         Compare frozen Qwen 1.5B and 3B reports\n"
 	@printf "  make verify-live-sessions              Verify the five real controlled-session receipts\n"
+	@printf "  make research-readiness                Evaluate the authoritative evidence gate\n"
+	@printf "  make research-readiness-record         Run Python/Rust suites, then evaluate readiness\n"
 	@printf "\nDaily work:\n"
 	@printf "  make tool-agent TASK='inspect agents'    Run bounded repository tools\n"
 	@printf "  make structured-spec-plan SPEC_PATH=...  Create an architect plan only\n"
@@ -161,6 +163,12 @@ record-live-session:
 
 verify-live-sessions:
 	$(PYTHON) scripts/verify_live_sessions.py --receipt-dir "$(SESSION_RECEIPT_DIR)"
+
+research-readiness:
+	$(PYTHON) scripts/verify_research_readiness.py
+
+research-readiness-record:
+	$(PYTHON) scripts/verify_research_readiness.py --record-checks
 
 research-compute-shield:
 	$(PYTHON) scripts/run_compute_shield_experiment.py $(COMPUTE_SHIELD_ARGS)

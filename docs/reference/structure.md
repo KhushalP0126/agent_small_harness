@@ -80,7 +80,7 @@ agents; they prepare, route, validate, and record work.
 - `agents/prompt_normalizer.py` - Removes conversational filler from raw prompts.
 - `agents/task_classifier.py` - Infers task type, language, library hints, and route hints.
 - `agents/plan_mode.py` - Extracts target functions, behavior examples, state rules, graph context, adapter contracts, Deal candidates, and `TaskIR`. Optionally merges repo-map context when a repo root is supplied.
-- `agents/repo_map_agent.py` - AST repo walker that maps functions, variables, mutations, loop sites, and classified imports into typed `RepoGraph` nodes/edges, compact Plan Mode context, JSON, and live Mermaid output.
+- `agents/repo_map_agent.py` - AST repo walker that maps functions, variables, mutations, loop sites, and classified imports into typed `RepoGraph` nodes/edges, compact Plan Mode context, and JSON.
 - `agents/template_registry.py` - Optional injected template-route selector. It has no built-in app-specific route.
 - `agents/routing_policy.py` - Chooses worker, template-assisted worker, architect escalation, or manual review.
 - `agents/coder.py` - Builds initial model prompts from context and behavior specs.
@@ -115,8 +115,8 @@ to existing CLI entrypoints and consumes JSON artifacts rather than importing
 the controller.
 
 - `TUI/app.py` - Run launcher, live static/behavior/profiling/formal attempt dashboard, contract dashboard, architecture and changes modals, history screen, hotkeys, and exact runtime-repair safety copy.
-- `TUI/data_source.py` - Single JSON/subprocess boundary for run enumeration, checkpoint loading, CLI launch/resume, bounded history lookup, repo mapping, Mermaid SVG handoff, and unified attempt diffs.
-- `TUI/mermaid_renderer.py` - Human-scale layer/dependency summary plus a bounded parser/ASCII-tree renderer for the repo mapper's low-level Mermaid output.
+- `TUI/data_source.py` - Single JSON/subprocess boundary for run enumeration, checkpoint loading, CLI launch/resume, bounded history lookup, repo mapping, and unified attempt diffs.
+- `TUI/repo_renderer.py` - Human-scale layer/dependency summary and bounded typed-graph tree renderer.
 - `TUI/CODE_SPEC.md` - Grounded Phase 1/2 implementation specification and Phase 3 exclusions.
 - `TUI/__main__.py` - `python -m TUI` entrypoint.
 - `TUI/__init__.py` - Public data-source types.
@@ -140,14 +140,14 @@ instead of replacing it.
 
 ## `rust_tui/`
 
-- `rust_tui/Cargo.toml` - Pinned Rust application dependencies for Ratatui, Tokio, terminal image protocols, Mermaid SVG rendering, and rasterization.
+- `rust_tui/Cargo.toml` - Pinned Rust application dependencies for Ratatui, Tokio, serialization, and terminal events.
 - `rust_tui/src/main.rs` - Async terminal application, Python bridge lifecycle, pure application-state reducer, input/event/redraw selection loop, and review dashboard.
 - `rust_tui/src/protocol.rs` - Serde command/event contract and resilient JSON-lines reader.
-- `rust_tui/src/mermaid_view.rs` - In-process Mermaid SVG rendering, PNG rasterization, terminal protocol selection, and modal widget.
 
 The Rust client is the default terminal interface. Python remains the source of
 truth for engine logic and artifacts, and the Textual TUI remains available as
-the legacy artifact-review fallback while terminal compatibility work continues.
+the legacy artifact-review fallback. Repository maps, repair timelines, and
+research-readiness views render with standard terminal cells.
 
 ## Additional engine
 
@@ -250,7 +250,7 @@ Checked-in evaluation evidence and review material.
 - `docs/results/gemma-deepseek-capability-results-2026-07-19.md` - Gemma worker and DeepSeek architect comparison results.
 - `docs/results/snake-pong-execution-report-2026-07-19.md` - Reproducible Snake/Pong commands, failures, fixes, artifact IDs, and post-fix runtime outcomes.
 - `docs/results/additional-harness-results-2026-07-24.md` - Raw-versus-harness, repeated paired-sample, structured-spec resume, Pong closure, and stateful-ladder architect-recovery results.
-- `docs/results/structured-spec-repo-map-results-2026-07-24.md` - Structured-spec Snake/Pong plan and full-run results plus repo-mapper context/Mermaid/JSON output metrics.
+- `docs/results/structured-spec-repo-map-results-2026-07-24.md` - Historical Structured-spec Snake/Pong plan and full-run repository-map metrics.
 - `docs/results/compute-shield-10-2026-08-04.md` - Frozen 1.5B Compute Shield comparison, including the measured regression.
 - `docs/open_source_readiness_audit.pdf` - Snapshot of the repository's open-source readiness review.
 
@@ -279,7 +279,7 @@ Runnable experiments and operator tooling.
 - `scripts/run_formal_experiment.py` - Optional CrossHair smoke experiment.
 - `scripts/review_run.py` - Human-readable artifact-run summary.
 - `scripts/run_live_repair.py` - Live repair loop against a fixture.
-- `scripts/run_repo_map.py` - Runs the repo mapper and prints the compact context, JSON graph, or mermaid diagram (optionally saving artifacts).
+- `scripts/run_repo_map.py` - Runs the repo mapper and prints compact context or a JSON graph, optionally saving artifacts.
 - `scripts/run_structured_spec.py` - Plans a structured specification into a contract queue, checkpoints terminal contract results, resumes without regenerating checkpointed contracts, assembles the program, injects accepted interface context, runs the integration smoke gate, and saves artifacts.
 
 ## `tests/`

@@ -66,6 +66,12 @@ pub enum HarnessCommand {
         #[serde(default)]
         limit: Option<u32>,
     },
+    ResearchReadiness,
+    RepairSessionAction {
+        run_id: String,
+        entrypoint: String,
+        action: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -113,6 +119,42 @@ pub struct VariableEntry {
     pub imports: Vec<String>,
     #[serde(default)]
     pub variables: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GraphNodeEntry {
+    pub id: String,
+    pub kind: String,
+    pub label: String,
+    #[serde(default)]
+    pub module: String,
+    #[serde(default)]
+    pub line: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GraphEdgeEntry {
+    pub source: String,
+    pub target: String,
+    pub kind: String,
+    #[serde(default)]
+    pub label: String,
+    #[serde(default)]
+    pub line: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct GateStatus {
+    pub name: String,
+    pub passed: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ReadinessCategory {
+    pub name: String,
+    pub passed: bool,
+    #[serde(default)]
+    pub evidence: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -238,10 +280,15 @@ pub enum HarnessEvent {
         delta: i64,
     },
     RepoMap {
-        mermaid: String,
         #[serde(default)]
         summary: String,
+        #[serde(default)]
+        nodes: Vec<GraphNodeEntry>,
+        #[serde(default)]
+        edges: Vec<GraphEdgeEntry>,
     },
+    // Decoding-only compatibility for protocol-v4 bridges. Version 5 never
+    // emits or opens this URL.
     RepoMapUrl {
         url: String,
     },
@@ -254,6 +301,45 @@ pub enum HarnessEvent {
     },
     RepoMapVariables {
         entries: Vec<VariableEntry>,
+    },
+    RepairSessionSnapshot {
+        session_id: String,
+        phase: String,
+        goal: String,
+        #[serde(default)]
+        contract: String,
+        #[serde(default)]
+        worker: String,
+        attempt: u32,
+        max_attempts: u32,
+        #[serde(default)]
+        strategy: String,
+        #[serde(default)]
+        failure_kind: String,
+        #[serde(default)]
+        failure_location: String,
+        #[serde(default)]
+        diagnostic: String,
+        #[serde(default)]
+        counterexample: String,
+        #[serde(default)]
+        edit_ratio: f64,
+        #[serde(default)]
+        semantic_stagnant: bool,
+        #[serde(default)]
+        gates: Vec<GateStatus>,
+        #[serde(default)]
+        pending_action: String,
+        #[serde(default)]
+        termination_reason: String,
+    },
+    ResearchReadiness {
+        score: u8,
+        status: String,
+        #[serde(default)]
+        categories: Vec<ReadinessCategory>,
+        #[serde(default)]
+        blockers: Vec<String>,
     },
     HistoryList {
         runs: Vec<RunSummary>,
@@ -450,8 +536,15 @@ mod tests {
                 delta: 60,
             },
             HarnessEvent::RepoMap {
-                mermaid: "flowchart LR\n  A --> B".into(),
                 summary: "Repository architecture".into(),
+                nodes: vec![GraphNodeEntry {
+                    id: "module:main".into(),
+                    kind: "module".into(),
+                    label: "main".into(),
+                    module: "main".into(),
+                    line: 1,
+                }],
+                edges: vec![],
             },
             HarnessEvent::RepoMapView {
                 mode: "variables".into(),
@@ -470,6 +563,38 @@ mod tests {
                     imports: vec!["os".into()],
                     variables: vec!["state".into()],
                 }],
+            },
+            HarnessEvent::RepairSessionSnapshot {
+                session_id: "run-123".into(),
+                phase: "repair".into(),
+                goal: "fix parser".into(),
+                contract: "parse".into(),
+                worker: "small_worker".into(),
+                attempt: 1,
+                max_attempts: 3,
+                strategy: "json_patch".into(),
+                failure_kind: "behavior_mismatch".into(),
+                failure_location: "parse".into(),
+                diagnostic: "wrong output".into(),
+                counterexample: "empty input".into(),
+                edit_ratio: 0.02,
+                semantic_stagnant: true,
+                gates: vec![GateStatus {
+                    name: "behavior".into(),
+                    passed: false,
+                }],
+                pending_action: "json_patch".into(),
+                termination_reason: String::new(),
+            },
+            HarnessEvent::ResearchReadiness {
+                score: 71,
+                status: "blocked".into(),
+                categories: vec![ReadinessCategory {
+                    name: "qwen_local".into(),
+                    passed: true,
+                    evidence: vec!["raw.json".into()],
+                }],
+                blockers: vec!["missing live sessions".into()],
             },
             HarnessEvent::HistoryList {
                 runs: vec![RunSummary {
@@ -603,6 +728,12 @@ mod tests {
                 run_id: None,
                 limit: None,
             },
+            HarnessCommand::ResearchReadiness,
+            HarnessCommand::RepairSessionAction {
+                run_id: "run-123".into(),
+                entrypoint: "coding_capability".into(),
+                action: "resume".into(),
+            },
         ];
         for command in commands {
             let encoded = serde_json::to_string(&command).unwrap();
@@ -625,6 +756,21 @@ mod tests {
         assert!(matches!(
             parse_event_line("{broken"),
             HarnessEvent::ProtocolError { .. }
+        ));
+    }
+
+    #[test]
+    fn protocol_v4_repository_events_remain_decodable() {
+        let event = parse_event_line(
+            r#"{"type":"repo_map","mermaid":"legacy","summary":"Repository architecture"}"#,
+        );
+        assert!(matches!(
+            event,
+            HarnessEvent::RepoMap { nodes, edges, .. } if nodes.is_empty() && edges.is_empty()
+        ));
+        assert!(matches!(
+            parse_event_line(r#"{"type":"repo_map_url","url":"http://127.0.0.1"}"#),
+            HarnessEvent::RepoMapUrl { .. }
         ));
     }
 

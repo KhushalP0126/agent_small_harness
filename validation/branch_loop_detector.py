@@ -36,7 +36,7 @@ def normalized_draft_signature(source: str, language: str = "python") -> str:
             tree = treesitter_support.parse_tree(normalized_language, source)
             if not tree.root_node.has_error:
                 return "tree-sitter:" + tree.root_node.sexp()
-        except (AttributeError, ImportError, RuntimeError):
+        except (AttributeError, ImportError, RuntimeError, TypeError, ValueError):
             pass
     return "tokens:" + " ".join(_normalized_tokens(source, language))
 
@@ -44,8 +44,7 @@ def normalized_draft_signature(source: str, language: str = "python") -> str:
 def compare_drafts(previous: str, current: str, language: str = "python") -> DraftComparison:
     previous_signature = normalized_draft_signature(previous, language)
     current_signature = normalized_draft_signature(current, language)
-    similarity = SequenceMatcher(None, previous_signature, current_signature, autojunk=False).ratio()
-    edit_ratio = 1.0 - similarity
+    edit_ratio = _signature_edit_ratio(previous_signature, current_signature)
     representation = previous_signature.split(":", 1)[0]
     return DraftComparison(
         edit_ratio=edit_ratio,
@@ -60,9 +59,57 @@ def build_failure_signature(violation: Any) -> str:
     kind = str(_get(violation, "kind", ""))
     location = str(_get(violation, "location", ""))
     evidence = _mapping(_get(violation, "evidence", {}))
-    symbol = str(evidence.get("function_name") or evidence.get("symbol") or "")
-    identity = location or symbol or "unknown"
+    case = _mapping(evidence.get("case", {}))
+    issue = _mapping(evidence.get("issue", {}))
+    symbol = str(
+        evidence.get("function_name")
+        or evidence.get("symbol")
+        or case.get("function_name")
+        or issue.get("function_name")
+        or ""
+    )
+    behavior_case = str(case.get("case") or case.get("name") or issue.get("case") or "")
+    # Symbols and named behavior cases survive harmless line movement. Raw
+    # locations are only a last resort and have their volatile line/column
+    # numbers removed.
+    identity = symbol or behavior_case or _stable_location(location) or "unknown"
     return f"{engine}:{kind}:{identity}"
+
+
+def _stable_location(location: str) -> str:
+    import re
+
+    normalized = re.sub(r"(?i)(?:line|column|col)\s*[:=]?\s*\d+", "", location)
+    normalized = re.sub(r":\d+(?::\d+)?\b", "", normalized)
+    return " ".join(normalized.split()).strip(" :-")
+
+
+def _signature_edit_ratio(previous: str, current: str) -> float:
+    if previous == current:
+        return 0.0
+    longest = max(len(previous), len(current), 1)
+    minimum_possible = abs(len(previous) - len(current)) / longest
+    if minimum_possible >= SEMANTIC_STAGNATION_THRESHOLD:
+        return minimum_possible
+    # SequenceMatcher can become quadratic on large AST dumps. For a large
+    # representation, only classify the edit as tiny when a bounded changed
+    # window proves that; uncertainty intentionally counts as substantive.
+    if longest > 100_000:
+        prefix = 0
+        shared = min(len(previous), len(current))
+        while prefix < shared and previous[prefix] == current[prefix]:
+            prefix += 1
+        suffix = 0
+        while (
+            suffix < shared - prefix
+            and previous[len(previous) - suffix - 1] == current[len(current) - suffix - 1]
+        ):
+            suffix += 1
+        changed = max(len(previous), len(current)) - prefix - suffix
+        conservative_ratio = changed / longest
+        return conservative_ratio if conservative_ratio < SEMANTIC_STAGNATION_THRESHOLD else 1.0
+    similarity = SequenceMatcher(None, previous, current, autojunk=False).ratio()
+    return 1.0 - similarity
 
 
 def is_semantically_stagnant(

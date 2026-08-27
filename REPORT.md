@@ -12,22 +12,6 @@ research result: stronger control loops can trade cost for reliability.
 
 ## Published benchmark snapshot
 
-```mermaid
-xychart-beta
-    title "DeepSeek 20-task hardened run"
-    x-axis ["Baseline", "Shielded"]
-    y-axis "Tasks completed" 0 --> 20
-    bar [20, 19]
-```
-
-```mermaid
-xychart-beta
-    title "DeepSeek model-token use"
-    x-axis ["Baseline", "Shielded"]
-    y-axis "Model tokens" 0 --> 200000
-    bar [53467, 182661]
-```
-
 | Measure | Comparable baseline | Hardened shielded loop | Difference |
 | --- | ---: | ---: | --- |
 | Successful tasks | 20/20 | 19/20 | -1 task |
@@ -39,21 +23,6 @@ The hardened loop improved from the earlier 11/20 shielded result to 19/20,
 but that comparison is historical—not a repeated confidence estimate.
 
 ## Frozen local-model result
-
-```mermaid
-xychart-beta
-    title "Qwen 1.5B Compute Shield: 10 tasks"
-    x-axis ["Baseline", "Shielded"]
-    y-axis "Model tokens" 0 --> 18000
-    bar [5606, 16973]
-```
-
-```mermaid
-pie title "Qwen 1.5B task outcomes"
-    "Direct baseline success" : 10
-    "Shielded success" : 9
-    "Shielded failure" : 1
-```
 
 | Measure | Direct baseline | Shielded loop | Difference |
 | --- | ---: | ---: | --- |
@@ -82,14 +51,9 @@ the two raw reports are published alongside it under `docs/results/raw/`.
 
 ## What the evidence supports
 
-```mermaid
-flowchart TD
-    A[Typed tools and validation] --> B[More controlled code changes]
-    B --> C[Approval-gated writes]
-    C --> D[Inspectable artifacts]
-    D --> E[Useful prototype and research platform]
-    F[Single-run benchmark data] --> G[No broad efficiency claim]
-    G --> H[Repeat before generalizing]
+```text
+typed tools + deterministic validation -> approval-gated changes -> inspectable evidence
+single-run evidence -> no broad efficiency claim -> repeat before generalizing
 ```
 
 Supported today:

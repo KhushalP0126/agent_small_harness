@@ -58,7 +58,7 @@ to same-named JSON under `docs/results/raw/`.
 | `agents/preprocessor.py` | Normalizes task input before planning/generation. |
 | `agents/prompt_normalizer.py` | Cleans and classifies free-form user prompts. |
 | `agents/repair_strategy.py` | Selects bounded repair behavior from findings and attempts. |
-| `agents/repo_map_agent.py` | Builds repository structure, symbol, import, and Mermaid maps. |
+| `agents/repo_map_agent.py` | Builds typed repository structure, symbol, and import maps. |
 | `agents/routing_policy.py` | Chooses measured routes using success, token, and cost history. |
 | `agents/scope_tracker.py` | Tracks task scope and prevents uncontrolled expansion. |
 | `agents/task_classifier.py` | Separates chat, planning, repository, and coding work. |
@@ -140,11 +140,10 @@ to same-named JSON under `docs/results/raw/`.
 | `rust_tui/Cargo.lock` | Locked Rust dependency versions. |
 | `rust_tui/src/main.rs` | Ratatui event loop, conversation display, approvals, and state. |
 | `rust_tui/src/protocol.rs` | Rust representation of JSONL bridge commands/events. |
-| `rust_tui/src/mermaid_view.rs` | Mermaid SVG/PNG rendering and terminal graphics fallbacks. |
 | `rust_tui/README.md` | Rust-client usage and terminal notes. |
 | `TUI/app.py` | Legacy Textual artifact-review application. |
 | `TUI/data_source.py` | Data access for the legacy Textual interface. |
-| `TUI/mermaid_renderer.py` | Mermaid rendering helper for the legacy interface. |
+| `TUI/repo_renderer.py` | Bounded terminal-native repository layer and tree rendering. |
 | `TUI/CODE_SPEC.md` | Historical Textual UI specification. |
 | `examples/specs/snake_game_spec.md` | Structured-spec smoke fixture for a Snake game. |
 | `examples/specs/pong_game_spec.md` | Structured-spec smoke fixture for a Pong game. |
@@ -204,7 +203,6 @@ to same-named JSON under `docs/results/raw/`.
 | `data/snippets/javascript/imports.js` | JavaScript import-extraction fixture. |
 | `docs/RESEARCH.md` | Research questions, methodology, findings, and remaining work. |
 | `docs/WORKSTREAMS.md` | Workstream status and ownership map. |
-| `docs/architecture.mmd` | Mermaid source for the architecture diagram. |
 | `docs/open_source_readiness_audit.pdf` | External/open-source readiness audit record. |
 | `docs/reference/*.md` | Historical design, structure, conventions, and specification references. |
 | `docs/results/*.md` | Dated, human-readable benchmark and experiment reports. |

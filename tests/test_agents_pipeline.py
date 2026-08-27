@@ -1171,6 +1171,25 @@ class HistorianLearningTests(unittest.TestCase):
 
 
 class ControllerIntegrationTests(unittest.TestCase):
+    def test_controller_emits_resumable_repair_snapshots(self) -> None:
+        events: list[dict] = []
+        controller = GenerationController(
+            max_retries=1,
+            draft_supplier=lambda _prompt: "def identity(value):\n    return value\n",
+            event_sink=events.append,
+        )
+
+        result = controller.run(target="snapshot-session", initial_prompt="identity")
+
+        snapshots = [event for event in events if event.get("type") == "repair_session_snapshot"]
+        self.assertEqual(result.payload["termination_reason"], "validated")
+        self.assertEqual(snapshots[-1]["phase"], "completed")
+        self.assertEqual(snapshots[-1]["session_id"], "snapshot-session")
+        self.assertEqual(
+            {gate["name"] for gate in snapshots[-1]["gates"]},
+            {"static", "behavior", "profiling", "formal"},
+        )
+
     def test_semantic_stagnation_uses_json_patch_and_completes(self) -> None:
         source = "def increment(value):\n    return value\n"
         whitespace_only_edit = "def increment(value):\n  return value\n"
@@ -1230,6 +1249,40 @@ class ControllerIntegrationTests(unittest.TestCase):
         self.assertEqual(result.payload["final_status"], "completed")
         self.assertEqual(result.payload["attempts"][1]["repair_worker"], "json_patch->architect_llm")
         self.assertTrue(architect_prompts)
+
+    def test_patch_validation_failure_gets_architect_pass_at_retry_limit(self) -> None:
+        source = "def increment(value):\n    return value\n"
+        architect_prompts: list[str] = []
+
+        def small_supplier(_draft: str, prompt: str) -> str:
+            if "TYPED PATCH OUTPUT:" in prompt:
+                return json.dumps({
+                    "target_symbol": "increment",
+                    "action": "replace_symbol",
+                    "replacement_source": "def increment(value):\n    return value + 2",
+                })
+            return "def increment(value):\n  return value\n"
+
+        def architect_supplier(_draft: str, prompt: str) -> str:
+            architect_prompts.append(prompt)
+            return "def increment(value):\n    return value + 1\n"
+
+        controller = GenerationController(
+            max_retries=2,
+            draft_supplier=lambda _prompt: source,
+            repair_supplier=small_supplier,
+            architect_supplier=architect_supplier,
+            repair_strategy=RepairStrategyAgent(),
+            behavior_spec=FunctionBehaviorSpec(
+                function_name="increment",
+                cases=[BehaviorCase(name="increments", args=(2,), expected=3)],
+            ),
+        )
+        result = controller.run(target="patch-validation-fallback", initial_prompt="increment values")
+
+        self.assertEqual(result.payload["final_status"], "completed")
+        self.assertTrue(architect_prompts)
+        self.assertEqual(result.payload["attempts"][2]["repair_worker"], "architect_llm")
 
     def test_semantic_stagnation_uses_deterministic_import_transform(self) -> None:
         source = "import numpy\n\ndef identity(value):\n    return value\n"

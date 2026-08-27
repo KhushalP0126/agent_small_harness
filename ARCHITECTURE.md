@@ -4,7 +4,7 @@ Start with the directory that matches the question you are answering:
 
 | Need | Start here | Owns |
 | --- | --- | --- |
-| Terminal interaction | `rust_tui/` | Ratatui UI, input handling, JSONL protocol, terminal image rendering |
+| Terminal interaction | `rust_tui/` | Ratatui UI, input handling, JSONL protocol, and native session visualizations |
 | Model-driven work | `agents/` | Chat/spec orchestration, planning, repair, history, artifacts, and worker control |
 | Code correctness | `engines/` | Static analysis, compilation, linting, structural IR, and validation gates |
 | Runtime routing | `routing/` | Public entry points for the bridge, repository tools, path guard, sandbox, and tool registry |
@@ -15,8 +15,8 @@ Start with the directory that matches the question you are answering:
 feature areas above. `data/` is versioned fixtures and task corpora; generated
 artifacts remain ignored.
 
-The current system diagram is maintained in
-[`docs/architecture.mmd`](docs/architecture.mmd).
+The current execution flow and ownership boundaries are maintained in this
+document and rendered from typed runtime state in the TUI.
 
 ## Compatibility boundary
 

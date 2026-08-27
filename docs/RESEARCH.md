@@ -554,6 +554,23 @@ current two-receipt set; this is expected and must not be worked around.
 - Any new model is reported as a separate row rather than replacing earlier
   measurements.
 
+## Authoritative readiness gate
+
+Run `make research-readiness` to evaluate the retained evidence without model
+calls. Run `make research-readiness-record` after implementation changes to run
+the full Python and Rust suites, record their results, and regenerate the JSON,
+Markdown, and SVG readiness artifacts under `docs/results/`.
+
+The score is deliberately evidence-backed: implementation verification,
+provider-healthy repeated benchmarks, controlled approval-reviewed sessions,
+provenance, reports, and native visualizations are independent gates. Missing
+or unhealthy evidence remains a blocker instead of being inferred from older
+results. Live or paid provider reruns require an explicit operator-approved
+batch; the evaluator never fabricates receipts or starts model calls.
+
+The current score and exact blockers are published in
+[`results/research-readiness.md`](results/research-readiness.md).
+
 ## Remaining research work
 
 1. **Open.** Rerun the 20-task DeepSeek comparison with the API-health gate.

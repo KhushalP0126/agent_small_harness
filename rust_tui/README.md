@@ -5,10 +5,9 @@ the harness, model calls, validation engines, and artifacts. The TUI consumes
 the bridge's JSONL events, renders normal assistant Markdown (including tables)
 in the stream, and can open the repository README with `/readme`.
 
-The `src/mermaid_view.rs` module owns the image-processing path: Mermaid text
-is rendered to SVG, rasterized to PNG pixels, and emitted through Kitty,
-iTerm2, or the portable quadrant-block fallback selected from terminal
-environment markers.
+Repair timelines, validation gates, context usage, repository maps, and research
+readiness are rendered directly with Ratatui widgets. No browser, image
+protocol, or diagram compiler is required.
 
 From the repository root:
 
@@ -26,3 +25,6 @@ cargo run --manifest-path rust_tui/Cargo.toml -- .
 
 Use the legacy Textual interface only for artifact review with `make tui`.
 `make test` does not require a Rust toolchain.
+
+The interface uses standard terminal cells and should behave consistently in
+Apple Terminal, Kitty, iTerm2, and WezTerm.

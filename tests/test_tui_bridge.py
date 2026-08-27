@@ -799,11 +799,13 @@ class TuiBridgeTests(unittest.TestCase):
         self.assertEqual(event["type"], "compute_shield_metrics")
         self.assertEqual(event["delta"], 70)
 
-    def test_repo_map_emits_mermaid_from_real_mapper(self) -> None:
+    def test_repo_map_emits_typed_graph_from_real_mapper(self) -> None:
         self.bridge.handle({"cmd": "repo_map", "root": ".", "focus": "agents"})
         event = self.events()[0]
         self.assertEqual(event["type"], "repo_map")
-        self.assertTrue(event["mermaid"].startswith("flowchart"))
+        self.assertTrue(event["nodes"])
+        self.assertTrue(event["edges"])
+        self.assertIn("summary", event)
 
     def test_repo_map_files_are_structured_per_file(self) -> None:
         self.bridge.handle(
@@ -1248,6 +1250,30 @@ class TuiBridgeTests(unittest.TestCase):
             self.assertIn(summary["run_id"], created)
             self.assertEqual(summary["final_status"], "manual_review_required")
             self.assertEqual(summary["attempt_count"], 1)
+
+    def test_history_list_reads_versioned_generation_session_checkpoint(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            manager = ArtifactManager(Path(tmpdir))
+            paths = manager.create_run(run_id="versioned-run")
+            manager.checkpoint(
+                {
+                    "version": 1,
+                    "session": {
+                        "target": "module.py",
+                        "final_status": "completed",
+                        "attempts": [{"attempt": 0}, {"attempt": 1}],
+                    },
+                    "runtime": {"phase": "terminal"},
+                },
+                paths,
+            )
+            bridge = Bridge(EventWriter(self.output), artifact_root=Path(tmpdir))
+            bridge.handle({"cmd": "history", "limit": 1})
+
+        summary = self.events()[0]["runs"][0]
+        self.assertEqual(summary["target"], "module.py")
+        self.assertEqual(summary["final_status"], "completed")
+        self.assertEqual(summary["attempt_count"], 2)
 
     def test_history_detail_missing_run_warns_without_crashing(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

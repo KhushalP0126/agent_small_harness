@@ -114,17 +114,12 @@ class ArchitectureModal(ModalScreen[None]):
                         ("Architecture layers", "ascii"),
                         ("Raw node tree", "tree"),
                         ("LLM plan context", "context"),
-                        ("Full Mermaid source", "mermaid"),
                     ],
                     value="ascii",
                     id="architecture-view",
                     allow_blank=False,
                 )
                 yield Button("Refresh", id="refresh-map", variant="primary")
-                yield Button(
-                    "Open Diagram",
-                    id="open-diagram",
-                )
                 yield Button("Close", id="close-modal")
             yield RichLog(id="architecture-output", wrap=False, highlight=True)
 
@@ -147,17 +142,6 @@ class ArchitectureModal(ModalScreen[None]):
             self.dismiss()
         elif event.button.id == "refresh-map":
             self.refresh_map()
-        elif event.button.id == "open-diagram":
-            root = self.query_one("#architecture-root", Input).value
-            focus = self.query_one("#architecture-focus", Input).value
-            try:
-                path = self.data_source.open_architecture_diagram(
-                    root,
-                    focus=focus,
-                )
-                self.notify(f"Opened {path}")
-            except Exception as exc:  # noqa: BLE001 - actionable UI notification
-                self.notify(str(exc), severity="error")
 
 
 class ChangesModal(ModalScreen[None]):

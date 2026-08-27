@@ -1,13 +1,9 @@
 from __future__ import annotations
 
 import difflib
-import html
 import json
-import shutil
 import subprocess
 import sys
-import tempfile
-import webbrowser
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -16,11 +12,7 @@ from typing import Any, Mapping
 from agents.artifact_manager import ArtifactManager
 from agents.historian import DEFAULT_HISTORY_PATH, HistorianAgent
 from agents.repo_map_agent import RepoMapAgent
-from TUI.mermaid_renderer import (
-    render_mermaid_tree,
-    render_repo_architecture,
-    render_repo_architecture_mermaid,
-)
+from TUI.repo_renderer import render_repo_architecture, render_repo_tree
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -144,7 +136,7 @@ class HarnessDataSource:
     def repo_map(
         self,
         root: Path | str | None = None,
-        fmt: str = "mermaid",
+        fmt: str = "ascii",
         *,
         focus: str = "",
     ) -> str:
@@ -153,15 +145,13 @@ class HarnessDataSource:
         if fmt == "ascii":
             return render_repo_architecture(graph, focus=focus)
         if fmt == "tree":
-            return render_mermaid_tree(RepoMapAgent().to_mermaid(graph))
-        if fmt == "mermaid":
-            return RepoMapAgent().to_mermaid(graph)
+            return render_repo_tree(graph)
         if fmt == "context":
             return "\n".join(RepoMapAgent().to_plan_context(graph))
         if fmt == "json":
             return json.dumps(asdict(graph), indent=2, sort_keys=True)
         raise ValueError(
-            "repo-map format must be one of: ascii, tree, context, json, mermaid"
+            "repo-map format must be one of: ascii, tree, context, json"
         )
 
     def diff_attempts(
@@ -300,84 +290,6 @@ class HarnessDataSource:
         if entrypoint == "structured_spec" and "--spec" not in command:
             raise ValueError("structured_spec requires a spec path")
         return command
-
-    def mermaid_renderer_available(self) -> bool:
-        return True
-
-    def architecture_mermaid(
-        self,
-        root: Path | str | None = None,
-        *,
-        focus: str = "",
-    ) -> str:
-        target = Path(root or self.repo_root).resolve()
-        graph = RepoMapAgent().map_repo(target)
-        return render_repo_architecture_mermaid(graph, focus=focus)
-
-    def open_architecture_diagram(
-        self,
-        root: Path | str | None = None,
-        *,
-        focus: str = "",
-    ) -> Path:
-        """Open a graphical layer diagram via mmdc or a browser HTML fallback."""
-
-        diagram = self.architecture_mermaid(root, focus=focus)
-        renderer = shutil.which("mmdc")
-        output_dir = Path(tempfile.mkdtemp(prefix="harness-repo-map-"))
-        source_path = output_dir / "repo-map.mmd"
-        source_path.write_text(diagram, encoding="utf-8")
-        if renderer is not None:
-            svg_path = output_dir / "repo-map.svg"
-            subprocess.run(
-                [renderer, "-i", str(source_path), "-o", str(svg_path)],
-                check=True,
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-            webbrowser.open(svg_path.as_uri())
-            return svg_path
-
-        html_path = output_dir / "repo-map.html"
-        html_path.write_text(
-            """<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Harness Repository Architecture</title>
-  <style>
-    body { margin: 0; padding: 24px; background: #0d1117; color: #f0f6fc;
-           font-family: system-ui, sans-serif; }
-    h1 { margin: 0 0 16px; }
-    .note { color: #8b949e; margin-bottom: 20px; }
-    .diagram { overflow: auto; min-height: 70vh; background: #161b22;
-               border: 1px solid #30363d; border-radius: 8px; padding: 20px; }
-  </style>
-</head>
-<body>
-  <h1>Repository Architecture</h1>
-  <div class="note">Generated from the live AST repository map.</div>
-  <div class="diagram"><pre class="mermaid">"""
-            + html.escape(diagram)
-            + """</pre></div>
-  <script type="module">
-    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
-    mermaid.initialize({startOnLoad: true, theme: "dark", securityLevel: "strict"});
-  </script>
-</body>
-</html>
-""",
-            encoding="utf-8",
-        )
-        webbrowser.open(html_path.as_uri())
-        return html_path
-
-    def open_mermaid_svg(self, root: Path | str | None = None) -> Path:
-        """Backward-compatible alias for the architecture diagram action."""
-
-        return self.open_architecture_diagram(root)
 
     def _attempt_sources(
         self,

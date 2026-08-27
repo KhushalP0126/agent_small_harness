@@ -174,8 +174,11 @@ class AlgorithmicProfilerTests(unittest.TestCase):
         self.assertFalse(profile["is_compliant"])
         self.assertEqual(len(profile["results"]), 2)
         self.assertEqual(
-            [event["type"] for event in events],
+            [event["type"] for event in events if event["type"] == "profiling_result"],
             ["profiling_result", "profiling_result"],
+        )
+        self.assertTrue(
+            any(event["type"] == "repair_session_snapshot" for event in events)
         )
 
     def test_controller_default_does_not_profile(self) -> None:

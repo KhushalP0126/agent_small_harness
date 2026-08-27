@@ -21,21 +21,7 @@ def render_comparison(one_point_five: dict[str, Any], three: dict[str, Any]) -> 
         "",
         "Both reports use the same versioned ten-task corpus and baseline/shielded protocol. This is a two-model observation, not a parameter-scaling law.",
         "",
-        "```mermaid",
-        "xychart-beta",
-        "    title \"Shielded task completion by local model\"",
-        "    x-axis [\"Qwen 1.5B\", \"Qwen 3B\"]",
-        "    y-axis \"Tasks completed\" 0 --> 10",
-        f"    bar [{left['shielded_successes']}, {right['shielded_successes']}]",
-        "```",
-        "",
-        "```mermaid",
-        "xychart-beta",
-        "    title \"Shielded model-token use by local model\"",
-        "    x-axis [\"Qwen 1.5B\", \"Qwen 3B\"]",
-        f"    y-axis \"Model tokens\" 0 --> {max(left['shielded_tokens'], right['shielded_tokens'], 1)}",
-        f"    bar [{left['shielded_tokens']}, {right['shielded_tokens']}]",
-        "```",
+        "![Local model comparison](local-model-comparison.svg)",
         "",
         "| Measure | Qwen 1.5B | Qwen 3B | 3B − 1.5B |",
         "| --- | ---: | ---: | ---: |",
@@ -52,6 +38,35 @@ def render_comparison(one_point_five: dict[str, Any], three: dict[str, Any]) -> 
         lines.append(f"| {label} | {left[key]:.2f} | {right[key]:.2f} | {right[key] - left[key]:+.2f} |")
     lines.extend(["", "## Interpretation", "", _interpretation(left, right), ""])
     return "\n".join(lines)
+
+
+def render_comparison_svg(one_point_five: dict[str, Any], three: dict[str, Any]) -> str:
+    left = _metrics(one_point_five)
+    right = _metrics(three)
+    success_max = max(left["shielded_successes"], right["shielded_successes"], 1.0)
+    token_max = max(left["shielded_tokens"], right["shielded_tokens"], 1.0)
+    bars = []
+    for index, (label, metrics, color) in enumerate(
+        (("Qwen 1.5B", left, "#38bdf8"), ("Qwen 3B", right, "#a78bfa"))
+    ):
+        x = 160 + index * 300
+        success_height = 150 * metrics["shielded_successes"] / success_max
+        token_height = 150 * metrics["shielded_tokens"] / token_max
+        bars.append(
+            f'<rect x="{x}" y="{220-success_height:.1f}" width="72" height="{success_height:.1f}" fill="{color}"/>'
+            f'<rect x="{x+100}" y="{470-token_height:.1f}" width="72" height="{token_height:.1f}" fill="{color}"/>'
+            f'<text x="{x}" y="245" class="label">{label}</text>'
+            f'<text x="{x}" y="495" class="label">{label}</text>'
+        )
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" width="760" height="530" viewBox="0 0 760 530">
+<style>.title{{font:700 22px system-ui;fill:#e5eefb}}.label{{font:14px system-ui;fill:#cbd5e1}}</style>
+<rect width="100%" height="100%" rx="18" fill="#08111f"/>
+<text x="36" y="42" class="title">Shielded completions</text>
+<line x1="80" y1="220" x2="700" y2="220" stroke="#475569"/>
+<text x="36" y="292" class="title">Shielded model tokens</text>
+<line x1="80" y1="470" x2="700" y2="470" stroke="#475569"/>
+{''.join(bars)}
+</svg>'''
 
 
 def _metrics(payload: dict[str, Any]) -> dict[str, float]:
@@ -88,14 +103,15 @@ def main() -> int:
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     try:
-        rendered = render_comparison(
-            json.loads(args.one_point_five.read_text(encoding="utf-8")),
-            json.loads(args.three.read_text(encoding="utf-8")),
-        )
+        one_point_five = json.loads(args.one_point_five.read_text(encoding="utf-8"))
+        three = json.loads(args.three.read_text(encoding="utf-8"))
+        rendered = render_comparison(one_point_five, three)
+        svg = render_comparison_svg(one_point_five, three)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         parser.error(str(exc))
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(rendered, encoding="utf-8")
+    args.output.with_suffix(".svg").write_text(svg + "\n", encoding="utf-8")
     print(args.output)
     return 0
 

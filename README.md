@@ -61,8 +61,8 @@ user task
 Every draft, including output from the architect model, must pass the same gates.
 No model output is trusted by default.
 
-For the maintained Mermaid source, see
-[`docs/architecture.mmd`](docs/architecture.mmd).
+The live repository map is generated as typed graph data and rendered as
+terminal-native layers and trees.
 
 ## Repository File Guide
 
@@ -76,7 +76,7 @@ index.
 | --- | --- | --- |
 | Root | `README.md`, `ARCHITECTURE.md`, `REPORT.md`, `CHANGELOG.md` | Project entry point, system design, current research summary, and change history. |
 | Root configuration | `Makefile`, `config.yaml`, `pyproject.toml`, `requirements*.txt`, `.env.example`, `Dockerfile` | Reproducible setup, dependency sets, runtime defaults, environment template, and container build. |
-| `rust_tui/` | `Cargo.toml`, `src/main.rs`, `src/protocol.rs`, `src/mermaid_view.rs` | Default Ratatui client, JSONL protocol, and terminal-safe Mermaid/image rendering. |
+| `rust_tui/` | `Cargo.toml`, `src/main.rs`, `src/protocol.rs` | Default Ratatui client, JSONL protocol, and native session/readiness visualizations. |
 | `agents/` | `generation_controller.py`, `plan_mode.py`, `tool_calling_agent.py`, `routing_policy.py`, plus helpers | Orchestration: plan intake, drafting, retries, tool use, artifacts, history, and route decisions. |
 | `backends/` | `architect_client.py`, `ollama_client.py` | DeepSeek-compatible architect API and local Ollama model clients with usage telemetry. |
 | `engines/` | `*_engine.py`, `import_*.py`, `library_registry.py`, `treesitter_*.py` | Deterministic static, structural, import-risk, compilation, and complexity checks. |
@@ -90,7 +90,7 @@ index.
 | `docs/` | `RESEARCH.md`, `WORKSTREAMS.md`, `results/`, `reference/` | Research protocol, work tracking, rendered results/raw evidence, and historical design references. |
 | `tests/` | `test_*.py`, `fixtures/`, `adversarial/`, `*_ladders/` | Unit, integration, safety, language, benchmark, and TUI regression coverage. |
 | `examples/specs/` | `snake_game_spec.md`, `pong_game_spec.md` | Example structured-spec inputs; they are fixtures, not product-specific logic. |
-| `TUI/` | `app.py`, `data_source.py`, `mermaid_renderer.py` | Legacy Textual artifact-review interface; Rust TUI is the default client. |
+| `TUI/` | `app.py`, `data_source.py`, `repo_renderer.py` | Legacy Textual artifact-review interface and terminal-native repository views. |
 
 For a task-oriented view, use [`ARCHITECTURE.md`](ARCHITECTURE.md); for an
 exact path-to-purpose lookup, use [`docs/FILE_INDEX.md`](docs/FILE_INDEX.md).
@@ -111,7 +111,7 @@ definition of the product or controller behavior.
 
 | Capability | Current behavior |
 | --- | --- |
-| Repository mapping | `RepoMapAgent` walks Python files with `ast`, records functions, calls, returns, classes, all discovered variables, mutations, loop depth, and classified imports, and emits typed graph nodes/edges for compact Plan Mode context, JSON artifacts, or live Mermaid output. |
+| Repository mapping | `RepoMapAgent` walks Python files with `ast`, records functions, calls, returns, classes, variables, mutations, loop depth, and classified imports, and emits typed graph nodes/edges for compact context, JSON artifacts, and native tree views. |
 | Structured planning | `PlanModeAgent` builds `TaskIR`, behavior examples, state rules, graph context, adapter constraints, and compact worker packets. Repo context is opt-in through a supplied root or graph. |
 | Local model generation | Ollama workers use configurable Qwen model profiles; harder failures can escalate to a separately configured architect model. |
 | Deterministic validation | Parsing, seven Python engine checks, policy evaluation, required Pylint, behavior checks, optional Deal examples, and optional CrossHair decide acceptance. |
@@ -120,7 +120,7 @@ definition of the product or controller behavior.
 | Bounded repair | Retry prompts preserve current failures and drafts under a prompt budget, detect stagnation/branch loops, and validate every worker or architect revision again. |
 | Structured-spec applications | Architect-ordered contract queues carry accepted field types and method arities forward, validate imports per contract, assemble one Python program, and run contract examples plus the headless smoke test outside the harness process with sanitized environments and disposable working directories. |
 | Review evidence | Optional run artifacts preserve prompts, attempts, diffs, findings, execution traces, validation results, token estimates, and timelines. |
-| Human review TUI | The Rust `ratatui` client is the default terminal interface. It uses a non-blocking JSONL bridge and in-process Mermaid/image rendering. The older Textual console remains an artifact-review fallback. |
+| Human review TUI | The Rust `ratatui` client is the default terminal interface. It uses a non-blocking JSONL bridge and native repair timelines, gate tables, context gauges, diffs, and readiness status. The older Textual console remains an artifact-review fallback. |
 | Multi-language parser and engines | Python has the full AST engine suite. C/C++ add strict compiler gates; C/C++, Rust, and JavaScript add tree-sitter parsing plus structural/import-risk checks whenever their installed grammar is available. Rust and JavaScript retain isolated sandbox execution even when that optional parser dependency is absent. |
 | Algorithmic profiling | An opt-in behavioral profiler measures repeated callable variants, reports median/spread and optional hardware counters, and only identifies a faster ordering beyond a documented noise floor. |
 | Compute Shield metrics | A task-level evaluator reads recorded model-token telemetry from paired artifacts, preserves each comparison row, and reports the exact aggregate delta; it is evidence, not an acceptance gate. |
@@ -183,10 +183,10 @@ make rust-tui REPO_ROOT=.
 make test-rust
 ```
 
-The Rust crate lives under `rust_tui/`; its `mermaid_view` module contains the
-in-process SVG-to-PNG pipeline and Kitty/iTerm2/quadrant-block terminal
-renderers. Run Cargo directly with `cargo --manifest-path rust_tui/Cargo.toml`
-when you need a Rust-specific command.
+The Rust crate lives under `rust_tui/`; it renders typed bridge events directly
+with Ratatui and does not require a browser or terminal image protocol. Run
+Cargo directly with `cargo --manifest-path rust_tui/Cargo.toml` when you need a
+Rust-specific command.
 
 The primary view is a high-contrast, Codex-inspired linear event stream: a
 compact session line, `─` turn dividers, and `•`/`└` event trees. A persistent
@@ -279,17 +279,14 @@ per request. The TUI presents them one at a time; each `y` or `n` resolves only
 the visible diff before the next one is shown, so a multi-file change never
 bypasses review.
 
-`m` prepares the repository map on loopback; `o` opens it in the browser.
-Outside repository focus, `r` retains the coding-capability shortcut. `d` opens
-an inline run-history selector; `Esc` closes the active selector, and `q`
-cancels before exiting.
+`/map` builds a typed repository map and renders its summary in the native
+session inspector. `/history` opens the inline run-history selector and
+`/readiness` refreshes the evidence-backed research gate. `Esc` closes the
+active selector, and `q` cancels before exiting.
 
-The retained renderer module supports Kitty/Ghostty graphics, iTerm2/WezTerm
-inline images, and a 2×2 quadrant-block fallback for Apple Terminal and Windows
-Terminal. The current repository-map path is browser-first, so these renderers
-are not invoked by `m`; they remain available for a future native image view.
-Renderer detection uses terminal environment markers and does not perform a
-blocking stdio capability query.
+Repository, repair, and readiness visualizations use standard terminal cells.
+They do not depend on a browser, an inline-image protocol, or a diagram
+compiler.
 The Python bridge allowlists
 entrypoints and flags and wraps child output in typed log events so ordinary
 CLI text cannot corrupt the protocol.
@@ -314,83 +311,11 @@ fallback.
 
 ## Execution Flow
 
-```mermaid
-flowchart TD
-    task[User task and optional repo root] --> map{Repository supplied?}
-    map -->|yes| repo[RepoMapAgent<br/>fresh typed nodes and edges]
-    map -->|no| plan[PlanModeAgent]
-    repo --> plan
-    plan --> ir[TaskIR and compact worker packet]
-    ir --> specmode{Structured application spec?}
-    specmode -->|no| worker[Small local worker]
-    specmode -->|yes| queue[Contract queue planner]
-    queue --> contracts[Sequential contract generation<br/>accepted interface registry]
-    contracts --> integration[Assemble one Python program]
-    integration --> draft[Generated Python draft]
-    worker --> draft
-
-    draft --> parse[ParseContractAgent]
-    parse -->|invalid source| review[manual_review_required]
-    parse -->|valid source| registry[EngineRegistry]
-
-    subgraph static[Static analysis fan-out]
-        registry --> compile[Compilation gate for C/C++<br/>strict warnings and syntax]
-        registry --> math[Math engine<br/>loop depth]
-        registry --> hazards[Hazards engine<br/>state, imports, APIs]
-        registry --> branching[Branching engine<br/>path complexity]
-        registry --> cost[Cost engine<br/>membership hotspots]
-        registry --> bounds[Bounds engine<br/>index patterns]
-        registry --> stateflow[State-flow engine<br/>returned state]
-        registry --> lint[Required Pylint<br/>errors, fatals, skip status]
-    end
-
-    compile --> policy[Policy validator]
-    math --> policy
-    hazards --> policy
-    branching --> policy
-    cost --> policy
-    bounds --> policy
-    stateflow --> policy
-    lint --> policy
-
-    draft --> execute[Behavior sandbox<br/>optional retained ExecutionTrace]
-    execute --> trace[ExecutionTrace<br/>returns, output, errors, timing]
-    trace --> behavior[Behavior result]
-    behavior --> profile{Profiling runner supplied?}
-    profile -->|yes| profiling[Repeated behavioral profile<br/>median, spread, optional counters]
-    profile -->|no| gates
-    draft --> formal[Optional CrossHair/formal validator]
-    integration --> smoke[Headless integration smoke test]
-    policy --> gates{All enabled gates pass?}
-    behavior --> gates
-    profiling --> gates
-    formal --> gates
-    smoke --> gates
-
-    gates -->|yes| completed[completed]
-    completed --> artifacts[Artifacts and historian]
-    artifacts --> textual[Legacy Textual artifact-review fallback<br/>launch, resume, inspect, compare]
-    artifacts --> shield[Compute Shield<br/>paired token telemetry]
-    bridge[Python JSONL bridge<br/>separate typed event pipe] --> rust[Rust review TUI<br/>logs, progress, Mermaid modal]
-    artifacts --> rust
-    registry -. compile/profile events .-> bridge
-
-    gates -->|no| debug{Debugger hints enabled?}
-    debug -->|yes| hints[Trace-to-spec repair hints]
-    debug -->|no| branch{Branch loop or retry limit?}
-    hints --> branch
-    branch -->|yes| review
-    branch -->|no| strategy[RepairStrategyAgent]
-    strategy --> retry[Budgeted scoped retry prompt]
-    retry --> retrymode{Retry threshold reached or diagnostics stagnant?}
-    retrymode -->|ordinary retry| repair[Small worker repair]
-    repair -->|changed| draft
-    repair -->|unchanged| architect[Architect API worker]
-    repair -->|backend error| review
-    retrymode -->|escalate| architect
-    architect -->|passes to next attempt| draft
-    architect -->|static gate still fails| review
-    review --> artifacts
+```text
+clarify/spec -> contract queue -> Qwen generation -> deterministic validation
+      -> Qwen repair -> constrained transform/typed patch
+      -> DeepSeek different-angle escalation -> validation -> reviewed diff
+      -> completed or manual_review_required
 ```
 
 The repository map is rebuilt when requested instead of cached. Its JSON graph
@@ -679,7 +604,7 @@ Those outcomes are recorded in artifact metadata and the contract queue results.
 | --- | --- |
 | `agents/generation_controller.py` | Main create/repair loop, compilation/profiling event emission, opt-in profiling gate, execution-trace attachment, debugger-hint injection, stagnation guard, branch-loop detection, architect escalation, and final status |
 | `agents/artifact_manager.py` | Checkpoints sessions and preserves drafts, traces, profiling evidence, findings, token telemetry, and review timelines |
-| `agents/repo_map_agent.py` | Fresh AST repository map with functions, calls, returns, variables, loops, imports, compact context, and Mermaid rendering |
+| `agents/repo_map_agent.py` | Fresh AST repository map with functions, calls, returns, variables, loops, imports, and compact typed context |
 | `agents/execution_agent.py` | Isolated behavior-case execution and structured runtime trace capture |
 | `agents/plan_mode.py` | Converts raw user intent and optional repository context into behavior examples, constraints, graph context, and `TaskIR` |
 | `agents/engine_registry.py` | Routes parsed source to the registered engine set |
@@ -703,8 +628,8 @@ Those outcomes are recorded in artifact metadata and the contract queue results.
 | `prompt/` | Initial, retry, architect, and contract-architect prompt builders |
 | `backends/` | Ollama worker and API architect clients |
 | `api/` | FastAPI boundary for synchronous runs, asynchronous jobs, status lookup, and health checks |
-| `TUI/` | Legacy Textual artifact-review fallback; retained while its shared Mermaid helper is extracted from the old interface |
-| `scripts/run_repo_map.py` | Repository-map CLI for compact context, JSON, Mermaid, and optional artifacts |
+| `TUI/` | Legacy Textual artifact-review fallback with terminal-native repository trees |
+| `scripts/run_repo_map.py` | Repository-map CLI for compact context, JSON, and optional artifacts |
 | `scripts/run_compute_shield.py` | Aggregates matching baseline/shielded artifact telemetry without rerunning models |
 | `scripts/run_structured_spec.py` | Plan-only or full contract-queue generation, integration, validation, and smoke execution |
 | `scripts/` | Ladder runners, raw-vs-harness comparison, history aggregation, and review tools |
@@ -719,7 +644,7 @@ Those outcomes are recorded in artifact metadata and the contract queue results.
 | `docs/results/` | Published benchmark, capability, and execution reports |
 | `setup/` | Fresh-checkout setup and local runtime guide |
 | `ARCHITECTURE.md` | Top-level ownership map and compatibility boundaries |
-| `rust_tui/` | Rust TUI crate and in-process Mermaid/image rendering |
+| `rust_tui/` | Rust TUI crate with native repair/readiness visualizations |
 
 ## Setup
 
@@ -831,11 +756,9 @@ make rust-tui REPO_ROOT=.
 
 The Rust TUI is deliberately outside the control loop. It launches the existing CLI
 scripts as subprocesses and reads their JSON checkpoints. `Q` quits, `R`
-resumes the selected run, `M` prepares the repository map, and `O` opens its
-loopback browser page. `D` shows
-successive-attempt diffs, and `H` searches similar past attempts. The
-terminal stays focused on status and review; the map itself is rendered in the
-browser using Mermaid JS.
+resumes the selected run, and `M` prepares the repository map. `D` shows
+successive-attempt diffs, and `H` searches similar past attempts. Repository,
+repair, and readiness context are rendered directly in the terminal.
 
 The first service boundary is intentionally small:
 
@@ -875,7 +798,6 @@ Map a repository before generation or render its dependency graph:
 ```bash
 make repo-map REPO_ROOT=. REPO_MAP_FORMAT=context
 make repo-map REPO_ROOT=. REPO_MAP_FORMAT=json
-make repo-map REPO_ROOT=. REPO_MAP_FORMAT=mermaid
 ```
 
 Run only structured-spec planning, or execute the full contract queue with the
@@ -986,7 +908,7 @@ make approve-library LIB=clang.cindex
 - [x] Generalized Python create/repair controller with bounded local-worker and
   architect retry paths.
 - [x] Fresh AST repository mapping with compact Plan Mode context and on-demand
-  typed JSON/Mermaid graphs for calls, imports, variables, loops, and mutations.
+  typed JSON graphs and terminal trees for calls, imports, variables, loops, and mutations.
 - [x] Shared structural IR plus math, hazards, branching, cost, bounds,
   state-flow, and required Pylint gates.
 - [x] Real isolated behavior execution with structured per-case traces.
@@ -1021,11 +943,10 @@ make approve-library LIB=clang.cindex
   guidance.
 - [x] Review-before-trust library discovery and registry approval workflow.
 - [x] Artifact-driven Textual fallback with CLI launch/resume, live attempt
-  and contract-queue status, repo-map Mermaid text/SVG handoff, unified
+  and contract-queue status, native repository trees, unified
   attempt diffs, and advisory history search.
 - [x] Rust TUI default with a Tokio three-source event loop, typed JSONL
-  subprocess protocol, responsive state reducer, and in-process Mermaid
-  SVG-to-terminal-image modal.
+  subprocess protocol, responsive state reducer, and native repair/readiness views.
 - [x] Strict C/C++ compilation gate plus opt-in algorithmic profiling and
   task-level Compute Shield token accounting.
 - [x] Tool-loop finalization for documentation-only edits: after a proposed
@@ -1047,9 +968,10 @@ make approve-library LIB=clang.cindex
 
 ### Remaining Work
 
-- [ ] Complete manual terminal compatibility passes for the directly emitted
-  Kitty and iTerm2 protocol paths. The Rust TUI is the default; the
-  quadrant-block fallback has been smoke-tested in Apple Terminal.
+- [ ] Replace the blocked research evidence identified by
+  `make research-readiness`: healthy three-run Qwen/DeepSeek artifacts and the
+  three missing approval-reviewed live-session receipts. Model/API runs remain
+  explicit operator actions and are never fabricated by the readiness tool.
 - [x] Run and publish the frozen 10-task Compute Shield experiment. The honest
   2026-08-04 1.5B result is documented in
   `docs/results/compute-shield-10-2026-08-04.md`; it used more shielded tokens and had

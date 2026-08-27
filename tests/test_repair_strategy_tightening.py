@@ -29,6 +29,17 @@ class RepairStrategyTighteningTests(unittest.TestCase):
         self.assertNotIn("requests", result)
         self.assertIn("def f", result)
 
+    def test_forbidden_import_preserves_mixed_import_and_comments(self) -> None:
+        source = "# keep this\nimport os, requests  # dependencies\n\ndef f():\n    return os.name\n"
+        result = apply_deterministic_transform(
+            source,
+            {"kind": "external_dependency", "evidence": {"module": "requests"}},
+        )
+        self.assertIn("# keep this", result)
+        self.assertIn("import os", result)
+        self.assertNotIn("requests", result)
+        self.assertIn("# dependencies", result)
+
     def test_valid_single_symbol_patch(self) -> None:
         patch = parse_symbol_replacement_patch({
             "target_symbol": "f", "action": "replace_symbol",
@@ -39,6 +50,22 @@ class RepairStrategyTighteningTests(unittest.TestCase):
     def test_invalid_patch_is_rejected(self) -> None:
         with self.assertRaises(ValueError):
             parse_symbol_replacement_patch('{"action":"replace_symbol"}')
+
+    def test_patch_rejects_unknown_fields_and_extra_top_level_code(self) -> None:
+        with self.assertRaisesRegex(ValueError, "unsupported fields"):
+            parse_symbol_replacement_patch({
+                "target_symbol": "f",
+                "action": "replace_symbol",
+                "replacement_source": "def f():\n    return 1",
+                "path": "surprise.py",
+            })
+        patch = parse_symbol_replacement_patch({
+            "target_symbol": "f",
+            "action": "replace_symbol",
+            "replacement_source": "import os\n\ndef f():\n    return 1",
+        })
+        with self.assertRaisesRegex(ValueError, "exactly one top-level symbol"):
+            apply_symbol_replacement_patch("def f():\n    return 0\n", patch)
 
 
 if __name__ == "__main__":

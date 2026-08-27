@@ -86,18 +86,11 @@ left to phrasing judgment.
 
 ### 1.3 `ArchitectureModal` (hotkey `M`)
 
-- Calls `RepoMapAgent().map_repo(root)` and then `.to_mermaid(graph)`.
+- Calls `RepoMapAgent().map_repo(root)` and renders the typed graph directly.
   The default display groups the mapper output into human-scale top-level
   layers with module/function counts and cross-layer dependencies. A filter
-  drills into a package or module. **Raw node tree**, **LLM plan context**, and
-  **Full Mermaid source** remain explicit diagnostic views. Textual does not
-  render Mermaid natively; do not promise inline graphical rendering that does
-  not exist.
-- **Open Diagram** action: render the small layer-level graph with local
-  Mermaid CLI when available. Otherwise open a generated browser page that
-  loads Mermaid JS and renders the same graph. The browser fallback requires
-  network access to load Mermaid JS; the textual layer summary remains fully
-  offline.
+  drills into a package or module. **Raw node tree** and **LLM plan context**
+  remain explicit, fully offline diagnostic views.
 - Root defaults to the repository itself. When viewing a completed run, default
   to the generated-output directory instead. The repo mapper has already been
   confirmed against generated output.
