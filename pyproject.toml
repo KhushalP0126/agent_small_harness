@@ -38,7 +38,9 @@ packages = [
   "backends",
   "engines",
   "harness_kernel",
+  "harness_kernel.terminal_bridge",
   "prompt",
+  "routing",
   "validation",
   "TUI",
 ]

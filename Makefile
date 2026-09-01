@@ -52,7 +52,7 @@ IMAGE ?= agent-small-harness:local
 ARTIFACT_ARGS = $(if $(filter 1 true yes,$(SAVE_ARTIFACTS)),--save-artifacts --artifact-root "$(ARTIFACT_ROOT)",)
 DOC_ARGS = --doc-agent "$(DOC_AGENT)" $(if $(DOC_MODEL),--doc-model "$(DOC_MODEL)",) $(if $(DOC_OUTPUT),--doc-output "$(DOC_OUTPUT)",)
 
-.PHONY: help bootstrap setup install install-formal install-kernel env-path init-env api-dev tui rust-tui tui_rust start test-rust check research-check research-readiness research-readiness-record research-agent-benchmark research-fixture-deepseek research-fixture-qwen research-formal-repair research-formal-repair-diverse research-formal-repair-general research-formal-nonnegative research-formal-repair-routed routing-report research-report research-model-comparison record-live-session verify-live-sessions research-compute-shield docker-build sandbox-run agent-benchmark test test-engine-expansion compute-shield test-claude-fixes test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-fixture resume-coding-capability test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-worker-limit-architect resume-worker-limit test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-python-ladder-stateful test-plan-mode-ladder test-raw-vs-harness test-raw-vs-harness-architect test-raw-vs-harness-repeated test-raw-vs-harness-ablation test-formal-experiment formal-counterexample-smoke structured-spec structured-spec-plan resume-structured-spec repo-map review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library tool-agent ollama-smoke inference-smoke live-repair day1 clean-history clean-cache clean-generated
+.PHONY: help bootstrap setup install install-formal install-kernel env-path init-env api-dev tui rust-tui start test-rust check research-check research-readiness research-readiness-record research-agent-benchmark research-fixture-deepseek research-fixture-qwen research-formal-repair research-formal-repair-diverse research-formal-repair-general research-formal-nonnegative research-formal-repair-routed routing-report research-report research-model-comparison record-live-session verify-live-sessions research-compute-shield docker-build sandbox-run agent-benchmark test test-engine-expansion compute-shield test-claude-fixes test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-fixture resume-coding-capability test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-worker-limit-architect resume-worker-limit test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-python-ladder-stateful test-plan-mode-ladder test-raw-vs-harness test-raw-vs-harness-architect test-raw-vs-harness-repeated test-raw-vs-harness-ablation test-formal-experiment formal-counterexample-smoke structured-spec structured-spec-plan resume-structured-spec repo-map review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library tool-agent ollama-smoke inference-smoke live-repair clean-history clean-cache clean-generated
 
 help:
 	@printf "agent-coder_structure\n\n"
@@ -61,12 +61,8 @@ help:
 	@printf "  make start REPO_ROOT=.           Launch the default Rust terminal interface\n"
 	@printf "  make check                       Run Python and Rust tests (no model calls)\n"
 	@printf "  make research-check              Verify the reproducible research surface (no model calls)\n"
-	@printf "  make research-agent-benchmark   Run a health-gated repeated API comparison\n"
-	@printf "  make research-report REPORT_INPUT=...  Render a dated Markdown report from raw JSON\n"
-	@printf "  make research-model-comparison         Compare frozen Qwen 1.5B and 3B reports\n"
-	@printf "  make verify-live-sessions              Verify the five real controlled-session receipts\n"
-	@printf "  make research-readiness                Evaluate the authoritative evidence gate\n"
-	@printf "  make research-readiness-record         Run Python/Rust suites, then evaluate readiness\n"
+	@printf "  make research-readiness          Evaluate the authoritative evidence gate\n"
+	@printf "  make research-report REPORT_INPUT=...  Render a dated research report\n"
 	@printf "\nDaily work:\n"
 	@printf "  make tool-agent TASK='inspect agents'    Run bounded repository tools\n"
 	@printf "  make structured-spec-plan SPEC_PATH=...  Create an architect plan only\n"
@@ -76,13 +72,6 @@ help:
 	@printf "\nValidation and maintenance:\n"
 	@printf "  make test                        Run the full Python test suite\n"
 	@printf "  make test-rust                   Run Rust protocol, UI-state, and renderer tests\n"
-	@printf "  make formal-counterexample-smoke Verify CrossHair counterexamples reach the repair surface\n"
-	@printf "  make research-formal-repair       Run the pre-registered Python/CrossHair A/B repair study\n"
-	@printf "  make research-formal-repair-diverse  Repeat it with ordering, text, and loop fixtures\n"
-	@printf "  make research-formal-repair-general  Compare a general verifier-aligned directive\n"
-	@printf "  make research-formal-nonnegative  Diagnose the nonnegative postcondition repair path\n"
-	@printf "  make research-formal-repair-routed  Compare no-repair, generic, and failure-mode routed repair\n"
-	@printf "  make routing-report               Show if real multi-route history supports routing claims\n"
 	@printf "  make docker-build                Build the isolated execution image\n"
 	@printf "  make sandbox-run SOURCE=... LANGUAGE=python  Run source without network\n"
 	@printf "  make clean-cache                 Remove Python test caches (keeps artifacts and Rust build cache)\n"
@@ -128,8 +117,6 @@ tui:
 
 rust-tui:
 	PYTHON="$(PYTHON)" $(CARGO) run --manifest-path $(RUST_MANIFEST) -- "$(REPO_ROOT)"
-
-tui_rust: rust-tui
 
 start: rust-tui
 
@@ -346,15 +333,16 @@ inference-smoke:
 live-repair:
 	$(PYTHON) scripts/run_live_repair.py
 
-day1: benchmark test
-
 clean-history:
 	$(PYTHON) -c "import json, pathlib; p = pathlib.Path('history.json'); data = json.loads(p.read_text()); data['generations'] = []; p.write_text(json.dumps(data, indent=2) + '\n')"
 
 clean-cache:
 	@find . -type d -name '__pycache__' -prune -exec rm -rf {} +
 	@rm -rf .pytest_cache
-	@printf "Removed Python caches. Artifacts, .env, local history, and Rust build output were kept.\n"
+	@rm -rf tests/fixtures/projects/*/build tests/fixtures/projects/*/xcrun_db
+	@rm -rf tests/fixtures/projects/*/.npm tests/fixtures/projects/*/node-compile-cache
+	@rm -rf tests/fixtures/projects/*/.rustup
+	@printf "Removed Python and fixture caches. Artifacts, .env, local history, and Rust build output were kept.\n"
 
 clean-generated: clean-cache
 	@rm -rf artifacts rust_tui/target

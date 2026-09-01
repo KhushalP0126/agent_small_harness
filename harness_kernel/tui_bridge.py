@@ -69,6 +69,7 @@ from harness_kernel.governance import PermissionEvaluator, PermissionMode
 from harness_kernel.language_adapters import detect_project
 from harness_kernel.orchestration_store import OrchestrationStore
 from harness_kernel.task_graph import ProviderPolicy, TaskGraph, TaskNode
+from harness_kernel.terminal_bridge.commands import dispatch_command
 from TUI.repo_renderer import render_repo_architecture
 
 
@@ -303,101 +304,7 @@ class Bridge:
             )
 
     def handle(self, command: dict[str, Any]) -> None:
-        kind = str(command.get("cmd") or "")
-        if kind == "run":
-            self.start_run(
-                str(command.get("entrypoint") or ""),
-                [str(item) for item in command.get("args") or []],
-            )
-        elif kind in {"prompt", "chat"}:
-            self.start_chat(str(command.get("text") or ""))
-        elif kind == "draft_spec":
-            self.start_spec_draft()
-        elif kind == "draft_research":
-            self.start_research()
-        elif kind == "questionnaire_complete":
-            self.complete_questionnaire(command.get("answers"))
-        elif kind == "execute_spec":
-            self.start_spec_execution(str(command.get("text") or ""))
-        elif kind == "tool_task":
-            self.start_tool_task(
-                str(command.get("text") or ""),
-                str(command.get("provider") or "auto"),
-            )
-        elif kind == "apply_tool_diff":
-            self.resolve_tool_diff(bool(command.get("approved")))
-        elif kind == "approve_action":
-            self.resolve_action_approval(bool(command.get("approved")))
-        elif kind == "check":
-            self.check_code(str(command.get("path") or ""))
-        elif kind == "cancel":
-            self.cancel()
-        elif kind == "repo_map":
-            self.repo_map(
-                str(command.get("root") or REPO_ROOT),
-                str(command.get("focus") or ""),
-                str(command.get("mode") or "diagram"),
-            )
-        elif kind == "compile":
-            self.compile_source(
-                str(command.get("language") or ""),
-                str(command.get("source") or ""),
-            )
-        elif kind == "profile_samples":
-            self.profile_samples(
-                str(command.get("loop_order") or ""),
-                command.get("samples_ns"),
-                command.get("cache_misses"),
-            )
-        elif kind == "compute_shield":
-            self.compute_shield(command.get("phase"), command.get("tasks"))
-        elif kind == "history":
-            self.history(command.get("run_id"), command.get("limit"))
-        elif kind == "research_readiness":
-            self.research_readiness()
-        elif kind == "repair_session_action":
-            self.repair_session_action(command)
-        elif kind == "orchestrate":
-            self.orchestrate(str(command.get("goal") or ""))
-        elif kind == "approve_graph":
-            self.approve_graph(str(command.get("session_id") or ""), str(command.get("revision_hash") or ""))
-        elif kind == "orchestration_action":
-            self.orchestration_action(command)
-        elif kind == "inspect_orchestration":
-            self.inspect_orchestration(str(command.get("session_id") or ""))
-        elif kind == "replay_orchestration":
-            self.replay_orchestration(str(command.get("session_id") or ""))
-        elif kind == "open_settings":
-            self.emit_settings_state()
-        elif kind == "save_provider_settings":
-            self.save_provider_settings(command)
-        elif kind == "test_provider_connection":
-            threading.Thread(target=self.test_provider_connection, daemon=True).start()
-        elif kind == "clear_provider_credential":
-            self.clear_provider_credential(str(command.get("provider") or self._provider_settings.provider.value))
-        elif kind == "set_contribution_split":
-            self.set_contribution_split(command)
-        elif kind == "cost_cap_approval":
-            self._api_overage_approved = bool(command.get("approved"))
-            self.writer.emit("cost_cap_approval", approved=self._api_overage_approved, remaining_api_budget=self._cost_guard.remaining_usd)
-        elif kind == "set_permission_mode":
-            self.set_permission_mode(str(command.get("mode") or "default"))
-        elif kind == "clear_context":
-            self.clear_context()
-        elif kind == "compact_context":
-            self.compact_context(str(command.get("instructions") or ""))
-        elif kind == "context_status":
-            self.emit_context_state()
-        elif kind == "list_checkpoints":
-            self.emit_checkpoint_list()
-        elif kind == "rewind":
-            self.rewind(str(command.get("checkpoint_id") or ""), str(command.get("scope") or "both"))
-        elif kind == "branch_checkpoint":
-            self.branch_checkpoint(str(command.get("checkpoint_id") or ""))
-        elif kind in {"extensions_status", "mcp_status"}:
-            self.emit_extensions_state()
-        else:
-            self.writer.emit("log", level="error", msg=f"unknown command: {kind}")
+        dispatch_command(self, command)
 
     def emit_settings_state(self) -> None:
         credential, _source = self._resolved_provider_credential(self._provider_settings.provider)

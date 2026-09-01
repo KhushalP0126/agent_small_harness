@@ -39,6 +39,7 @@ to same-named JSON under `docs/results/raw/`.
 | `backends/architect_client.py` | DeepSeek-compatible architect client, retries, thinking settings, and usage telemetry. |
 | `backends/ollama_client.py` | Local Ollama client and local-model token/context telemetry. |
 | `agents/artifact_manager.py` | Writes run artifacts, checkpoints, summaries, and timelines. |
+| `agents/attempt_analysis.py` | Pure draft-diff and diagnostic-stagnation helpers used between repair attempts. |
 | `agents/base.py` | Shared agent interfaces and core data types. |
 | `agents/behavior_spec.py` | Converts requirements into executable behavior examples. |
 | `agents/coder.py` | Local/remote code-draft generation abstraction. |
@@ -112,6 +113,17 @@ to same-named JSON under `docs/results/raw/`.
 | `harness_kernel/language_adapters.py` | Normalizes language-specific build/run behavior. |
 | `harness_kernel/live_session.py` | Captures approval-reviewed live-session receipts. |
 | `harness_kernel/local_sandbox.py` | Temp-directory, sanitized-environment Python execution. |
+| `harness_kernel/task_graph.py` | Defines immutable task graphs, revisions, hashes, and DAG/path validation. |
+| `harness_kernel/roles.py` | Registers typed planner, researcher, implementer, validator, and conflict-repair roles. |
+| `harness_kernel/governance.py` | Central permission and capability evaluation for graph and tool actions. |
+| `harness_kernel/orchestration.py` | Compiles legacy task requests and exposes orchestration service operations. |
+| `harness_kernel/orchestration_runtime.py` | Runs approved nodes with deterministic scheduling, isolation, retry, and pause control. |
+| `harness_kernel/orchestration_store.py` | Persists graph revisions and recoverable session state. |
+| `harness_kernel/event_journal.py` | Writes sanitized append-only events and content-addressed artifacts for replay. |
+| `harness_kernel/merge_queue.py` | Serializes reviewed editing proposals and rejects stale or overlapping changes. |
+| `harness_kernel/checkpoints.py` | Captures repository checkpoints used by reviewed merges and rewind. |
+| `harness_kernel/project_validation.py` | Runs trusted, capability-aware project validation across the five language profiles. |
+| `harness_kernel/provider_settings.py` | Validates provider configuration without persisting raw credentials. |
 | `harness_kernel/profiling.py` | Optional repeated behavioral performance profiling. |
 | `harness_kernel/provenance.py` | Captures revision, OS, model, and experiment metadata. |
 | `harness_kernel/research_reporting.py` | Computes benchmark summaries, intervals, and research tables. |
@@ -119,7 +131,8 @@ to same-named JSON under `docs/results/raw/`.
 | `harness_kernel/tool_handlers.py` | Read/search/create/move/edit tool implementations. |
 | `harness_kernel/tool_paths.py` | Repository-root path safety checks. |
 | `harness_kernel/tool_registry.py` | Typed registry/dispatch for repository tools. |
-| `harness_kernel/tui_bridge.py` | JSONL bridge between the Rust client and Python harness. |
+| `harness_kernel/tui_bridge.py` | JSONL bridge capabilities between the Rust client and Python harness. |
+| `harness_kernel/terminal_bridge/commands.py` | Readable command-to-capability dispatch table for the bridge. |
 | `prompt/architect_builder.py` | Builds architect-model planning prompts. |
 | `prompt/backend_failure_builder.py` | Formats backend/API failure context for recovery. |
 | `prompt/budget.py` | Enforces prompt/context budgets. |
@@ -140,6 +153,7 @@ to same-named JSON under `docs/results/raw/`.
 | `rust_tui/Cargo.lock` | Locked Rust dependency versions. |
 | `rust_tui/src/main.rs` | Ratatui event loop, conversation display, approvals, and state. |
 | `rust_tui/src/protocol.rs` | Rust representation of JSONL bridge commands/events. |
+| `rust_tui/src/render_support.rs` | Terminal theme, pane styling, and lightweight Markdown rendering. |
 | `rust_tui/README.md` | Rust-client usage and terminal notes. |
 | `TUI/app.py` | Legacy Textual artifact-review application. |
 | `TUI/data_source.py` | Data access for the legacy Textual interface. |

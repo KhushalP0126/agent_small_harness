@@ -934,11 +934,25 @@ mod tests {
                 entrypoint: "coding_capability".into(),
                 action: "resume".into(),
             },
-            HarnessCommand::Orchestrate { goal: "build parser".into() },
-            HarnessCommand::ApproveGraph { session_id: "orch-1".into(), revision_hash: "abc".into() },
-            HarnessCommand::InspectOrchestration { session_id: "orch-1".into() },
-            HarnessCommand::OrchestrationAction { session_id: "orch-1".into(), action: "retry".into(), node_id: "a".into(), provider: "api".into() },
-            HarnessCommand::ReplayOrchestration { session_id: "orch-1".into() },
+            HarnessCommand::Orchestrate {
+                goal: "build parser".into(),
+            },
+            HarnessCommand::ApproveGraph {
+                session_id: "orch-1".into(),
+                revision_hash: "abc".into(),
+            },
+            HarnessCommand::InspectOrchestration {
+                session_id: "orch-1".into(),
+            },
+            HarnessCommand::OrchestrationAction {
+                session_id: "orch-1".into(),
+                action: "retry".into(),
+                node_id: "a".into(),
+                provider: "api".into(),
+            },
+            HarnessCommand::ReplayOrchestration {
+                session_id: "orch-1".into(),
+            },
         ];
         for command in commands {
             let encoded = serde_json::to_string(&command).unwrap();

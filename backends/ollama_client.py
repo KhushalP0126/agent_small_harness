@@ -135,7 +135,7 @@ class OllamaModelSupplier:
         # mistakes an unavailable price for a measured $0.00 observation.
         self.telemetry: list[dict[str, Any]] = []
         if tool_registry is None:
-            from harness_kernel.tool_handlers import build_default_tool_registry
+            from routing.tools import build_default_tool_registry
 
             tool_registry = build_default_tool_registry(ollama_client=self.client)
         self.tool_registry = tool_registry

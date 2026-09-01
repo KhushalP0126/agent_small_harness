@@ -1,4 +1,5 @@
 mod protocol;
+mod render_support;
 
 use std::fs;
 use std::io;
@@ -30,6 +31,7 @@ use ratatui::{
     widgets::{Block, Borders, Clear, Padding, Paragraph, Wrap},
     Terminal,
 };
+use render_support::*;
 use tokio::{
     io::{AsyncWriteExt, BufReader},
     process::{ChildStdin, Command},
@@ -43,12 +45,29 @@ enum AppMode {
     Chat,
     Questionnaire,
     DraftingSpec,
-    SpecReview { spec_text: String },
-    ResearchReview { text: String, path: String },
-    ReadmeView { text: String, path: String },
-    ActionApproval { request: String, reason: String },
-    ToolDiffReview { path: String, diff: String },
-    GraphApproval { session_id: String, revision_hash: String },
+    SpecReview {
+        spec_text: String,
+    },
+    ResearchReview {
+        text: String,
+        path: String,
+    },
+    ReadmeView {
+        text: String,
+        path: String,
+    },
+    ActionApproval {
+        request: String,
+        reason: String,
+    },
+    ToolDiffReview {
+        path: String,
+        diff: String,
+    },
+    GraphApproval {
+        session_id: String,
+        revision_hash: String,
+    },
     Executing,
     Settings,
 }
@@ -800,7 +819,10 @@ impl AppState {
     fn side_inspector_active(&self) -> bool {
         matches!(
             self.mode,
-            AppMode::Questionnaire | AppMode::SpecReview { .. } | AppMode::ResearchReview { .. } | AppMode::GraphApproval { .. }
+            AppMode::Questionnaire
+                | AppMode::SpecReview { .. }
+                | AppMode::ResearchReview { .. }
+                | AppMode::GraphApproval { .. }
         ) || self.repair_context.is_some()
             || self.readiness_score.is_some()
     }
@@ -1916,7 +1938,9 @@ fn draw_composer(frame: &mut ratatui::Frame, state: &AppState, area: Rect) {
     let active = state.prompt_active
         || matches!(
             state.mode,
-            AppMode::ActionApproval { .. } | AppMode::ToolDiffReview { .. } | AppMode::GraphApproval { .. }
+            AppMode::ActionApproval { .. }
+                | AppMode::ToolDiffReview { .. }
+                | AppMode::GraphApproval { .. }
         );
     let block = Block::default()
         .borders(Borders::ALL)
@@ -2423,73 +2447,6 @@ fn context_summary(context: Option<&BackendContext>) -> String {
     )
 }
 
-fn theme_background() -> Color {
-    Color::Rgb(4, 7, 13)
-}
-
-fn theme_panel() -> Color {
-    Color::Rgb(10, 18, 32)
-}
-
-fn theme_status() -> Color {
-    Color::Rgb(15, 24, 42)
-}
-
-fn theme_foreground() -> Color {
-    Color::Rgb(231, 240, 252)
-}
-
-fn theme_muted() -> Color {
-    Color::Rgb(74, 100, 133)
-}
-
-fn theme_border() -> Color {
-    Color::Rgb(27, 42, 66)
-}
-
-fn theme_cyan() -> Color {
-    Color::Rgb(56, 189, 248)
-}
-
-fn theme_purple() -> Color {
-    Color::Rgb(147, 197, 253)
-}
-
-fn theme_you() -> Color {
-    Color::Rgb(125, 211, 252)
-}
-
-fn theme_assistant() -> Color {
-    Color::Rgb(96, 165, 250)
-}
-
-fn theme_working() -> Color {
-    Color::Rgb(147, 197, 253)
-}
-
-fn theme_system() -> Color {
-    Color::Rgb(59, 130, 246)
-}
-
-fn theme_ready() -> Color {
-    Color::Rgb(96, 165, 250)
-}
-
-fn pane_block<'a>(title: impl Into<Line<'a>>, active: bool) -> Block<'a> {
-    pane_block_accent(title, active, Color::Rgb(71, 85, 105))
-}
-
-fn pane_block_accent<'a>(title: impl Into<Line<'a>>, active: bool, accent: Color) -> Block<'a> {
-    let color = if active { theme_cyan() } else { accent };
-    Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(color))
-        .style(Style::default().bg(theme_panel()))
-        .padding(Padding::horizontal(1))
-        .title(title)
-        .title_style(Style::default().fg(color).add_modifier(Modifier::BOLD))
-}
-
 fn draw_validated_source(frame: &mut ratatui::Frame, state: &AppState) {
     let Some(source) = state.validated_source.as_deref() else {
         return;
@@ -2673,102 +2630,6 @@ fn draw_readme_view(frame: &mut ratatui::Frame, state: &AppState, text: &str, pa
             .scroll((state.inspector_scroll.min(u16::MAX as usize) as u16, 0)),
         inner,
     );
-}
-
-/// Small dependency-free Markdown renderer for repository documentation.
-/// It intentionally handles the README constructs that matter in a terminal
-/// (headings, lists, quotes, tables, rules, and fenced code) rather than
-/// exposing raw Markdown punctuation to the user.
-fn markdown_lines(source: &str) -> Vec<Line<'static>> {
-    let mut lines = Vec::new();
-    let mut in_code_block = false;
-    for raw in source.lines() {
-        let trimmed = raw.trim();
-        if trimmed.starts_with("```") {
-            in_code_block = !in_code_block;
-            let language = trimmed.trim_start_matches('`').trim();
-            lines.push(Line::styled(
-                if in_code_block {
-                    format!("┌ code {}", language)
-                } else {
-                    "└".into()
-                },
-                Style::default().fg(theme_muted()),
-            ));
-            continue;
-        }
-        if in_code_block {
-            lines.push(Line::styled(
-                raw.to_owned(),
-                Style::default().fg(Color::LightBlue),
-            ));
-            continue;
-        }
-        let heading_level = trimmed
-            .chars()
-            .take_while(|character| *character == '#')
-            .count();
-        if heading_level > 0 && trimmed.as_bytes().get(heading_level) == Some(&b' ') {
-            let title = trimmed[heading_level + 1..].trim();
-            lines.push(Line::styled(
-                title.to_owned(),
-                Style::default()
-                    .fg(if heading_level == 1 {
-                        theme_cyan()
-                    } else {
-                        theme_assistant()
-                    })
-                    .add_modifier(Modifier::BOLD),
-            ));
-        } else if trimmed == "---" || trimmed == "***" || trimmed == "___" {
-            lines.push(Line::styled(
-                "─".repeat(72),
-                Style::default().fg(theme_border()),
-            ));
-        } else if let Some(item) = trimmed.strip_prefix("> ") {
-            lines.push(Line::from(vec![
-                Span::styled("│ ", Style::default().fg(theme_muted())),
-                Span::styled(item.to_owned(), Style::default().fg(theme_foreground())),
-            ]));
-        } else if let Some(item) = trimmed
-            .strip_prefix("- ")
-            .or_else(|| trimmed.strip_prefix("* "))
-        {
-            lines.push(Line::from(vec![
-                Span::styled("• ", Style::default().fg(theme_cyan())),
-                Span::styled(item.to_owned(), Style::default().fg(theme_foreground())),
-            ]));
-        } else if is_markdown_table_separator(trimmed) {
-            lines.push(Line::styled(
-                "─".repeat(72),
-                Style::default().fg(theme_border()),
-            ));
-        } else if trimmed.starts_with('|') && trimmed.ends_with('|') {
-            let cells = trimmed
-                .trim_matches('|')
-                .split('|')
-                .map(str::trim)
-                .collect::<Vec<_>>()
-                .join("  │  ");
-            lines.push(Line::styled(cells, Style::default().fg(theme_foreground())));
-        } else if trimmed.is_empty() {
-            lines.push(Line::raw(""));
-        } else {
-            lines.push(Line::styled(
-                raw.to_owned(),
-                Style::default().fg(theme_foreground()),
-            ));
-        }
-    }
-    lines
-}
-
-fn is_markdown_table_separator(line: &str) -> bool {
-    line.starts_with('|')
-        && line.ends_with('|')
-        && line
-            .chars()
-            .all(|character| matches!(character, '|' | '-' | ':' | ' '))
 }
 
 fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {

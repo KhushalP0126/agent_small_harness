@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass, field
-from difflib import unified_diff
 from pathlib import Path
 from typing import Callable
 
 from agents.base import AgentResult, BaseAgent
+from agents.attempt_analysis import diagnostic_stagnant, draft_diff
 from agents.engine_registry import EngineRegistry
 from agents.execution_agent import ExecutionAgent
 from agents.historian import DEFAULT_HISTORY_PATH, HistorianAgent
@@ -493,26 +493,13 @@ class GenerationController(BaseAgent):
         return "decompose_and_generate"
 
     def _diff_text(self, previous_draft: str, current_draft: str) -> str:
-        if previous_draft == current_draft:
-            return ""
-        return "\n".join(
-            unified_diff(
-                previous_draft.splitlines(),
-                current_draft.splitlines(),
-                fromfile="attempt_prev",
-                tofile="attempt_curr",
-                lineterm="",
-            )
-        )
+        return draft_diff(previous_draft, current_draft)
 
     def _is_stagnant(self, previous_draft: str, current_draft: str) -> bool:
         return previous_draft == current_draft
 
     def _is_diagnostic_stagnant(self, diagnostic_deltas: list[dict]) -> bool:
-        meaningful = [delta for delta in diagnostic_deltas if delta.get("repeated")]
-        if not meaningful:
-            return False
-        return all(not delta.get("improved", False) for delta in meaningful)
+        return diagnostic_stagnant(diagnostic_deltas)
 
     def _debug_print(self, message: str) -> None:
         if self.debug:

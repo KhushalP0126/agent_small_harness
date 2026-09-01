@@ -15,7 +15,7 @@ if str(ROOT) not in sys.path:
 from agents.tool_calling_agent import ToolCallingAgent
 from backends.architect_client import ArchitectApiClient, ArchitectConfig, ArchitectProfile
 from harness_kernel.container_sandbox import run_source_isolated
-from harness_kernel.tool_handlers import build_default_tool_registry
+from routing.tools import build_default_tool_registry
 from harness_kernel.tool_paths import resolve_within_root
 
 

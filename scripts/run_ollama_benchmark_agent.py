@@ -13,7 +13,7 @@ if str(ROOT) not in sys.path:
 
 from agents.tool_calling_agent import ToolCallingAgent
 from backends.ollama_client import OllamaClient, OllamaGenerationConfig
-from harness_kernel.tool_handlers import build_default_tool_registry
+from routing.tools import build_default_tool_registry
 
 
 def _usage(client: OllamaClient) -> dict[str, int]:

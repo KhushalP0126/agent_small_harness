@@ -13,7 +13,7 @@ if str(ROOT) not in sys.path:
 from agents.config_loader import DEFAULT_CONFIG_PATH, load_config
 from agents.tool_calling_agent import ToolCallingAgent
 from backends.architect_client import ArchitectApiClient, ArchitectConfig
-from harness_kernel.tool_handlers import build_default_tool_registry
+from routing.tools import build_default_tool_registry
 
 
 def _generator(model: str, config_path: Path):

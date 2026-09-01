@@ -1,8 +1,9 @@
 # Results
 
-This directory holds published, reproducible experiment reports. They are
-evidence, not product claims: each report records its model, task corpus,
-commands, dates, and failures.
+This directory is the in-repository historical research archive. It holds
+published, reproducible experiment reports in place so old links and provenance
+remain valid. Reports are evidence, not current product claims: each records its
+model, task corpus, commands, dates, and failures.
 
 Keep raw JSON beside its dated report under `raw/`; do not use an unhealthy
 provider run as a quality or efficiency comparison.

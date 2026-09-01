@@ -16,6 +16,10 @@ venv/
 build/
 dist/
 artifacts/
+**/xcrun_db/
+tests/fixtures/projects/**/.npm/
+tests/fixtures/projects/**/node-compile-cache/
+tests/fixtures/projects/**/.rustup/
 data/stats.json
 .DS_Store
 *.log
