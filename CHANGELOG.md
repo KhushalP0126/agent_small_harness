@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Made the Makefile the supported setup interface for core, formal-verification,
+  browser-search, and combined installations.
+- Consolidated dependency declarations in `pyproject.toml` and removed the
+  redundant root requirement manifests.
+- Removed the stale root research summary; dated evidence remains under
+  `docs/results/` with its raw provenance.
+
 ## v0.1.0 — 2026-07-31
 
 Initial tagged release of the generalized code-generation and repair harness.

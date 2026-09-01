@@ -53,9 +53,9 @@ described where relevant but are intentionally not tracked.
 - `.github/workflows/ci.yml` - GitHub Actions workflow for package install, tests, and Docker image build.
 - `.env.example` - Safe template for local secrets such as architect API keys.
 - `benchmarker.py` - Benchmark entrypoint and helper factory for Ollama-backed controllers.
-- `requirements.txt` - Pip-compatible runtime dependency list, including tree-sitter, pygame, required Pylint, FastAPI, Uvicorn, and Textual.
-- `requirements-kernel.txt` - Optional Kernel browser documentation dependency manifest.
-- `requirements-formal.txt` - Optional Deal and CrossHair formal-validation dependency manifest.
+- `pyproject.toml` - Authoritative core and optional dependency manifest; use
+  the matching `make setup*` target rather than installing dependency files
+  directly.
 - `history.json` - Historian persistence file for run summaries and successful repair lessons.
 - `docs/reference/conventions.md` - Stable model-facing coding and harness rules.
 - `docs/reference/design.md` - Architecture, safety, escalation, and validation design constraints.

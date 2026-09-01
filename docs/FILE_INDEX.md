@@ -18,14 +18,10 @@ to same-named JSON under `docs/results/raw/`.
 | `.gitignore` | Excludes generated, local, and secret files from version control. |
 | `README.md` | Project overview, setup, capabilities, and repository guide. |
 | `ARCHITECTURE.md` | Task-oriented map of how the major runtime components fit together. |
-| `REPORT.md` | High-level research and benchmark summary. |
 | `CHANGELOG.md` | Curated record of user-visible project changes. |
 | `Makefile` | Supported setup, test, TUI, benchmark, and reporting commands. |
 | `config.yaml` | Default model, backend, and harness configuration. |
 | `pyproject.toml` | Python project metadata and tool configuration. |
-| `requirements.txt` | Core Python runtime dependencies. |
-| `requirements-formal.txt` | Optional formal-verification dependencies. |
-| `requirements-kernel.txt` | Optional kernel/documentation-search dependencies. |
 | `Dockerfile` | Reproducible container image for isolated execution. |
 | `benchmarker.py` | Legacy/simple benchmark helper retained for compatibility. |
 | `history.json` | Legacy history data; current run evidence lives in artifacts/results. |

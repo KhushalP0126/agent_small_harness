@@ -52,12 +52,15 @@ IMAGE ?= agent-small-harness:local
 ARTIFACT_ARGS = $(if $(filter 1 true yes,$(SAVE_ARTIFACTS)),--save-artifacts --artifact-root "$(ARTIFACT_ROOT)",)
 DOC_ARGS = --doc-agent "$(DOC_AGENT)" $(if $(DOC_MODEL),--doc-model "$(DOC_MODEL)",) $(if $(DOC_OUTPUT),--doc-output "$(DOC_OUTPUT)",)
 
-.PHONY: help bootstrap setup install install-formal install-kernel env-path init-env api-dev tui rust-tui start test-rust check research-check research-readiness research-readiness-record research-agent-benchmark research-fixture-deepseek research-fixture-qwen research-formal-repair research-formal-repair-diverse research-formal-repair-general research-formal-nonnegative research-formal-repair-routed routing-report research-report research-model-comparison record-live-session verify-live-sessions research-compute-shield docker-build sandbox-run agent-benchmark test test-engine-expansion compute-shield test-claude-fixes test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-fixture resume-coding-capability test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-worker-limit-architect resume-worker-limit test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-python-ladder-stateful test-plan-mode-ladder test-raw-vs-harness test-raw-vs-harness-architect test-raw-vs-harness-repeated test-raw-vs-harness-ablation test-formal-experiment formal-counterexample-smoke structured-spec structured-spec-plan resume-structured-spec repo-map review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library tool-agent ollama-smoke inference-smoke live-repair clean-history clean-cache clean-generated
+.PHONY: help bootstrap setup setup-formal setup-browser setup-all install install-formal install-kernel env-path init-env api-dev tui rust-tui start test-rust check research-check research-readiness research-readiness-record research-agent-benchmark research-fixture-deepseek research-fixture-qwen research-formal-repair research-formal-repair-diverse research-formal-repair-general research-formal-nonnegative research-formal-repair-routed routing-report research-report research-model-comparison record-live-session verify-live-sessions research-compute-shield docker-build sandbox-run agent-benchmark test test-engine-expansion compute-shield test-claude-fixes test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-fixture resume-coding-capability test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-worker-limit-architect resume-worker-limit test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-python-ladder-stateful test-plan-mode-ladder test-raw-vs-harness test-raw-vs-harness-architect test-raw-vs-harness-repeated test-raw-vs-harness-ablation test-formal-experiment formal-counterexample-smoke structured-spec structured-spec-plan resume-structured-spec repo-map review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library tool-agent ollama-smoke inference-smoke live-repair clean-history clean-cache clean-generated
 
 help:
 	@printf "agent-coder_structure\n\n"
 	@printf "Start here:\n"
-	@printf "  make setup                       Create .venv, install dependencies, configure .env, build Rust\n"
+	@printf "  make setup                       Create .venv, install the project, configure .env, build Rust\n"
+	@printf "  make setup-formal                Add Deal and CrossHair verification tools\n"
+	@printf "  make setup-browser               Add browser-backed documentation search\n"
+	@printf "  make setup-all                   Install both optional capability groups\n"
 	@printf "  make start REPO_ROOT=.           Launch the default Rust terminal interface\n"
 	@printf "  make check                       Run Python and Rust tests (no model calls)\n"
 	@printf "  make research-check              Verify the reproducible research surface (no model calls)\n"
@@ -82,21 +85,30 @@ help:
 bootstrap:
 	@test -d .venv || python3 -m venv .venv
 	.venv/bin/python -m pip install --upgrade pip
-	.venv/bin/python -m pip install -r requirements.txt
+	.venv/bin/python -m pip install -e .
 	@test -f .env || cp .env.example .env
 	$(CARGO) build --release --manifest-path $(RUST_MANIFEST)
 	@printf "\nSetup complete. Run: make start REPO_ROOT=.\n"
 
 setup: bootstrap
 
+setup-formal: setup
+	.venv/bin/python -m pip install -e ".[formal]"
+
+setup-browser: setup
+	.venv/bin/python -m pip install -e ".[browser]"
+
+setup-all: setup
+	.venv/bin/python -m pip install -e ".[formal,browser]"
+
 install:
-	$(PYTHON) -m pip install -r requirements.txt
+	$(PYTHON) -m pip install -e .
 
 install-formal:
-	$(PYTHON) -m pip install -r requirements-formal.txt
+	$(PYTHON) -m pip install -e ".[formal]"
 
 install-kernel:
-	$(PYTHON) -m pip install -r requirements-kernel.txt
+	$(PYTHON) -m pip install -e ".[browser]"
 
 env-path:
 	@printf "Env file: %s/.env\n" "$$(pwd)"

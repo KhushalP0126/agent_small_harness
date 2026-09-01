@@ -20,6 +20,9 @@ make test
 make start
 ```
 
+Optional verification and documentation-search dependencies are installed
+through `make setup-formal`, `make setup-browser`, or `make setup-all`.
+
 Inside the terminal UI, enter a normal request or use `/orchestrate <goal>` to
 propose a supervised multi-agent graph. The graph does not run until its exact
 revision hash is approved.

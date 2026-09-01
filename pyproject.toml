@@ -24,8 +24,8 @@ dependencies = [
 
 [project.optional-dependencies]
 formal = [
-  "deal",
-  "crosshair-tool",
+  "deal>=4.24.0",
+  "crosshair-tool>=0.0.80",
 ]
 browser = [
   "kernel",

@@ -30,7 +30,7 @@ class KernelLibraryDocumentationSearchAgent:
             except ImportError as exc:
                 raise RuntimeError(
                     "Kernel documentation search requires the optional `kernel` package. "
-                    "Install requirements-kernel.txt and set KERNEL_API_KEY."
+                    "Run `make setup-browser` and set KERNEL_API_KEY."
                 ) from exc
             api_key = _configured_kernel_api_key()
             if not api_key:
