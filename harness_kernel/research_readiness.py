@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import datetime, timezone
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
@@ -36,10 +37,23 @@ def evaluate_research_readiness(repository_root: Path) -> dict[str, Any]:
     passed = sum(category.passed for category in categories)
     score = round(100 * passed / len(categories))
     blockers = [blocker for category in categories for blocker in category.blockers]
+    optional = {"deepseek_fixture"}
+    projected_passed = sum(category.passed or category.name not in optional for category in categories)
+    commands = {
+        "qwen_local": "make research-fixture-qwen RESEARCH_RUNS=3",
+        "deepseek_20": "make research-agent-benchmark RESEARCH_RUNS=3",
+        "deepseek_fixture": "make research-fixture-deepseek RESEARCH_RUNS=3",
+        "controlled_live_sessions": "make record-live-session",
+    }
     return {
         "schema_version": READINESS_SCHEMA_VERSION,
         "score": score,
         "status": "ready" if score == 100 and not blockers else "blocked",
+        "projected_score": round(100 * projected_passed / len(categories)),
+        "evidence_age_days": _evidence_ages(root, categories),
+        "blocker_commands": {category.name: commands[category.name] for category in categories if not category.passed and category.name in commands},
+        "provider_health": _provider_health(root),
+        "requested_contribution": {"qwen": 50, "api": 50},
         "categories": [asdict(category) for category in categories],
         "blockers": blockers,
     }
@@ -52,6 +66,7 @@ def render_readiness_markdown(result: dict[str, Any], *, svg_name: str) -> str:
         f"![Research readiness visualization]({svg_name})",
         "",
         f"**Authoritative result: {result['score']}% · {result['status']}**",
+        f"**Projected after required live gates: {result.get('projected_score', result['score'])}%**",
         "",
         "| Gate | Status | Evidence |",
         "| --- | --- | --- |",
@@ -65,6 +80,9 @@ def render_readiness_markdown(result: dict[str, Any], *, svg_name: str) -> str:
     lines.extend(f"- {blocker}" for blocker in result["blockers"])
     if not result["blockers"]:
         lines.append("- None.")
+    if result.get("blocker_commands"):
+        lines.extend(["", "## Exact commands", ""])
+        lines.extend(f"- `{name}`: `{command}`" for name, command in result["blocker_commands"].items())
     lines.append("")
     return "\n".join(lines)
 
@@ -240,6 +258,32 @@ def _safe_int(value: Any) -> int:
         return int(value)
     except (TypeError, ValueError):
         return 0
+
+
+def _evidence_ages(root: Path, categories: list[ReadinessCategory]) -> dict[str, int | None]:
+    now = datetime.now(timezone.utc).timestamp()
+    ages: dict[str, int | None] = {}
+    for category in categories:
+        timestamps = []
+        for relative in category.evidence:
+            try:
+                timestamps.append((root / relative).stat().st_mtime)
+            except OSError:
+                continue
+        ages[category.name] = round((now - max(timestamps)) / 86400) if timestamps else None
+    return ages
+
+
+def _provider_health(root: Path) -> dict[str, dict[str, Any]]:
+    files = {
+        "qwen": "fixture-qwen-1.5b-repeated-2026-08-16.json",
+        "deepseek_20": "deepseek-20-health-gated-2026-08-17.json",
+        "deepseek_fixture": "fixture-deepseek-repeated-2026-08-16.json",
+    }
+    return {
+        name: dict(_load_json(root / "docs/results/raw" / filename).get("health") or {})
+        for name, filename in files.items()
+    }
 
 
 def _xml(value: str) -> str:

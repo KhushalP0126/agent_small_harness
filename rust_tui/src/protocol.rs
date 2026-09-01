@@ -67,10 +67,74 @@ pub enum HarnessCommand {
         limit: Option<u32>,
     },
     ResearchReadiness,
+    OpenSettings,
+    SaveProviderSettings {
+        provider: String,
+        endpoint: String,
+        model: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        credential: Option<String>,
+        cost_cap_usd: f64,
+        local_development_confirmed: bool,
+    },
+    TestProviderConnection,
+    ClearProviderCredential {
+        provider: String,
+    },
+    SetContributionSplit {
+        qwen: u8,
+        api: u8,
+        save_default: bool,
+    },
+    CostCapApproval {
+        approved: bool,
+    },
+    SetPermissionMode {
+        mode: String,
+    },
+    ClearContext,
+    CompactContext {
+        instructions: String,
+    },
+    ContextStatus,
+    ListCheckpoints,
+    Rewind {
+        checkpoint_id: String,
+        scope: String,
+    },
+    BranchCheckpoint {
+        checkpoint_id: String,
+    },
+    ExtensionsStatus,
+    McpStatus,
     RepairSessionAction {
         run_id: String,
         entrypoint: String,
         action: String,
+    },
+    Orchestrate {
+        goal: String,
+    },
+    ApproveGraph {
+        session_id: String,
+        revision_hash: String,
+    },
+    InspectOrchestration {
+        #[serde(default)]
+        session_id: String,
+    },
+    OrchestrationAction {
+        #[serde(default)]
+        session_id: String,
+        action: String,
+        #[serde(default)]
+        node_id: String,
+        #[serde(default)]
+        provider: String,
+    },
+    ReplayOrchestration {
+        #[serde(default)]
+        session_id: String,
     },
 }
 
@@ -341,6 +405,75 @@ pub enum HarnessEvent {
         #[serde(default)]
         blockers: Vec<String>,
     },
+    SettingsState {
+        provider: String,
+        endpoint_hostname: String,
+        endpoint: String,
+        model: String,
+        configured: bool,
+        last_four: String,
+        fingerprint_prefix: String,
+        cost_cap_usd: f64,
+        #[serde(default)]
+        local_development_confirmed: bool,
+    },
+    ProviderConnectionResult {
+        ok: bool,
+        message: String,
+    },
+    ContributionState {
+        qwen: u8,
+        api: u8,
+        remaining_api_budget: f64,
+        #[serde(default)]
+        telemetry: BTreeMap<String, serde_json::Value>,
+    },
+    CostCapApproval {
+        approved: bool,
+        remaining_api_budget: f64,
+    },
+    PermissionModeState {
+        mode: String,
+    },
+    ContextState {
+        summary: String,
+        message_count: u32,
+        #[serde(default)]
+        checkpoint_ids: Vec<String>,
+        #[serde(default)]
+        permission_mode: String,
+        #[serde(default)]
+        contribution: BTreeMap<String, serde_json::Value>,
+        #[serde(default)]
+        remaining_api_budget: f64,
+        #[serde(default)]
+        cleared: bool,
+    },
+    CheckpointCreated {
+        checkpoint_id: String,
+        #[serde(default)]
+        parent_id: String,
+        #[serde(default)]
+        changed_paths: Vec<String>,
+    },
+    CheckpointList {
+        #[serde(default)]
+        checkpoints: Vec<BTreeMap<String, serde_json::Value>>,
+    },
+    RewindResult {
+        ok: bool,
+        checkpoint_id: String,
+        message: String,
+    },
+    SessionBranched {
+        parent_session_id: String,
+        session_id: String,
+        checkpoint_id: String,
+    },
+    ExtensionsState {
+        #[serde(default)]
+        extensions: Vec<BTreeMap<String, serde_json::Value>>,
+    },
     HistoryList {
         runs: Vec<RunSummary>,
     },
@@ -393,6 +526,21 @@ pub enum HarnessEvent {
         path: String,
         passed: bool,
         findings: Vec<CheckFinding>,
+    },
+    GraphProposal {
+        session_id: String,
+        goal: String,
+        revision: u32,
+        revision_hash: String,
+        graph: serde_json::Value,
+    },
+    OrchestrationState {
+        state: serde_json::Value,
+    },
+    OrchestrationReplay {
+        session_id: String,
+        external_actions: bool,
+        events: Vec<serde_json::Value>,
     },
     ProtocolError {
         line: String,
@@ -654,6 +802,21 @@ mod tests {
                     details: "invalid syntax".into(),
                 }],
             },
+            HarnessEvent::GraphProposal {
+                session_id: "orch-1".into(),
+                goal: "build parser".into(),
+                revision: 1,
+                revision_hash: "abc".into(),
+                graph: serde_json::json!({"nodes": []}),
+            },
+            HarnessEvent::OrchestrationState {
+                state: serde_json::json!({"status": "running"}),
+            },
+            HarnessEvent::OrchestrationReplay {
+                session_id: "orch-1".into(),
+                external_actions: false,
+                events: vec![serde_json::json!({"sequence": 1})],
+            },
             HarnessEvent::ProtocolError {
                 line: "{broken".into(),
                 error: "expected value".into(),
@@ -729,11 +892,53 @@ mod tests {
                 limit: None,
             },
             HarnessCommand::ResearchReadiness,
+            HarnessCommand::OpenSettings,
+            HarnessCommand::SaveProviderSettings {
+                provider: "deepseek".into(),
+                endpoint: "https://api.deepseek.com".into(),
+                model: "deepseek-chat".into(),
+                credential: Some("private-channel-only".into()),
+                cost_cap_usd: 1.0,
+                local_development_confirmed: false,
+            },
+            HarnessCommand::TestProviderConnection,
+            HarnessCommand::ClearProviderCredential {
+                provider: "deepseek".into(),
+            },
+            HarnessCommand::SetContributionSplit {
+                qwen: 50,
+                api: 50,
+                save_default: false,
+            },
+            HarnessCommand::CostCapApproval { approved: false },
+            HarnessCommand::SetPermissionMode {
+                mode: "plan".into(),
+            },
+            HarnessCommand::ClearContext,
+            HarnessCommand::CompactContext {
+                instructions: "keep diffs".into(),
+            },
+            HarnessCommand::ContextStatus,
+            HarnessCommand::ListCheckpoints,
+            HarnessCommand::Rewind {
+                checkpoint_id: "cp-123".into(),
+                scope: "both".into(),
+            },
+            HarnessCommand::BranchCheckpoint {
+                checkpoint_id: "cp-123".into(),
+            },
+            HarnessCommand::ExtensionsStatus,
+            HarnessCommand::McpStatus,
             HarnessCommand::RepairSessionAction {
                 run_id: "run-123".into(),
                 entrypoint: "coding_capability".into(),
                 action: "resume".into(),
             },
+            HarnessCommand::Orchestrate { goal: "build parser".into() },
+            HarnessCommand::ApproveGraph { session_id: "orch-1".into(), revision_hash: "abc".into() },
+            HarnessCommand::InspectOrchestration { session_id: "orch-1".into() },
+            HarnessCommand::OrchestrationAction { session_id: "orch-1".into(), action: "retry".into(), node_id: "a".into(), provider: "api".into() },
+            HarnessCommand::ReplayOrchestration { session_id: "orch-1".into() },
         ];
         for command in commands {
             let encoded = serde_json::to_string(&command).unwrap();

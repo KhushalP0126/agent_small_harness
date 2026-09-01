@@ -9,7 +9,8 @@ from backends.architect_client import CONTRACT_PROFILE, REPAIR_PROFILE, Architec
 from validation.policy import DEFAULT_POLICY
 
 
-DEFAULT_CONFIG_PATH = Path("config.yaml")
+ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_CONFIG_PATH = ROOT / "config.yaml"
 
 
 class ConfigError(ValueError):

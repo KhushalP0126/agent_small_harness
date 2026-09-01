@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 3.16)
+project(fixture_c C)
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -Werror")
+enable_testing()
+add_executable(fixture_c src/main.c)
+add_test(NAME fixture_c COMMAND fixture_c)

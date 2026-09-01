@@ -1013,3 +1013,15 @@ run ends as `manual_review_required`. These gates organize evidence for a human
 reviewer; they do not make deployment, merge, or product-acceptance decisions on
 the reviewer's behalf. Manual review is a normal terminal outcome, not a harness
 failure.
+The native `/settings` modal edits provider, endpoint, model, masked credential,
+API cost cap, deterministic Qwen/API contribution, and explicit localhost
+confirmation. Use `Tab`/`Shift-Tab` between fields, hold `F2` to reveal the
+credential, and use `Ctrl-S`, `Ctrl-T`, or `Ctrl-X` to save, test, or clear it.
+Credentials are stored in macOS Keychain, Linux Secret Service, or session
+memory; they are never written to the settings file.
+
+Session controls include `/mode`, `/clear`, `/compact`, `/context`,
+`/checkpoints`, `/rewind`, `/branch`, `/extensions`, and `/mcp`. Every approved
+edit creates a content checkpoint before mutation. Rewind never changes Git
+history, extension manifests execute through bounded typed subprocess tools,
+and editing subagents use isolated temporary workspaces with stale-diff checks.

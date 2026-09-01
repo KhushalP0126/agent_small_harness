@@ -19,6 +19,8 @@ import sys
 import tempfile
 import time
 import threading
+import httpx
+import uuid
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, TextIO
@@ -28,6 +30,7 @@ from agents.artifact_manager import ArtifactManager
 from agents.repo_map_agent import RepoMapAgent
 from agents.tool_calling_agent import ToolCallRecord, ToolCallingAgent
 from backends.architect_client import (
+    DEFAULT_ARCHITECT_API_BASE_URL,
     DEFAULT_ARCHITECT_MODEL,
     ArchitectApiClient,
     ArchitectConfig,
@@ -40,6 +43,11 @@ from backends.ollama_client import (
 from engines.compilation_engine import CompilationEngine
 from harness_kernel.compute_shield import ShieldTaskTokens, compute_shield_metrics
 from harness_kernel.profiling import ProfileResult
+from harness_kernel.contribution import ApiCostGuard, ContributionSplit, ContributionTelemetry, WeightedSchedule
+from harness_kernel.provider_settings import (
+    Provider, ProviderSettings, SessionCredentialStore, credential_metadata,
+    default_credential_store, resolve_credential,
+)
 from harness_kernel.research_readiness import evaluate_research_readiness
 from harness_kernel.event_stream import EVENT_FD_ENV
 from harness_kernel.tool_handlers import (
@@ -54,10 +62,17 @@ from harness_kernel.tool_handlers import (
     apply_reviewed_search_replace,
     build_default_tool_registry,
 )
+from harness_kernel.tool_paths import resolve_within_root
+from harness_kernel.checkpoints import CheckpointStore
+from harness_kernel.extensions import ExtensionManifest, register_extension_tools
+from harness_kernel.governance import PermissionEvaluator, PermissionMode
+from harness_kernel.language_adapters import detect_project
+from harness_kernel.orchestration_store import OrchestrationStore
+from harness_kernel.task_graph import ProviderPolicy, TaskGraph, TaskNode
 from TUI.repo_renderer import render_repo_architecture
 
 
-PROTOCOL_VERSION = 5
+PROTOCOL_VERSION = 7
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_MEMORY_PATH = REPO_ROOT / ".tui_memory.json"
 MAX_CHAT_MESSAGES = 24
@@ -77,8 +92,8 @@ Return JSON only, with exactly this shape:
 Ground every claim in the supplied findings; use empty lists or an empty string when inconclusive."""
 COMPACTION_SYSTEM_PROMPT = """You are compacting a coding-agent conversation before its context window fills.
 Return JSON only, with exactly this shape:
-{"goal":"...","approach":"...","done":["..."],"current_blocker":"...","key_facts":["..."]}
-Preserve concrete decisions, completed work, constraints, and file paths. Use empty lists or an empty string where needed."""
+{"goal":"...","approach":"...","done":["..."],"current_blocker":"...","key_facts":["..."],"active_diffs":["..."],"contribution_state":"...","cost_state":"...","checkpoint_ids":["..."]}
+Preserve concrete decisions, completed work, constraints, file paths, active diffs, provider contribution, API cost state, and checkpoints. Use empty lists or an empty string where needed."""
 QUESTIONNAIRE_SYSTEM_PROMPT = """You are an autonomous planning worker and software architect.
 The user has explicitly asked to plan, build, create, design, implement, or change software. Do not write code and do not claim to execute anything. Return JSON only in this shape:
 {"kind":"questionnaire","message":"short introduction","questions":[{"question_text":"...","options":["...","..."]}]}
@@ -164,6 +179,7 @@ class Bridge:
         architect_client: ArchitectApiClient | None = None,
         tool_generate_text: Any = None,
         tool_repository_root: Path | str | None = None,
+        credential_store: Any = None,
     ) -> None:
         self.writer = writer or EventWriter()
         self.tool_repository_root = Path(tool_repository_root or REPO_ROOT).resolve()
@@ -178,7 +194,9 @@ class Bridge:
             if memory_path is not None
             else self.tool_repository_root / ".tui_memory.json"
         )
+        self.settings_path = self.memory_path.with_name(".tui_settings.json")
         self._architect_client = architect_client
+        self._architect_client_injected = architect_client is not None
         self._tool_generate_text = tool_generate_text
         self._pending_tool_diff: (
             ApplySearchReplaceResponse | CreateFileResponse | MoveFileResponse | None
@@ -197,6 +215,36 @@ class Bridge:
         self._assistant_busy = False
         self._process: subprocess.Popen[str] | None = None
         self._lock = threading.Lock()
+        self._credential_store = credential_store or default_credential_store()
+        self._session_credentials = SessionCredentialStore()
+        saved_settings = self._load_settings_payload().get("provider", {})
+        try:
+            self._provider_settings = ProviderSettings(
+                Provider(str(saved_settings["name"])), str(saved_settings["endpoint"]),
+                str(saved_settings["model"]), float(saved_settings.get("cost_cap_usd", 1.0)),
+                bool(saved_settings.get("local_development_confirmed")),
+            )
+            self._provider_settings.validate()
+            self._provider_settings_explicit = True
+        except (KeyError, TypeError, ValueError):
+            self._provider_settings = ProviderSettings(
+                Provider.DEEPSEEK, DEFAULT_ARCHITECT_API_BASE_URL, DEFAULT_ARCHITECT_MODEL
+            )
+            self._provider_settings_explicit = False
+        self._contribution_split = self._load_contribution_default()
+        self._contribution = ContributionTelemetry(self._contribution_split)
+        self._schedule = WeightedSchedule(self._contribution_split, f"tui-{os.getpid()}")
+        self._cost_guard = ApiCostGuard(self._provider_settings.cost_cap_usd)
+        self._api_overage_approved = False
+        self._permission_evaluator = PermissionEvaluator()
+        self._session_id = f"tui-{uuid.uuid4().hex[:12]}"
+        self._checkpoint_store = CheckpointStore(
+            self.tool_repository_root, self.artifact_root.parent / "tui_checkpoints"
+        )
+        self._checkpoint_parent: str | None = None
+        self._checkpoint_conversations: dict[str, list[dict[str, str]]] = {}
+        self._orchestration_store = OrchestrationStore(self.artifact_root.parent / "orchestrations")
+        self._active_orchestration_id: str | None = None
 
     def emit_startup_status(self) -> None:
         child_env = self._child_environment()
@@ -274,7 +322,7 @@ class Bridge:
         elif kind == "tool_task":
             self.start_tool_task(
                 str(command.get("text") or ""),
-                str(command.get("provider") or "deepseek"),
+                str(command.get("provider") or "auto"),
             )
         elif kind == "apply_tool_diff":
             self.resolve_tool_diff(bool(command.get("approved")))
@@ -309,8 +357,257 @@ class Bridge:
             self.research_readiness()
         elif kind == "repair_session_action":
             self.repair_session_action(command)
+        elif kind == "orchestrate":
+            self.orchestrate(str(command.get("goal") or ""))
+        elif kind == "approve_graph":
+            self.approve_graph(str(command.get("session_id") or ""), str(command.get("revision_hash") or ""))
+        elif kind == "orchestration_action":
+            self.orchestration_action(command)
+        elif kind == "inspect_orchestration":
+            self.inspect_orchestration(str(command.get("session_id") or ""))
+        elif kind == "replay_orchestration":
+            self.replay_orchestration(str(command.get("session_id") or ""))
+        elif kind == "open_settings":
+            self.emit_settings_state()
+        elif kind == "save_provider_settings":
+            self.save_provider_settings(command)
+        elif kind == "test_provider_connection":
+            threading.Thread(target=self.test_provider_connection, daemon=True).start()
+        elif kind == "clear_provider_credential":
+            self.clear_provider_credential(str(command.get("provider") or self._provider_settings.provider.value))
+        elif kind == "set_contribution_split":
+            self.set_contribution_split(command)
+        elif kind == "cost_cap_approval":
+            self._api_overage_approved = bool(command.get("approved"))
+            self.writer.emit("cost_cap_approval", approved=self._api_overage_approved, remaining_api_budget=self._cost_guard.remaining_usd)
+        elif kind == "set_permission_mode":
+            self.set_permission_mode(str(command.get("mode") or "default"))
+        elif kind == "clear_context":
+            self.clear_context()
+        elif kind == "compact_context":
+            self.compact_context(str(command.get("instructions") or ""))
+        elif kind == "context_status":
+            self.emit_context_state()
+        elif kind == "list_checkpoints":
+            self.emit_checkpoint_list()
+        elif kind == "rewind":
+            self.rewind(str(command.get("checkpoint_id") or ""), str(command.get("scope") or "both"))
+        elif kind == "branch_checkpoint":
+            self.branch_checkpoint(str(command.get("checkpoint_id") or ""))
+        elif kind in {"extensions_status", "mcp_status"}:
+            self.emit_extensions_state()
         else:
             self.writer.emit("log", level="error", msg=f"unknown command: {kind}")
+
+    def emit_settings_state(self) -> None:
+        credential, _source = self._resolved_provider_credential(self._provider_settings.provider)
+        metadata = credential_metadata(credential)
+        parsed = urlparse(self._provider_settings.endpoint)
+        self.writer.emit(
+            "settings_state", provider=self._provider_settings.provider.value,
+            endpoint_hostname=parsed.hostname or "", endpoint=self._provider_settings.endpoint,
+            model=self._provider_settings.model, cost_cap_usd=self._cost_guard.cap_usd,
+            local_development_confirmed=self._provider_settings.local_development_confirmed,
+            **metadata,
+        )
+        self.writer.emit(
+            "contribution_state", qwen=self._contribution_split.qwen,
+            api=self._contribution_split.api, remaining_api_budget=self._cost_guard.remaining_usd,
+            telemetry=self._contribution.snapshot(),
+        )
+
+    def save_provider_settings(self, command: dict[str, Any]) -> None:
+        try:
+            provider = Provider(str(command.get("provider") or "deepseek"))
+            settings = ProviderSettings(
+                provider, str(command.get("endpoint") or ""), str(command.get("model") or ""),
+                float(command.get("cost_cap_usd", 1.0)),
+                bool(command.get("local_development_confirmed")),
+            )
+            settings.validate()
+            credential = command.get("credential")
+            if credential is not None:
+                # Consume the private-channel value immediately; no event includes it.
+                value = str(credential)
+                if value:
+                    self._credential_store.set(provider.value, value)
+                del value
+            self._provider_settings = settings
+            self._provider_settings_explicit = True
+            self._cost_guard.cap_usd = settings.cost_cap_usd
+            payload = self._load_settings_payload()
+            payload["provider"] = {
+                "name": settings.provider.value, "endpoint": settings.endpoint,
+                "model": settings.model, "cost_cap_usd": settings.cost_cap_usd,
+                "local_development_confirmed": settings.local_development_confirmed,
+            }
+            self._write_settings_payload(payload)
+            if not self._architect_client_injected:
+                self._architect_client = None
+            self.emit_settings_state()
+        except (ValueError, RuntimeError) as exc:
+            self.writer.emit("provider_connection_result", ok=False, message=str(exc))
+
+    def clear_provider_credential(self, provider: str) -> None:
+        try:
+            self._credential_store.clear(Provider(provider).value)
+            self._session_credentials.clear(provider)
+            self.emit_settings_state()
+        except (ValueError, RuntimeError) as exc:
+            self.writer.emit("provider_connection_result", ok=False, message=str(exc))
+
+    def test_provider_connection(self) -> None:
+        try:
+            credential, _source = self._resolved_provider_credential(self._provider_settings.provider)
+            headers = {"Authorization": f"Bearer {credential}"} if credential else {}
+            probe = _provider_probe_url(self._provider_settings)
+            response = httpx.get(probe, headers=headers, timeout=5.0, follow_redirects=False)
+            if response.status_code in {401, 403}:
+                self.writer.emit("provider_connection_result", ok=False, message="credential rejected")
+            elif response.status_code >= 500:
+                self.writer.emit("provider_connection_result", ok=False, message=f"provider returned HTTP {response.status_code}")
+            else:
+                self.writer.emit("provider_connection_result", ok=True, message="provider endpoint and credential accepted")
+        except (httpx.HTTPError, ValueError):
+            self.writer.emit("provider_connection_result", ok=False, message="provider connection failed")
+
+    def set_contribution_split(self, command: dict[str, Any]) -> None:
+        try:
+            split = ContributionSplit(int(command.get("qwen", 50)), int(command.get("api", 50)))
+        except (TypeError, ValueError) as exc:
+            self.writer.emit("log", level="error", msg=str(exc))
+            return
+        self._contribution_split = split
+        self._contribution = ContributionTelemetry(split)
+        self._schedule = WeightedSchedule(split, f"tui-{os.getpid()}")
+        if bool(command.get("save_default")):
+            payload = self._load_settings_payload()
+            payload["contribution"] = {"qwen": split.qwen, "api": split.api}
+            self._write_settings_payload(payload)
+        self.emit_settings_state()
+
+    def _load_contribution_default(self) -> ContributionSplit:
+        try:
+            payload = self._load_settings_payload()
+            contribution = payload.get("contribution", {})
+            return ContributionSplit(int(contribution["qwen"]), int(contribution["api"]))
+        except (OSError, KeyError, TypeError, ValueError, json.JSONDecodeError):
+            return ContributionSplit()
+
+    def _load_settings_payload(self) -> dict[str, Any]:
+        try:
+            payload = json.loads(self.settings_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {"version": 1}
+        return payload if isinstance(payload, dict) else {"version": 1}
+
+    def _write_settings_payload(self, payload: dict[str, Any]) -> None:
+        payload["version"] = 1
+        self.settings_path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = self.settings_path.with_suffix(".tmp")
+        temporary.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        temporary.replace(self.settings_path)
+
+    def set_permission_mode(self, mode: str) -> None:
+        try:
+            selected = PermissionMode(mode)
+        except ValueError:
+            self.writer.emit("log", level="error", msg=f"unknown permission mode: {mode}")
+            return
+        self._permission_evaluator.mode = selected
+        self.writer.emit("permission_mode_state", mode=selected.value)
+
+    def clear_context(self) -> None:
+        self._chat_history.clear()
+        self.writer.emit("context_state", summary="Context cleared.", message_count=0, checkpoint_ids=[], cleared=True)
+
+    def compact_context(self, instructions: str = "") -> None:
+        if self._compaction_in_progress:
+            self.writer.emit("log", level="warning", msg="context compaction is already running")
+            return
+        self._compaction_in_progress = True
+        self.writer.emit("assistant_status", stage="compacting_context", busy=True)
+        def compact() -> None:
+            try:
+                if instructions.strip():
+                    self._chat_history.append({"role": "user", "content": f"COMPACTION INSTRUCTIONS: {instructions.strip()}"})
+                self._run_compaction()
+                self.emit_context_state()
+            except Exception as exc:  # noqa: BLE001 - background protocol boundary
+                self.writer.emit("chat_error", stage="compacting_context", message=f"{type(exc).__name__}: {exc}")
+            finally:
+                self._compaction_in_progress = False
+                self.writer.emit("assistant_status", stage="compacting_context", busy=False)
+        threading.Thread(target=compact, daemon=True).start()
+
+    def emit_context_state(self) -> None:
+        checkpoints = [item.checkpoint_id for item in self._checkpoint_store.list(self._session_id)]
+        summary = _chat_transcript(self._chat_history[-6:]) or "No active conversation context."
+        self.writer.emit(
+            "context_state", summary=summary[:4000], message_count=len(self._chat_history),
+            checkpoint_ids=checkpoints, permission_mode=self._permission_evaluator.mode.value,
+            contribution=self._contribution.snapshot(), remaining_api_budget=self._cost_guard.remaining_usd,
+        )
+
+    def _create_edit_checkpoint(self, paths: list[str]) -> None:
+        checkpoint = self._checkpoint_store.create(
+            self._session_id, paths, parent_id=self._checkpoint_parent,
+            conversation_summary=_chat_transcript(self._chat_history[-8:]), approval_state="approved",
+        )
+        self._checkpoint_parent = checkpoint.checkpoint_id
+        self._checkpoint_conversations[checkpoint.checkpoint_id] = [dict(item) for item in self._chat_history]
+        self.writer.emit("checkpoint_created", checkpoint_id=checkpoint.checkpoint_id, parent_id=checkpoint.parent_id or "", changed_paths=list(checkpoint.changed_paths))
+
+    def emit_checkpoint_list(self) -> None:
+        self.writer.emit("checkpoint_list", checkpoints=[asdict(item) for item in self._checkpoint_store.list(self._session_id)])
+
+    def rewind(self, checkpoint_id: str, scope: str) -> None:
+        if scope not in {"code", "conversation", "both"}:
+            self.writer.emit("rewind_result", ok=False, checkpoint_id=checkpoint_id, message="invalid rewind scope")
+            return
+        try:
+            target = next(item for item in self._checkpoint_store.list(self._session_id) if item.checkpoint_id == checkpoint_id)
+            if scope in {"code", "both"}:
+                self._create_edit_checkpoint(list(target.changed_paths))
+                self._checkpoint_store.restore(checkpoint_id)
+            if scope in {"conversation", "both"}:
+                history = self._checkpoint_conversations.get(checkpoint_id)
+                self._chat_history = [dict(item) for item in history] if history is not None else [{"role": "assistant", "content": target.conversation_summary}]
+            self.writer.emit("rewind_result", ok=True, checkpoint_id=checkpoint_id, message=f"restored {scope}")
+        except (OSError, ValueError, StopIteration, json.JSONDecodeError) as exc:
+            self.writer.emit("rewind_result", ok=False, checkpoint_id=checkpoint_id, message=f"{type(exc).__name__}: {exc}")
+
+    def branch_checkpoint(self, checkpoint_id: str) -> None:
+        try:
+            child = self._checkpoint_store.branch(checkpoint_id)
+            self.writer.emit("session_branched", parent_session_id=self._session_id, session_id=child, checkpoint_id=checkpoint_id)
+        except (ValueError, StopIteration) as exc:
+            self.writer.emit("rewind_result", ok=False, checkpoint_id=checkpoint_id, message=str(exc))
+
+    def emit_extensions_state(self) -> None:
+        entries = []
+        manifest_root = self.tool_repository_root / ".harness" / "extensions"
+        for path in sorted(manifest_root.glob("*.json")):
+            try:
+                manifest = ExtensionManifest.from_dict(json.loads(path.read_text(encoding="utf-8")))
+                entries.append({"name": manifest.name, "version": manifest.version, "capabilities": sorted(manifest.capabilities), "status": "ready"})
+            except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
+                entries.append({"name": path.stem, "version": "", "capabilities": [], "status": f"invalid: {exc}"})
+        self.writer.emit("extensions_state", extensions=entries)
+
+    def _extension_manifests(self) -> list[ExtensionManifest]:
+        manifests = []
+        for path in sorted((self.tool_repository_root / ".harness" / "extensions").glob("*.json")):
+            try:
+                manifests.append(ExtensionManifest.from_dict(json.loads(path.read_text(encoding="utf-8"))))
+            except (OSError, ValueError, TypeError, json.JSONDecodeError):
+                continue
+        return manifests
+
+    def _tool_registry(self):
+        registry = build_default_tool_registry(repository_root=self.tool_repository_root)
+        register_extension_tools(registry, self._extension_manifests(), self._permission_evaluator)
+        return registry
 
     def start_chat(self, text: str, *, approved: bool = False, already_visible: bool = False) -> None:
         text = text.strip()
@@ -321,21 +618,39 @@ class Bridge:
             self.writer.emit("log", level="warning", msg="DeepSeek is already responding")
             return
         planning_requested = _should_start_planning(text)
-        reason = _action_approval_reason(text)
-        if reason and not approved:
-            self._pending_action_approval = PendingActionApproval(text, reason, "chat")
-            self.writer.emit("chat_message", role="user", content=text)
-            self.writer.emit("action_approval", request=text, reason=reason)
-            return
-        self._chat_history.append({"role": "user", "content": text})
-        self._chat_history = self._chat_history[-MAX_CHAT_MESSAGES:]
-        if not already_visible:
-            self.writer.emit("chat_message", role="user", content=text)
         if planning_requested:
             unavailable = self._planning_unavailable_reason()
             if unavailable:
                 self._emit_planning_unavailable(unavailable)
                 return
+        reason = _action_approval_reason(text)
+        if reason:
+            decision = self._permission_evaluator.evaluate("write", "chat_repository_change")
+            if not decision.allowed and not decision.approval_required:
+                self.writer.emit("chat_error", stage="permission", message=decision.reason)
+                return
+        if reason and not approved:
+            self._pending_action_approval = PendingActionApproval(text, reason, "chat")
+            self.writer.emit("chat_message", role="user", content=text)
+            self.writer.emit("action_approval", request=text, reason=reason)
+            return
+        uses_api = planning_requested or not _is_local_eligible_task(text)
+        if uses_api and not approved and not self._architect_client_injected:
+            decision = self._permission_evaluator.evaluate("network", "provider_api_call")
+            if not decision.allowed:
+                if decision.approval_required:
+                    self._pending_action_approval = PendingActionApproval(
+                        text, "The configured API provider requires a network request.", "chat"
+                    )
+                    self.writer.emit("chat_message", role="user", content=text)
+                    self.writer.emit("action_approval", request=text, reason="The configured API provider requires a network request.")
+                else:
+                    self.writer.emit("chat_error", stage="permission", message=decision.reason)
+                return
+        self._chat_history.append({"role": "user", "content": text})
+        self._chat_history = self._chat_history[-MAX_CHAT_MESSAGES:]
+        if not already_visible:
+            self.writer.emit("chat_message", role="user", content=text)
         remembered = self._preference_from_message(text)
         if remembered:
             added = self._remember_preference(remembered)
@@ -434,6 +749,11 @@ class Bridge:
             self.writer.emit("log", level="warning", msg="an assistant task is already running")
             return
         reason = _action_approval_reason(task)
+        capability = "write" if reason else "read"
+        decision = self._permission_evaluator.evaluate(capability, "repository_tool_task")
+        if not decision.allowed and not decision.approval_required:
+            self.writer.emit("chat_error", stage="permission", message=decision.reason)
+            return
         if reason and not approved:
             self._pending_action_approval = PendingActionApproval(
                 task,
@@ -444,6 +764,18 @@ class Bridge:
             self.writer.emit("chat_message", role="user", content=task)
             self.writer.emit("action_approval", request=task, reason=reason)
             return
+        if provider.strip().lower() in {"deepseek", "auto"} and not approved and not self._architect_client_injected and self._tool_generate_text is None:
+            decision = self._permission_evaluator.evaluate("network", "provider_api_call")
+            if not decision.allowed:
+                if decision.approval_required:
+                    self._pending_action_approval = PendingActionApproval(
+                        task, "The configured API provider requires a network request.", "tool_task", provider
+                    )
+                    self.writer.emit("chat_message", role="user", content=task)
+                    self.writer.emit("action_approval", request=task, reason="The configured API provider requires a network request.")
+                else:
+                    self.writer.emit("chat_error", stage="permission", message=decision.reason)
+                return
         if _should_start_planning(task):
             self.writer.emit(
                 "log",
@@ -453,7 +785,7 @@ class Bridge:
             self.start_chat(task, approved=approved, already_visible=already_visible)
             return
         selected_provider = provider.strip().lower()
-        if selected_provider not in {"qwen", "deepseek"}:
+        if selected_provider not in {"auto", "qwen", "deepseek"}:
             self.writer.emit(
                 "log",
                 level="error",
@@ -535,7 +867,7 @@ class Bridge:
         try:
             run = ToolCallingAgent(
                 self._tool_generator(provider),
-                build_default_tool_registry(repository_root=self.tool_repository_root),
+                self._tool_registry(),
                 max_turns=8,
                 on_tool_result=on_tool_result,
                 allowed_tools=allowed_tools,
@@ -571,6 +903,14 @@ class Bridge:
     def _tool_generator(self, provider: str):
         if self._tool_generate_text is not None:
             return self._tool_generate_text
+        if provider == "auto":
+            return lambda prompt: self._generate_eligible(
+                prompt,
+                system=(
+                    "Return one repository tool-call JSON object only. "
+                    f"Host operating system: {_host_operating_system()}."
+                ),
+            )
         if provider == "deepseek":
             return lambda prompt: self._generate_architect(
                 prompt,
@@ -588,6 +928,24 @@ class Bridge:
                 f"Host operating system: {_host_operating_system()}."
             ),
         )
+
+    def _generate_eligible(self, prompt: str, *, system: str) -> str:
+        scheduled = self._schedule.provider_at(len(self._contribution.scheduled))
+        if scheduled == "qwen":
+            response = self._generate_local(
+                OllamaClient(keep_alive=self._ollama_keep_alive()), prompt, system=system
+            )
+        else:
+            response = self._generate_architect(prompt, system=system)
+        self._contribution.record(scheduled, scheduled)
+        self.writer.emit(
+            "contribution_state",
+            qwen=self._contribution_split.qwen,
+            api=self._contribution_split.api,
+            remaining_api_budget=self._cost_guard.remaining_usd,
+            telemetry=self._contribution.snapshot(),
+        )
+        return response
 
     def _generate_local(self, client: OllamaClient, prompt: str, *, system: str) -> str:
         context_window = self._context_window("local")
@@ -619,12 +977,22 @@ class Bridge:
         system: str,
         history_carrying: bool = False,
     ) -> str:
+        estimated_cost = 0.01
+        if self._cost_guard.decision(estimated_cost, self._api_overage_approved) == "approval_required":
+            self.writer.emit(
+                "cost_cap_approval",
+                approved=False,
+                remaining_api_budget=self._cost_guard.remaining_usd,
+            )
+            raise RuntimeError("API cost cap reached; explicit overage approval is required")
+        self._api_overage_approved = False
         client = self._client()
         response = client.generate(prompt, system=system)
         usage = getattr(client, "last_usage", None)
         prompt_tokens = getattr(usage, "prompt_tokens", 0)
         completion_tokens = getattr(usage, "completion_tokens", 0)
         if isinstance(prompt_tokens, int) and isinstance(completion_tokens, int):
+            self._cost_guard.record(float(getattr(usage, "estimated_cost_usd", 0.0) or 0.0))
             self._emit_context_usage(
                 backend="api",
                 model=str(getattr(usage, "model", DEFAULT_ARCHITECT_MODEL)),
@@ -691,7 +1059,13 @@ class Bridge:
         # because an API-backed conversation has become long.
         response = self._generate_local(
             OllamaClient(keep_alive=self._ollama_keep_alive()),
-            "CONVERSATION:\n" + _chat_transcript(self._chat_history),
+            "\n\n".join([
+                "CONVERSATION:\n" + _chat_transcript(self._chat_history),
+                "ACTIVE DIFFS:\n" + "\n".join(getattr(item, "path", "") for item in self._pending_tool_diffs),
+                "CONTRIBUTION:\n" + json.dumps(self._contribution.snapshot(), sort_keys=True),
+                f"COST: spent=${self._cost_guard.spent_usd:.6f} remaining=${self._cost_guard.remaining_usd:.6f}",
+                "CHECKPOINTS:\n" + "\n".join(item.checkpoint_id for item in self._checkpoint_store.list(self._session_id)),
+            ]),
             system=COMPACTION_SYSTEM_PROMPT,
         ).strip()
         try:
@@ -709,7 +1083,16 @@ class Bridge:
         if proposal is None:
             self.writer.emit("log", level="warning", msg="no tool diff is pending review")
             return
+        decision = self._permission_evaluator.evaluate("write", "apply_reviewed_diff")
+        if approved and not decision.allowed and not decision.approval_required:
+            self.writer.emit("tool_diff_resolved", path=proposal.path, applied=False, message=decision.reason)
+            return
         try:
+            if approved:
+                paths = [proposal.path]
+                if isinstance(proposal, MoveFileResponse):
+                    paths.append(proposal.destination)
+                self._create_edit_checkpoint(paths)
             if isinstance(proposal, CreateFileResponse):
                 result = apply_reviewed_create_file(
                     self.tool_repository_root,
@@ -774,6 +1157,8 @@ class Bridge:
             replacements=getattr(proposal, "replacements", 1),
             pending_count=remaining,
         )
+        if self._permission_evaluator.mode is PermissionMode.ACCEPT_EDITS:
+            self.resolve_tool_diff(True)
 
     def resolve_action_approval(self, approved: bool) -> None:
         pending = self._pending_action_approval
@@ -810,9 +1195,7 @@ class Bridge:
         if not requested:
             self.writer.emit("log", level="warning", msg="/check requires a repository file path")
             return
-        result = build_default_tool_registry(
-            repository_root=self.tool_repository_root,
-        ).dispatch(
+        result = self._tool_registry().dispatch(
             "check_code",
             CheckCodeRequest(root=Path("."), path=requested),
         )
@@ -920,7 +1303,7 @@ class Bridge:
         try:
             run = ToolCallingAgent(
                 lambda prompt: self._generate_architect(prompt, system=CODE_DRAFT_SYSTEM_PROMPT),
-                build_default_tool_registry(repository_root=self.tool_repository_root),
+                self._tool_registry(),
                 max_turns=8,
                 on_tool_result=on_tool_result,
                 allowed_tools=(
@@ -976,7 +1359,7 @@ class Bridge:
 
         ToolCallingAgent(
             self._tool_generator("deepseek"),
-            build_default_tool_registry(repository_root=self.tool_repository_root),
+            self._tool_registry(),
             max_turns=8,
             on_tool_result=on_tool_result,
             allowed_tools=("search_directory", "read_file"),
@@ -1001,8 +1384,14 @@ class Bridge:
 
     def _client(self) -> ArchitectApiClient:
         if self._architect_client is None:
+            credential, _source = self._resolved_provider_credential(self._provider_settings.provider)
             self._architect_client = ArchitectApiClient(
-                ArchitectConfig(env_file=str(self.env_file))
+                ArchitectConfig(
+                    env_file=str(self.env_file),
+                    api_key_override=credential,
+                    base_url_override=self._provider_settings.endpoint,
+                    model_override=self._provider_settings.model,
+                )
             )
         return self._architect_client
 
@@ -1013,7 +1402,7 @@ class Bridge:
         # architect connection (and by the offline TUI protocol tests).
         if self._architect_client is not None:
             return None
-        if self._architect_key_source() == "missing":
+        if self._architect_key_source() == "unconfigured":
             return "Planning needs a DeepSeek API key in .env before it can start."
         return None
 
@@ -1092,14 +1481,12 @@ class Bridge:
         )
 
     def _architect_key_source(self) -> str:
-        for key in ("ARCHITECT_API_KEY", "DEEPSEEK_API_KEY"):
-            if os.environ.get(key, "").strip():
-                return f"environment:{key}"
-        values = _dotenv_values(self.env_file)
-        for key in ("ARCHITECT_API_KEY", "DEEPSEEK_API_KEY"):
-            if values.get(key, "").strip():
-                return f".env:{key}"
-        return "missing"
+        _credential, source = self._resolved_provider_credential(self._provider_settings.provider)
+        if source == "environment":
+            return "environment:DEEPSEEK_API_KEY"
+        if source == "dotenv":
+            return ".env:DEEPSEEK_API_KEY"
+        return source
 
     def _ollama_keep_alive(self) -> str:
         """Read the selected repository's setting, without overriding shell config."""
@@ -1229,7 +1616,24 @@ class Bridge:
         for key, value in _dotenv_values(self.env_file).items():
             if not child_env.get(key, "").strip():
                 child_env[key] = value
+        credential, source = self._resolved_provider_credential(self._provider_settings.provider)
+        if credential and source not in {"environment", "dotenv"}:
+            key = "OPENAI_API_KEY" if self._provider_settings.provider is Provider.OPENAI_COMPATIBLE else "DEEPSEEK_API_KEY"
+            child_env[key] = credential
+            child_env["ARCHITECT_API_KEY"] = credential
+        if self._provider_settings_explicit and self._provider_settings.provider is not Provider.QWEN:
+            child_env["ARCHITECT_API_BASE_URL"] = self._provider_settings.endpoint
+            child_env["ARCHITECT_MODEL"] = self._provider_settings.model
         return child_env
+
+    def _resolved_provider_credential(self, provider: Provider) -> tuple[str | None, str]:
+        return resolve_credential(
+            provider,
+            environment=os.environ,
+            store=self._credential_store,
+            dotenv=_dotenv_values(self.env_file),
+            session=self._session_credentials,
+        )
 
     def cancel(self) -> None:
         with self._lock:
@@ -1240,7 +1644,7 @@ class Bridge:
 
     def repo_map(self, root: str, focus: str, mode: str = "diagram") -> None:
         try:
-            root_path = Path(root).resolve()
+            root_path = resolve_within_root(self.tool_repository_root, root)
             graph = RepoMapAgent().map_repo(root_path)
         except Exception as exc:  # noqa: BLE001 - protocol boundary
             self.writer.emit(
@@ -1428,6 +1832,78 @@ class Bridge:
             blockers=result["blockers"],
         )
 
+    def orchestrate(self, goal: str) -> None:
+        if not goal.strip():
+            self.writer.emit("log", level="warning", msg="/orchestrate requires a goal")
+            return
+        profile = detect_project(self.tool_repository_root)
+        language = profile.language if profile else "python"
+        weighted = tuple((name, weight) for name, weight in (
+            ("qwen", self._contribution_split.qwen), ("api", self._contribution_split.api)
+        ) if weight > 0)
+        policy = ProviderPolicy(tuple(name for name, _ in weighted), tuple(weight for _, weight in weighted))
+        graph = TaskGraph((
+            TaskNode("research", "researcher", language, capabilities=("read",), provider_policy=policy,
+                     inputs={"goal": goal}),
+            TaskNode("implement", "implementer", language, dependencies=("research",),
+                     capabilities=("read", "write", "command"), provider_policy=policy,
+                     inputs={"goal": goal}),
+            TaskNode("validate", "validator", language, dependencies=("implement",),
+                     capabilities=("read", "command"), provider_policy=policy,
+                     inputs={"goal": goal}),
+        ))
+        state = self._orchestration_store.create(graph, goal=goal)
+        self._active_orchestration_id = state["session_id"]
+        self.writer.emit("graph_proposal", session_id=state["session_id"], goal=goal,
+                         revision=state["revision"]["revision"],
+                         revision_hash=state["revision"]["revision_hash"],
+                         graph=state["revision"]["graph"])
+
+    def approve_graph(self, session_id: str, revision_hash: str) -> None:
+        try:
+            state = self._orchestration_store.approve(session_id, revision_hash)
+        except (KeyError, ValueError) as exc:
+            self.writer.emit("log", level="error", msg=f"graph approval failed: {exc}")
+            return
+        self._active_orchestration_id = session_id
+        self.writer.emit("orchestration_state", state=state)
+
+    def orchestration_action(self, command: dict[str, Any]) -> None:
+        session_id = str(command.get("session_id") or self._active_orchestration_id or "")
+        action = str(command.get("action") or "inspect")
+        try:
+            if action in {"start", "resume"}:
+                state = self._orchestration_store.transition(session_id, "running")
+            elif action == "pause":
+                state = self._orchestration_store.transition(session_id, "paused")
+            elif action == "cancel":
+                state = self._orchestration_store.transition(session_id, "cancelled")
+            elif action == "retry":
+                provider = command.get("provider")
+                state = self._orchestration_store.retry(session_id, str(command.get("node_id") or ""),
+                                                        str(provider) if provider else None)
+            elif action in {"break", "clear_break", "step"}:
+                state = self._orchestration_store.debug_control(
+                    session_id, action, str(command.get("node_id") or "")
+                )
+            else:
+                state = self._orchestration_store.get(session_id)
+            self.writer.emit("orchestration_state", state=state)
+        except (KeyError, ValueError, PermissionError) as exc:
+            self.writer.emit("log", level="error", msg=f"orchestration action failed: {exc}")
+
+    def inspect_orchestration(self, session_id: str) -> None:
+        self.orchestration_action({"session_id": session_id or self._active_orchestration_id, "action": "inspect"})
+
+    def replay_orchestration(self, session_id: str) -> None:
+        session_id = session_id or self._active_orchestration_id or ""
+        try:
+            events = [asdict(event) for event in self._orchestration_store.journal(session_id).replay()]
+        except (KeyError, OSError, ValueError) as exc:
+            self.writer.emit("log", level="error", msg=f"orchestration replay failed: {exc}")
+            return
+        self.writer.emit("orchestration_replay", session_id=session_id, external_actions=False, events=events)
+
     def repair_session_action(self, command: dict[str, Any]) -> None:
         action = str(command.get("action") or "")
         run_id = str(command.get("run_id") or "")
@@ -1576,6 +2052,17 @@ def _dotenv_values(path: Path) -> dict[str, str]:
             value = value[1:-1]
         values[key] = value
     return values
+
+
+def _provider_probe_url(settings: ProviderSettings) -> str:
+    endpoint = settings.endpoint.rstrip("/")
+    if settings.provider is Provider.QWEN:
+        return endpoint if endpoint.endswith("/api/tags") else f"{endpoint}/api/tags"
+    for suffix in ("/chat/completions", "/responses"):
+        if endpoint.endswith(suffix):
+            endpoint = endpoint[: -len(suffix)]
+            break
+    return endpoint if endpoint.endswith("/models") else f"{endpoint}/models"
 
 
 def _is_filesystem_mutation_request(message: str) -> bool:
@@ -1848,6 +2335,12 @@ def _render_compaction_summary(response: str) -> str:
         + (" ".join(str(payload.get("current_blocker") or "").split()) or "(none)"),
         "Key facts:",
         *(f"  - {item}" for item in _sheet_list(payload.get("key_facts"), "key_facts", allow_empty=True)),
+        "Active diffs:",
+        *(f"  - {item}" for item in _sheet_list(payload.get("active_diffs", []), "active_diffs", allow_empty=True)),
+        "Contribution: " + (" ".join(str(payload.get("contribution_state") or "").split()) or "(unchanged)"),
+        "Cost: " + (" ".join(str(payload.get("cost_state") or "").split()) or "(unchanged)"),
+        "Checkpoints:",
+        *(f"  - {item}" for item in _sheet_list(payload.get("checkpoint_ids", []), "checkpoint_ids", allow_empty=True)),
     ]
     return "\n".join(lines)
 

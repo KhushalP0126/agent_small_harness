@@ -27,9 +27,9 @@ from scripts.run_coding_capability import (
 )
 
 
-DEFAULT_TASKS = Path("tests/worker_limit/tasks.json")
-DEFAULT_DECOMPOSITIONS = Path("tests/worker_limit/decompositions.json")
-DEFAULT_ARTIFACT_ROOT = Path("artifacts/runs")
+DEFAULT_TASKS = ROOT / "tests/worker_limit/tasks.json"
+DEFAULT_DECOMPOSITIONS = ROOT / "tests/worker_limit/decompositions.json"
+DEFAULT_ARTIFACT_ROOT = ROOT / "artifacts/runs"
 
 
 def _keep_first_break(

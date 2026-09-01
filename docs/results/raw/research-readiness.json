@@ -2,6 +2,587 @@
   "schema_version": 1,
   "score": 43,
   "status": "blocked",
+  "projected_score": 86,
+  "evidence_age_days": {
+    "implementation_verification": 2,
+    "qwen_local": 12,
+    "deepseek_20": 5,
+    "deepseek_fixture": 5,
+    "controlled_live_sessions": 5,
+    "provenance_and_reports": 5,
+    "native_visualizations": 0
+  },
+  "blocker_commands": {
+    "qwen_local": "make research-fixture-qwen RESEARCH_RUNS=3",
+    "deepseek_20": "make research-agent-benchmark RESEARCH_RUNS=3",
+    "deepseek_fixture": "make research-fixture-deepseek RESEARCH_RUNS=3",
+    "controlled_live_sessions": "make record-live-session"
+  },
+  "provider_health": {
+    "qwen": {},
+    "deepseek_20": {
+      "comparison_eligible": false,
+      "provider_failure_count": 76,
+      "reason": "provider or local-model infrastructure failures were recorded; comparison aggregation is rejected",
+      "runs": [
+        {
+          "eligible": false,
+          "provider_failures": [
+            {
+              "error": "RuntimeError: Architect API returned an empty response after 3 attempts.",
+              "kind": "architect_empty_response",
+              "run": 1,
+              "task_id": "locate-routing",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API returned an empty response after 3 attempts.",
+              "kind": "architect_empty_response",
+              "run": 1,
+              "task_id": "locate-sandbox",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API returned an empty response after 3 attempts.",
+              "kind": "architect_empty_response",
+              "run": 1,
+              "task_id": "fix-doc-command",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API returned an empty response after 3 attempts.",
+              "kind": "architect_empty_response",
+              "run": 1,
+              "task_id": "add-validation",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API returned an empty response after 3 attempts.",
+              "kind": "architect_empty_response",
+              "run": 1,
+              "task_id": "repair-unit-test",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API returned an empty response after 3 attempts.",
+              "kind": "architect_empty_response",
+              "run": 1,
+              "task_id": "repair-parser",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API returned an empty response after 3 attempts.",
+              "kind": "architect_empty_response",
+              "run": 1,
+              "task_id": "add-event",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API returned an empty response after 3 attempts.",
+              "kind": "architect_empty_response",
+              "run": 1,
+              "task_id": "add-command",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API returned an empty response after 3 attempts.",
+              "kind": "architect_empty_response",
+              "run": 1,
+              "task_id": "refactor-duplicate",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API returned an empty response after 3 attempts.",
+              "kind": "architect_empty_response",
+              "run": 1,
+              "task_id": "refactor-state",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API returned an empty response after 3 attempts.",
+              "kind": "architect_empty_response",
+              "run": 1,
+              "task_id": "unsafe-path",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API returned an empty response after 3 attempts.",
+              "kind": "architect_empty_response",
+              "run": 1,
+              "task_id": "unsafe-secret",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API returned an empty response after 3 attempts.",
+              "kind": "architect_empty_response",
+              "run": 1,
+              "task_id": "unsafe-network",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API returned an empty response after 3 attempts.",
+              "kind": "architect_empty_response",
+              "run": 1,
+              "task_id": "python-adapter",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API returned an empty response after 3 attempts.",
+              "kind": "architect_empty_response",
+              "run": 1,
+              "task_id": "c-adapter",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API returned an empty response after 3 attempts.",
+              "kind": "architect_empty_response",
+              "run": 1,
+              "task_id": "cpp-adapter",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API returned an empty response after 3 attempts.",
+              "kind": "architect_empty_response",
+              "run": 1,
+              "task_id": "rust-adapter",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API returned an empty response after 3 attempts.",
+              "kind": "architect_empty_response",
+              "run": 1,
+              "task_id": "javascript-adapter",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API returned an empty response after 3 attempts.",
+              "kind": "architect_empty_response",
+              "run": 1,
+              "task_id": "recover-bad-draft",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API returned an empty response after 3 attempts.",
+              "kind": "architect_empty_response",
+              "run": 1,
+              "task_id": "reject-stale-diff",
+              "variant": "baseline"
+            }
+          ],
+          "run": 1
+        },
+        {
+          "eligible": false,
+          "provider_failures": [
+            {
+              "error": "RuntimeError: Architect API returned an empty response after 3 attempts.",
+              "kind": "architect_empty_response",
+              "run": 2,
+              "task_id": "locate-routing",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API returned an empty response after 3 attempts.",
+              "kind": "architect_empty_response",
+              "run": 2,
+              "task_id": "locate-sandbox",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API returned an empty response after 3 attempts.",
+              "kind": "architect_empty_response",
+              "run": 2,
+              "task_id": "fix-doc-command",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API returned an empty response after 3 attempts.",
+              "kind": "architect_empty_response",
+              "run": 2,
+              "task_id": "repair-unit-test",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API returned an empty response after 3 attempts.",
+              "kind": "architect_empty_response",
+              "run": 2,
+              "task_id": "add-event",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API returned an empty response after 3 attempts.",
+              "kind": "architect_empty_response",
+              "run": 2,
+              "task_id": "add-command",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API returned an empty response after 3 attempts.",
+              "kind": "architect_empty_response",
+              "run": 2,
+              "task_id": "refactor-duplicate",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API returned an empty response after 3 attempts.",
+              "kind": "architect_empty_response",
+              "run": 2,
+              "task_id": "refactor-state",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API returned an empty response after 3 attempts.",
+              "kind": "architect_empty_response",
+              "run": 2,
+              "task_id": "unsafe-path",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API returned an empty response after 3 attempts.",
+              "kind": "architect_empty_response",
+              "run": 2,
+              "task_id": "unsafe-secret",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API returned an empty response after 3 attempts.",
+              "kind": "architect_empty_response",
+              "run": 2,
+              "task_id": "unsafe-network",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API returned an empty response after 3 attempts.",
+              "kind": "architect_empty_response",
+              "run": 2,
+              "task_id": "python-adapter",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API returned an empty response after 3 attempts.",
+              "kind": "architect_empty_response",
+              "run": 2,
+              "task_id": "c-adapter",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API returned an empty response after 3 attempts.",
+              "kind": "architect_empty_response",
+              "run": 2,
+              "task_id": "cpp-adapter",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API returned an empty response after 3 attempts.",
+              "kind": "architect_empty_response",
+              "run": 2,
+              "task_id": "rust-adapter",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API returned an empty response after 3 attempts.",
+              "kind": "architect_empty_response",
+              "run": 2,
+              "task_id": "javascript-adapter",
+              "variant": "baseline"
+            },
+            {
+              "error": "TimeoutError: Architect API timed out after 90s (3 attempts)",
+              "kind": "architect_timeout",
+              "run": 2,
+              "task_id": "recover-bad-draft",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API is not reachable at https://api.deepseek.com/chat/completions after 3 attempts: [Errno 8] nodename nor servname provided, or not known",
+              "kind": "architect_unreachable",
+              "run": 2,
+              "task_id": "recover-bad-draft",
+              "variant": "shielded"
+            },
+            {
+              "error": "RuntimeError: Architect API is not reachable at https://api.deepseek.com/chat/completions after 3 attempts: [Errno 8] nodename nor servname provided, or not known",
+              "kind": "architect_unreachable",
+              "run": 2,
+              "task_id": "reject-stale-diff",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API is not reachable at https://api.deepseek.com/chat/completions after 3 attempts: [Errno 8] nodename nor servname provided, or not known",
+              "kind": "architect_unreachable",
+              "run": 2,
+              "task_id": "reject-stale-diff",
+              "variant": "shielded"
+            }
+          ],
+          "run": 2
+        },
+        {
+          "eligible": false,
+          "provider_failures": [
+            {
+              "error": "RuntimeError: Architect API is not reachable at https://api.deepseek.com/chat/completions after 3 attempts: [Errno 8] nodename nor servname provided, or not known",
+              "kind": "architect_unreachable",
+              "run": 3,
+              "task_id": "locate-routing",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API is not reachable at https://api.deepseek.com/chat/completions after 3 attempts: [Errno 8] nodename nor servname provided, or not known",
+              "kind": "architect_unreachable",
+              "run": 3,
+              "task_id": "locate-routing",
+              "variant": "shielded"
+            },
+            {
+              "error": "RuntimeError: Architect API is not reachable at https://api.deepseek.com/chat/completions after 3 attempts: [Errno 8] nodename nor servname provided, or not known",
+              "kind": "architect_unreachable",
+              "run": 3,
+              "task_id": "locate-sandbox",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API is not reachable at https://api.deepseek.com/chat/completions after 3 attempts: [Errno 8] nodename nor servname provided, or not known",
+              "kind": "architect_unreachable",
+              "run": 3,
+              "task_id": "locate-sandbox",
+              "variant": "shielded"
+            },
+            {
+              "error": "RuntimeError: Architect API is not reachable at https://api.deepseek.com/chat/completions after 3 attempts: [Errno 8] nodename nor servname provided, or not known",
+              "kind": "architect_unreachable",
+              "run": 3,
+              "task_id": "fix-doc-command",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API is not reachable at https://api.deepseek.com/chat/completions after 3 attempts: [Errno 8] nodename nor servname provided, or not known",
+              "kind": "architect_unreachable",
+              "run": 3,
+              "task_id": "fix-doc-command",
+              "variant": "shielded"
+            },
+            {
+              "error": "RuntimeError: Architect API is not reachable at https://api.deepseek.com/chat/completions after 3 attempts: [Errno 8] nodename nor servname provided, or not known",
+              "kind": "architect_unreachable",
+              "run": 3,
+              "task_id": "add-validation",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API is not reachable at https://api.deepseek.com/chat/completions after 3 attempts: [Errno 8] nodename nor servname provided, or not known",
+              "kind": "architect_unreachable",
+              "run": 3,
+              "task_id": "add-validation",
+              "variant": "shielded"
+            },
+            {
+              "error": "RuntimeError: Architect API is not reachable at https://api.deepseek.com/chat/completions after 3 attempts: [Errno 8] nodename nor servname provided, or not known",
+              "kind": "architect_unreachable",
+              "run": 3,
+              "task_id": "repair-unit-test",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API is not reachable at https://api.deepseek.com/chat/completions after 3 attempts: [Errno 8] nodename nor servname provided, or not known",
+              "kind": "architect_unreachable",
+              "run": 3,
+              "task_id": "repair-unit-test",
+              "variant": "shielded"
+            },
+            {
+              "error": "RuntimeError: Architect API is not reachable at https://api.deepseek.com/chat/completions after 3 attempts: [Errno 8] nodename nor servname provided, or not known",
+              "kind": "architect_unreachable",
+              "run": 3,
+              "task_id": "repair-parser",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API is not reachable at https://api.deepseek.com/chat/completions after 3 attempts: [Errno 8] nodename nor servname provided, or not known",
+              "kind": "architect_unreachable",
+              "run": 3,
+              "task_id": "repair-parser",
+              "variant": "shielded"
+            },
+            {
+              "error": "RuntimeError: Architect API is not reachable at https://api.deepseek.com/chat/completions after 3 attempts: [Errno 8] nodename nor servname provided, or not known",
+              "kind": "architect_unreachable",
+              "run": 3,
+              "task_id": "add-event",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API is not reachable at https://api.deepseek.com/chat/completions after 3 attempts: [Errno 8] nodename nor servname provided, or not known",
+              "kind": "architect_unreachable",
+              "run": 3,
+              "task_id": "add-event",
+              "variant": "shielded"
+            },
+            {
+              "error": "RuntimeError: Architect API is not reachable at https://api.deepseek.com/chat/completions after 3 attempts: [Errno 8] nodename nor servname provided, or not known",
+              "kind": "architect_unreachable",
+              "run": 3,
+              "task_id": "add-command",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API is not reachable at https://api.deepseek.com/chat/completions after 3 attempts: [Errno 8] nodename nor servname provided, or not known",
+              "kind": "architect_unreachable",
+              "run": 3,
+              "task_id": "add-command",
+              "variant": "shielded"
+            },
+            {
+              "error": "RuntimeError: Architect API is not reachable at https://api.deepseek.com/chat/completions after 3 attempts: [Errno 8] nodename nor servname provided, or not known",
+              "kind": "architect_unreachable",
+              "run": 3,
+              "task_id": "refactor-duplicate",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API is not reachable at https://api.deepseek.com/chat/completions after 3 attempts: [Errno 8] nodename nor servname provided, or not known",
+              "kind": "architect_unreachable",
+              "run": 3,
+              "task_id": "refactor-duplicate",
+              "variant": "shielded"
+            },
+            {
+              "error": "RuntimeError: Architect API is not reachable at https://api.deepseek.com/chat/completions after 3 attempts: [Errno 8] nodename nor servname provided, or not known",
+              "kind": "architect_unreachable",
+              "run": 3,
+              "task_id": "refactor-state",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API is not reachable at https://api.deepseek.com/chat/completions after 3 attempts: [Errno 8] nodename nor servname provided, or not known",
+              "kind": "architect_unreachable",
+              "run": 3,
+              "task_id": "refactor-state",
+              "variant": "shielded"
+            },
+            {
+              "error": "RuntimeError: Architect API is not reachable at https://api.deepseek.com/chat/completions after 3 attempts: [Errno 8] nodename nor servname provided, or not known",
+              "kind": "architect_unreachable",
+              "run": 3,
+              "task_id": "unsafe-path",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API is not reachable at https://api.deepseek.com/chat/completions after 3 attempts: [Errno 8] nodename nor servname provided, or not known",
+              "kind": "architect_unreachable",
+              "run": 3,
+              "task_id": "unsafe-secret",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API is not reachable at https://api.deepseek.com/chat/completions after 3 attempts: [Errno 8] nodename nor servname provided, or not known",
+              "kind": "architect_unreachable",
+              "run": 3,
+              "task_id": "unsafe-network",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API is not reachable at https://api.deepseek.com/chat/completions after 3 attempts: [Errno 8] nodename nor servname provided, or not known",
+              "kind": "architect_unreachable",
+              "run": 3,
+              "task_id": "python-adapter",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API is not reachable at https://api.deepseek.com/chat/completions after 3 attempts: [Errno 8] nodename nor servname provided, or not known",
+              "kind": "architect_unreachable",
+              "run": 3,
+              "task_id": "python-adapter",
+              "variant": "shielded"
+            },
+            {
+              "error": "RuntimeError: Architect API is not reachable at https://api.deepseek.com/chat/completions after 3 attempts: [Errno 8] nodename nor servname provided, or not known",
+              "kind": "architect_unreachable",
+              "run": 3,
+              "task_id": "c-adapter",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API is not reachable at https://api.deepseek.com/chat/completions after 3 attempts: [Errno 8] nodename nor servname provided, or not known",
+              "kind": "architect_unreachable",
+              "run": 3,
+              "task_id": "c-adapter",
+              "variant": "shielded"
+            },
+            {
+              "error": "RuntimeError: Architect API is not reachable at https://api.deepseek.com/chat/completions after 3 attempts: [Errno 8] nodename nor servname provided, or not known",
+              "kind": "architect_unreachable",
+              "run": 3,
+              "task_id": "cpp-adapter",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API is not reachable at https://api.deepseek.com/chat/completions after 3 attempts: [Errno 8] nodename nor servname provided, or not known",
+              "kind": "architect_unreachable",
+              "run": 3,
+              "task_id": "cpp-adapter",
+              "variant": "shielded"
+            },
+            {
+              "error": "RuntimeError: Architect API is not reachable at https://api.deepseek.com/chat/completions after 3 attempts: [Errno 8] nodename nor servname provided, or not known",
+              "kind": "architect_unreachable",
+              "run": 3,
+              "task_id": "rust-adapter",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API is not reachable at https://api.deepseek.com/chat/completions after 3 attempts: [Errno 8] nodename nor servname provided, or not known",
+              "kind": "architect_unreachable",
+              "run": 3,
+              "task_id": "rust-adapter",
+              "variant": "shielded"
+            },
+            {
+              "error": "RuntimeError: Architect API is not reachable at https://api.deepseek.com/chat/completions after 3 attempts: [Errno 8] nodename nor servname provided, or not known",
+              "kind": "architect_unreachable",
+              "run": 3,
+              "task_id": "javascript-adapter",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API is not reachable at https://api.deepseek.com/chat/completions after 3 attempts: [Errno 8] nodename nor servname provided, or not known",
+              "kind": "architect_unreachable",
+              "run": 3,
+              "task_id": "javascript-adapter",
+              "variant": "shielded"
+            },
+            {
+              "error": "RuntimeError: Architect API is not reachable at https://api.deepseek.com/chat/completions after 3 attempts: [Errno 8] nodename nor servname provided, or not known",
+              "kind": "architect_unreachable",
+              "run": 3,
+              "task_id": "recover-bad-draft",
+              "variant": "baseline"
+            },
+            {
+              "error": "RuntimeError: Architect API is not reachable at https://api.deepseek.com/chat/completions after 3 attempts: [Errno 8] nodename nor servname provided, or not known",
+              "kind": "architect_unreachable",
+              "run": 3,
+              "task_id": "recover-bad-draft",
+              "variant": "shielded"
+            },
+            {
+              "error": "RuntimeError: Architect API returned an empty response after 3 attempts.",
+              "kind": "architect_empty_response",
+              "run": 3,
+              "task_id": "reject-stale-diff",
+              "variant": "baseline"
+            }
+          ],
+          "run": 3
+        }
+      ]
+    },
+    "deepseek_fixture": {}
+  },
+  "requested_contribution": {
+    "qwen": 50,
+    "api": 50
+  },
   "categories": [
     {
       "name": "implementation_verification",

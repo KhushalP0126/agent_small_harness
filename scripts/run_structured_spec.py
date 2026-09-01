@@ -42,7 +42,7 @@ from validation.import_graph import (
 )
 
 
-DEFAULT_ARTIFACT_ROOT = Path("artifacts/runs")
+DEFAULT_ARTIFACT_ROOT = ROOT / "artifacts/runs"
 CONTRACT_EXAMPLE_TIMEOUT_SECONDS = 2.0
 SANDBOX_RESULT_PREFIX = "__AGENT_HARNESS_SANDBOX_RESULT__="
 HELPER_SIGNATURE_RE = re.compile(

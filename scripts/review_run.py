@@ -6,7 +6,8 @@ from pathlib import Path
 from typing import Any
 
 
-DEFAULT_ARTIFACT_ROOT = Path("artifacts/runs")
+ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_ARTIFACT_ROOT = ROOT / "artifacts/runs"
 
 
 def _resolve_run(value: str, artifact_root: Path) -> Path:

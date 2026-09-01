@@ -35,7 +35,9 @@ diagram compiler.
 
 ## Protocol and safety
 
-- Protocol version 5 adds repair-session and research-readiness events while
+- Protocol version 6 adds secure settings, contribution, permission, context,
+  checkpoint/rewind, branching, and extension-status events while protocol
+  version 5 repair-session and research-readiness events remain decodable.
   preserving tolerant decoding of older events.
 - Commands, subprocess output, and inherited controller events remain isolated
   so human-readable logs cannot corrupt structured messages.

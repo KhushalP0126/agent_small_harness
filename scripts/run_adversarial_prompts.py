@@ -15,9 +15,9 @@ from agents.repair_strategy import RepairStrategyAgent
 from agents.task_classifier import TaskClassifierAgent
 
 
-DEFAULT_CASES = Path("tests/adversarial/prompts.json")
-DEFAULT_RUNS = Path("data/runs.jsonl")
-DEFAULT_HISTORY = Path("history.json")
+DEFAULT_CASES = ROOT / "tests/adversarial/prompts.json"
+DEFAULT_RUNS = ROOT / "data/runs.jsonl"
+DEFAULT_HISTORY = ROOT / "history.json"
 
 
 def _load_cases(path: Path) -> list[dict]:

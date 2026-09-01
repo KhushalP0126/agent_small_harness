@@ -3,6 +3,7 @@
 ![Research readiness visualization](research-readiness.svg)
 
 **Authoritative result: 43% · blocked**
+**Projected after required live gates: 86%**
 
 | Gate | Status | Evidence |
 | --- | --- | --- |
@@ -20,3 +21,10 @@
 - deepseek_20 needs a schema-v3+, three-run, provenance-complete, provider-healthy artifact.
 - deepseek_fixture needs a schema-v3+, three-run, provenance-complete, provider-healthy artifact.
 - missing scenarios: multi_file_edit, planning_review, small_edit
+
+## Exact commands
+
+- `qwen_local`: `make research-fixture-qwen RESEARCH_RUNS=3`
+- `deepseek_20`: `make research-agent-benchmark RESEARCH_RUNS=3`
+- `deepseek_fixture`: `make research-fixture-deepseek RESEARCH_RUNS=3`
+- `controlled_live_sessions`: `make record-live-session`

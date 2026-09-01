@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import asdict
 import os
 from pathlib import Path
 from typing import Any
@@ -13,6 +14,9 @@ from agents.job_store import JobRecord, JsonlJobStore
 from agents.repair_strategy import RepairStrategyAgent
 from backends.architect_client import ArchitectConfig, ArchitectModelSupplier
 from backends.ollama_client import DEFAULT_OLLAMA_MODEL, DEFAULT_OLLAMA_URL, OllamaClient, OllamaModelSupplier
+from harness_kernel.orchestration_store import OrchestrationStore, graph_from_dict
+from harness_kernel.orchestration_runtime import PersistedOrchestrationRuntime, TypedNodeExecutor
+from harness_kernel.merge_queue import TrustedValidator
 
 
 class SyncRunRequest(BaseModel):
@@ -37,7 +41,7 @@ class SyncRunResponse(BaseModel):
 
 
 ControllerFactory = Callable[[SyncRunRequest], GenerationController]
-DEFAULT_JOB_STORE_PATH = Path("data/jobs.jsonl")
+DEFAULT_JOB_STORE_PATH = Path(__file__).resolve().parents[1] / "data/jobs.jsonl"
 
 
 def build_controller(request: SyncRunRequest) -> GenerationController:
@@ -115,10 +119,14 @@ def _run_background_job(
 def create_app(
     controller_factory: ControllerFactory = build_controller,
     job_store: JsonlJobStore | None = None,
+    trusted_merge_validator: TrustedValidator | None = None,
 ) -> FastAPI:
     app = FastAPI(title="Agent Small Harness API", version="0.1.0")
     active_job_store = job_store or JsonlJobStore(
         os.environ.get("JOB_STORE_PATH", str(DEFAULT_JOB_STORE_PATH))
+    )
+    orchestration_store = OrchestrationStore(
+        Path(os.environ.get("ORCHESTRATION_STORE_PATH", str(Path.cwd() / ".harness/orchestrations")))
     )
 
     @app.get("/health")
@@ -173,6 +181,104 @@ def create_app(
             "created_at": job.created_at,
             "events": job.events,
         }
+
+    @app.post("/orchestrations/plan", status_code=201)
+    def plan_orchestration(request: dict[str, Any]) -> dict[str, Any]:
+        try:
+            graph = graph_from_dict(request.get("graph", {}))
+            if not graph.nodes:
+                raise ValueError("a candidate graph needs at least one node")
+            return orchestration_store.create(graph, goal=str(request.get("goal", "")))
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail={"error": "invalid_graph", "message": str(exc)}) from exc
+
+    @app.get("/orchestrations/{session_id}")
+    def inspect_orchestration(session_id: str) -> dict[str, Any]:
+        try:
+            return orchestration_store.get(session_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail={"error": "session_not_found"}) from exc
+
+    @app.post("/orchestrations/{session_id}/approve")
+    def approve_orchestration(session_id: str, request: dict[str, Any]) -> dict[str, Any]:
+        try:
+            return orchestration_store.approve(session_id, str(request.get("revision_hash", "")))
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail={"error": "session_not_found"}) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail={"error": "approval_hash_mismatch", "message": str(exc)}) from exc
+
+    def control_orchestration(session_id: str, status: str) -> dict[str, Any]:
+        try:
+            return orchestration_store.transition(session_id, status)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail={"error": "session_not_found"}) from exc
+        except (ValueError, PermissionError) as exc:
+            raise HTTPException(status_code=409, detail={"error": "invalid_transition", "message": str(exc)}) from exc
+
+    @app.post("/orchestrations/{session_id}/start")
+    def start_orchestration(session_id: str) -> dict[str, Any]:
+        return control_orchestration(session_id, "running")
+
+    @app.post("/orchestrations/{session_id}/pause")
+    def pause_orchestration(session_id: str) -> dict[str, Any]:
+        return control_orchestration(session_id, "paused")
+
+    @app.post("/orchestrations/{session_id}/resume")
+    def resume_orchestration(session_id: str) -> dict[str, Any]:
+        return control_orchestration(session_id, "running")
+
+    @app.post("/orchestrations/{session_id}/cancel")
+    def cancel_orchestration(session_id: str) -> dict[str, Any]:
+        return control_orchestration(session_id, "cancelled")
+
+    @app.post("/orchestrations/{session_id}/revise")
+    def revise_orchestration(session_id: str, request: dict[str, Any]) -> dict[str, Any]:
+        try:
+            graph = graph_from_dict(request.get("graph", {}))
+            return orchestration_store.revise(session_id, graph, str(request.get("reason", "graph revision")))
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail={"error": "session_not_found"}) from exc
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail={"error": "invalid_graph", "message": str(exc)}) from exc
+
+    @app.post("/orchestrations/{session_id}/nodes/{node_id}/retry")
+    def retry_orchestration_node(session_id: str, node_id: str, request: dict[str, Any]) -> dict[str, Any]:
+        try:
+            provider = request.get("provider")
+            return orchestration_store.retry(session_id, node_id, str(provider) if provider else None)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail={"error": "session_or_node_not_found"}) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail={"error": "invalid_retry", "message": str(exc)}) from exc
+
+    @app.get("/orchestrations/{session_id}/replay")
+    def replay_orchestration(session_id: str) -> dict[str, Any]:
+        try:
+            orchestration_store.get(session_id)
+            events = [asdict(event) for event in orchestration_store.journal(session_id).replay()]
+            return {"session_id": session_id, "mode": "replay", "external_actions": False, "events": events}
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail={"error": "session_not_found"}) from exc
+
+    @app.post("/orchestrations/{session_id}/merges/{node_id}/review")
+    def review_orchestration_merge(session_id: str, node_id: str,
+                                   request: dict[str, Any]) -> dict[str, Any]:
+        if trusted_merge_validator is None:
+            raise HTTPException(status_code=503, detail={"error": "trusted_validator_unavailable"})
+        try:
+            runtime = PersistedOrchestrationRuntime(
+                orchestration_store, session_id, Path.cwd(), TypedNodeExecutor({})
+            )
+            checkpoint_id = runtime.review_merge(
+                node_id, approved=bool(request.get("approved")), validate=trusted_merge_validator
+            )
+            return {"node_id": node_id, "approved": bool(request.get("approved")),
+                    "checkpoint_id": checkpoint_id}
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail={"error": "session_or_node_not_found"}) from exc
+        except (ValueError, RuntimeError, PermissionError) as exc:
+            raise HTTPException(status_code=409, detail={"error": "merge_rejected", "message": str(exc)}) from exc
 
     return app
 

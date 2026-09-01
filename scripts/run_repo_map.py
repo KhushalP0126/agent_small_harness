@@ -14,7 +14,7 @@ from agents.artifact_manager import ARTIFACT_SCHEMA_VERSION, ArtifactManager
 from agents.repo_map_agent import RepoMapAgent
 
 
-DEFAULT_ARTIFACT_ROOT = Path("artifacts/runs")
+DEFAULT_ARTIFACT_ROOT = ROOT / "artifacts/runs"
 
 
 def run_repo_map(

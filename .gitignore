@@ -15,6 +15,7 @@ dist/
 target/
 .env
 .tui_memory.json
+.tui_settings.json
 .env.*
 !.env.example
 artifacts/

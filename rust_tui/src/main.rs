@@ -12,7 +12,7 @@ use crossterm::{
     cursor::Show,
     event::{
         DisableMouseCapture, EnableMouseCapture, Event as CtEvent, EventStream, KeyCode,
-        KeyModifiers, MouseEventKind,
+        KeyEventKind, KeyModifiers, MouseEventKind,
     },
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
@@ -48,7 +48,9 @@ enum AppMode {
     ReadmeView { text: String, path: String },
     ActionApproval { request: String, reason: String },
     ToolDiffReview { path: String, diff: String },
+    GraphApproval { session_id: String, revision_hash: String },
     Executing,
+    Settings,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -93,7 +95,9 @@ impl AppMode {
             Self::ReadmeView { .. } => "README",
             Self::ActionApproval { .. } => "approval required",
             Self::ToolDiffReview { .. } => "tool diff review",
+            Self::GraphApproval { .. } => "graph approval",
             Self::Executing => "executing",
+            Self::Settings => "settings",
         }
     }
 }
@@ -148,6 +152,21 @@ struct AppState {
     readiness_status: String,
     readiness_categories: Vec<ReadinessCategory>,
     readiness_blockers: Vec<String>,
+    permission_mode: String,
+    settings_provider: String,
+    settings_endpoint: String,
+    settings_model: String,
+    settings_credential: String,
+    settings_reveal: bool,
+    settings_field: usize,
+    settings_cost_cap_usd: f64,
+    contribution_qwen: u8,
+    contribution_api: u8,
+    settings_local_confirmed: bool,
+    orchestration_session_id: String,
+    orchestration_status: String,
+    orchestration_graph: Option<serde_json::Value>,
+    orchestration_events: Vec<serde_json::Value>,
 }
 
 impl Default for AppState {
@@ -203,6 +222,21 @@ impl Default for AppState {
             readiness_status: "unknown".into(),
             readiness_categories: Vec::new(),
             readiness_blockers: Vec::new(),
+            permission_mode: "default".into(),
+            settings_provider: "deepseek".into(),
+            settings_endpoint: "https://api.deepseek.com/chat/completions".into(),
+            settings_model: "deepseek-v4-pro".into(),
+            settings_credential: String::new(),
+            settings_reveal: false,
+            settings_field: 0,
+            settings_cost_cap_usd: 1.0,
+            contribution_qwen: 50,
+            contribution_api: 50,
+            settings_local_confirmed: false,
+            orchestration_session_id: String::new(),
+            orchestration_status: "none".into(),
+            orchestration_graph: None,
+            orchestration_events: Vec::new(),
         }
     }
 }
@@ -547,6 +581,61 @@ impl AppState {
                 self.readiness_categories = categories;
                 self.readiness_blockers = blockers;
             }
+            HarnessEvent::SettingsState { provider, endpoint_hostname, endpoint, model, configured, last_four, fingerprint_prefix, cost_cap_usd, local_development_confirmed } => {
+                self.settings_provider = provider.clone();
+                self.settings_endpoint = endpoint;
+                self.settings_model = model.clone();
+                self.settings_cost_cap_usd = cost_cap_usd;
+                self.settings_local_confirmed = local_development_confirmed;
+                self.logs.push(format!(
+                    "[settings] provider={provider} · host={endpoint_hostname} · model={model} · {} · credential={}…{} · cap=${cost_cap_usd:.2}",
+                    if configured { "configured" } else { "not configured" }, fingerprint_prefix, last_four
+                ));
+            }
+            HarnessEvent::ProviderConnectionResult { ok, message } => {
+                self.logs.push(format!("[settings] connection {}: {message}", if ok { "passed" } else { "failed" }));
+            }
+            HarnessEvent::ContributionState { qwen, api, remaining_api_budget, .. } => {
+                self.contribution_qwen = qwen;
+                self.contribution_api = api;
+                self.logs.push(format!("[routing] Qwen: {qwen}% · API: {api}% · API budget remaining ${remaining_api_budget:.4}"));
+            }
+            HarnessEvent::CostCapApproval { approved, remaining_api_budget } => {
+                self.logs.push(format!("[cost] cap decision={} · remaining ${remaining_api_budget:.4}", if approved { "approved" } else { "declined" }));
+            }
+            HarnessEvent::PermissionModeState { mode } => {
+                self.permission_mode = mode.clone();
+                self.logs.push(format!("[permission] mode={mode}"));
+            }
+            HarnessEvent::ContextState { summary, message_count, checkpoint_ids, permission_mode, remaining_api_budget, cleared, .. } => {
+                if cleared { self.logs.clear(); }
+                if !permission_mode.is_empty() { self.permission_mode = permission_mode; }
+                self.context_content = format!("{summary}\n\nmessages={message_count} · checkpoints={} · API budget=${remaining_api_budget:.4}", checkpoint_ids.len());
+                self.logs.push(format!("[context] {message_count} messages · {} checkpoints", checkpoint_ids.len()));
+            }
+            HarnessEvent::CheckpointCreated { checkpoint_id, parent_id, changed_paths } => {
+                self.logs.push(format!("[checkpoint] {checkpoint_id} · parent={} · {} path(s)", if parent_id.is_empty() { "none" } else { &parent_id }, changed_paths.len()));
+            }
+            HarnessEvent::CheckpointList { checkpoints } => {
+                self.logs.push(format!("[checkpoint] {} checkpoint(s)", checkpoints.len()));
+                for item in checkpoints.iter().take(12) {
+                    self.logs.push(format!("  {}", item.get("checkpoint_id").and_then(|value| value.as_str()).unwrap_or("unknown")));
+                }
+            }
+            HarnessEvent::RewindResult { ok, checkpoint_id, message } => {
+                self.logs.push(format!("[rewind] {checkpoint_id} · {} · {message}", if ok { "restored" } else { "failed" }));
+            }
+            HarnessEvent::SessionBranched { parent_session_id, session_id, checkpoint_id } => {
+                self.logs.push(format!("[branch] {parent_session_id} -> {session_id} at {checkpoint_id}"));
+            }
+            HarnessEvent::ExtensionsState { extensions } => {
+                self.logs.push(format!("[extensions] {} discovered", extensions.len()));
+                for item in extensions.iter().take(12) {
+                    let name = item.get("name").and_then(|value| value.as_str()).unwrap_or("unknown");
+                    let status = item.get("status").and_then(|value| value.as_str()).unwrap_or("unknown");
+                    self.logs.push(format!("  {name} · {status}"));
+                }
+            }
             HarnessEvent::HistoryList { runs } => {
                 self.logs.push(format!("[history] {} run(s) loaded", runs.len()));
                 self.history_runs = runs;
@@ -653,6 +742,33 @@ impl AppState {
                     ));
                 }
             }
+            HarnessEvent::GraphProposal { session_id, goal, revision, revision_hash, graph } => {
+                self.orchestration_session_id = session_id.clone();
+                self.orchestration_status = "awaiting_approval".into();
+                self.orchestration_graph = Some(graph.clone());
+                self.context_content = serde_json::to_string_pretty(&graph).unwrap_or_default();
+                self.mode = AppMode::GraphApproval { session_id, revision_hash };
+                self.prompt_active = false;
+                self.inspector_scroll = 0;
+                self.logs.push(format!("[graph] revision {revision} proposed for {goal} · y approve · n reject"));
+            }
+            HarnessEvent::OrchestrationState { state } => {
+                self.orchestration_session_id = state.get("session_id").and_then(|v| v.as_str()).unwrap_or_default().into();
+                self.orchestration_status = state.get("status").and_then(|v| v.as_str()).unwrap_or("unknown").into();
+                self.context_content = serde_json::to_string_pretty(&state).unwrap_or_default();
+                self.logs.push(format!("[orchestration] {} · {}", self.orchestration_session_id, self.orchestration_status));
+                if self.mode == AppMode::Executing || matches!(self.mode, AppMode::GraphApproval { .. }) {
+                    self.mode = AppMode::Chat;
+                    self.prompt_active = true;
+                }
+            }
+            HarnessEvent::OrchestrationReplay { session_id, external_actions, events } => {
+                self.orchestration_session_id = session_id.clone();
+                self.orchestration_events = events;
+                self.orchestration_status = "replay".into();
+                self.context_content = format!("replay {} · {} events · external_actions={}", session_id, self.orchestration_events.len(), external_actions);
+                self.logs.push(format!("[replay] {} events loaded with external actions disabled", self.orchestration_events.len()));
+            }
             HarnessEvent::ProtocolError { line, error } => {
                 self.logs
                     .push(format!("[protocol warning] {error}: {line}"));
@@ -684,7 +800,7 @@ impl AppState {
     fn side_inspector_active(&self) -> bool {
         matches!(
             self.mode,
-            AppMode::Questionnaire | AppMode::SpecReview { .. } | AppMode::ResearchReview { .. }
+            AppMode::Questionnaire | AppMode::SpecReview { .. } | AppMode::ResearchReview { .. } | AppMode::GraphApproval { .. }
         ) || self.repair_context.is_some()
             || self.readiness_score.is_some()
     }
@@ -760,17 +876,46 @@ impl AppState {
 
 fn redact_context(value: &str) -> String {
     let mut text = value.replace('\n', " ");
-    for marker in ["DEEPSEEK_API_KEY", "ARCHITECT_API_KEY"] {
-        if let Some(index) = text.find(marker) {
-            if let Some(equal) = text[index..].find('=') {
-                let start = index + equal + 1;
-                let end = text[start..]
-                    .find(char::is_whitespace)
-                    .map(|offset| start + offset)
-                    .unwrap_or(text.len());
-                text.replace_range(start..end, "[redacted]");
-            }
+    for marker in [
+        "DEEPSEEK_API_KEY",
+        "ARCHITECT_API_KEY",
+        "OPENAI_API_KEY",
+        "api_key",
+        "api-key",
+        "authorization",
+    ] {
+        let mut search_from = 0;
+        loop {
+            let lowered = text[search_from..].to_ascii_lowercase();
+            let Some(relative_index) = lowered.find(&marker.to_ascii_lowercase()) else {
+                break;
+            };
+            let index = search_from + relative_index;
+            let after_marker = index + marker.len();
+            let Some(separator) = text[after_marker..].find(['=', ':']) else {
+                search_from = after_marker;
+                continue;
+            };
+            let start = after_marker + separator + 1;
+            let value_start = start
+                + text[start..]
+                    .find(|character: char| !character.is_whitespace())
+                    .unwrap_or(0);
+            let end = text[value_start..]
+                .find(char::is_whitespace)
+                .map(|offset| value_start + offset)
+                .unwrap_or(text.len());
+            text.replace_range(value_start..end, "[redacted]");
+            search_from = value_start + "[redacted]".len();
         }
+    }
+    if let Some(index) = text.to_ascii_lowercase().find("bearer ") {
+        let start = index + "bearer ".len();
+        let end = text[start..]
+            .find(char::is_whitespace)
+            .map(|offset| start + offset)
+            .unwrap_or(text.len());
+        text.replace_range(start..end, "[redacted]");
     }
     if text.len() > 500 {
         text.truncate(500);
@@ -905,6 +1050,19 @@ async fn run_loop(
         tokio::select! {
             maybe_event = term_events.next().fuse() => {
                 if let Some(Ok(event)) = maybe_event {
+                    if let CtEvent::Paste(text) = &event {
+                        if state.mode == AppMode::Settings {
+                            match state.settings_field {
+                                1 => state.settings_endpoint.push_str(text),
+                                2 => state.settings_model.push_str(text),
+                                3 => state.settings_credential.push_str(text),
+                                _ => {}
+                            }
+                        } else if state.prompt_active {
+                            state.prompt.push_str(text);
+                        }
+                        continue;
+                    }
                     if let CtEvent::Mouse(mouse) = event {
                         match mouse.kind {
                             MouseEventKind::ScrollUp if state.validated_source_visible => {
@@ -932,6 +1090,68 @@ async fn run_loop(
                     let CtEvent::Key(key) = event else {
                         continue;
                     };
+                    if state.mode == AppMode::Settings {
+                        if key.code == KeyCode::F(2) {
+                            state.settings_reveal = key.kind != KeyEventKind::Release;
+                            continue;
+                        }
+                        if key.kind == KeyEventKind::Release { continue; }
+                        match key.code {
+                            KeyCode::Esc => {
+                                state.mode = AppMode::Chat;
+                                state.prompt_active = true;
+                                state.settings_credential.clear();
+                                state.settings_reveal = false;
+                            }
+                            KeyCode::Tab => state.settings_field = (state.settings_field + 1) % 7,
+                            KeyCode::BackTab => state.settings_field = (state.settings_field + 6) % 7,
+                            KeyCode::Left if state.settings_field == 0 => {
+                                state.settings_provider = match state.settings_provider.as_str() {
+                                    "qwen" => "openai_compatible", "deepseek" => "qwen", _ => "deepseek",
+                                }.into();
+                            }
+                            KeyCode::Right if state.settings_field == 0 => {
+                                state.settings_provider = match state.settings_provider.as_str() {
+                                    "qwen" => "deepseek", "deepseek" => "openai_compatible", _ => "qwen",
+                                }.into();
+                            }
+                            KeyCode::Left if state.settings_field == 4 => state.settings_cost_cap_usd = (state.settings_cost_cap_usd - 0.25).max(0.0),
+                            KeyCode::Right if state.settings_field == 4 => state.settings_cost_cap_usd += 0.25,
+                            KeyCode::Left if state.settings_field == 5 => {
+                                state.contribution_qwen = state.contribution_qwen.saturating_sub(5);
+                                state.contribution_api = 100 - state.contribution_qwen;
+                            }
+                            KeyCode::Right if state.settings_field == 5 => {
+                                state.contribution_qwen = state.contribution_qwen.saturating_add(5).min(100);
+                                state.contribution_api = 100 - state.contribution_qwen;
+                            }
+                            KeyCode::Char(' ') if state.settings_field == 6 => state.settings_local_confirmed = !state.settings_local_confirmed,
+                            KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                                send_command(child_stdin, &HarnessCommand::SaveProviderSettings {
+                                    provider: state.settings_provider.clone(), endpoint: state.settings_endpoint.clone(),
+                                    model: state.settings_model.clone(),
+                                    credential: if state.settings_credential.is_empty() { None } else { Some(std::mem::take(&mut state.settings_credential)) },
+                                    cost_cap_usd: state.settings_cost_cap_usd, local_development_confirmed: state.settings_local_confirmed,
+                                }).await?;
+                                send_command(child_stdin, &HarnessCommand::SetContributionSplit {
+                                    qwen: state.contribution_qwen, api: state.contribution_api, save_default: true,
+                                }).await?;
+                            }
+                            KeyCode::Char('t') if key.modifiers.contains(KeyModifiers::CONTROL) => send_command(child_stdin, &HarnessCommand::TestProviderConnection).await?,
+                            KeyCode::Char('x') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                                state.settings_credential.clear();
+                                send_command(child_stdin, &HarnessCommand::ClearProviderCredential { provider: state.settings_provider.clone() }).await?;
+                            }
+                            KeyCode::Backspace => match state.settings_field {
+                                1 => { state.settings_endpoint.pop(); }, 2 => { state.settings_model.pop(); }, 3 => { state.settings_credential.pop(); }, _ => {}
+                            },
+                            KeyCode::Char(character) => match state.settings_field {
+                                1 => state.settings_endpoint.push(character), 2 => state.settings_model.push(character), 3 => state.settings_credential.push(character), _ => {}
+                            },
+                            _ => {}
+                        }
+                        continue;
+                    }
                     if state.prompt_active {
                         match key.code {
                             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -1067,6 +1287,23 @@ async fn run_loop(
                             state
                                 .logs
                                 .push("approved spec sent to the execution pipeline".into());
+                        }
+                        KeyCode::Char('y')
+                            if matches!(state.mode, AppMode::GraphApproval { .. }) =>
+                        {
+                            let (session_id, revision_hash) = match &state.mode {
+                                AppMode::GraphApproval { session_id, revision_hash } => (session_id.clone(), revision_hash.clone()),
+                                _ => unreachable!(),
+                            };
+                            send_command(child_stdin, &HarnessCommand::ApproveGraph { session_id, revision_hash }).await?;
+                            state.logs.push("[graph] approval submitted".into());
+                        }
+                        KeyCode::Char('n') | KeyCode::Esc
+                            if matches!(state.mode, AppMode::GraphApproval { .. }) =>
+                        {
+                            state.mode = AppMode::Chat;
+                            state.prompt_active = true;
+                            state.logs.push("[graph] proposal rejected; no nodes dispatched".into());
                         }
                         KeyCode::Char('y')
                             if matches!(state.mode, AppMode::ActionApproval { .. }) =>
@@ -1236,9 +1473,49 @@ async fn send_prompt_command(
         });
     match command {
         "/help" => state.logs.push(
-            "commands: /readme /map /check <path> /history /readiness /research /spec /model /remember <note> /mention <path> /tools <task>"
+            "commands: /orchestrate <goal> /agents /trace /attempts /routing /cost /events /artifacts /replay /step /break /pause /resume /cancel /settings /mode /checkpoints /map /check /history /research /spec /tools"
                 .into(),
         ),
+        "/orchestrate" if argument.is_empty() => state.logs.push("usage: /orchestrate <goal>".into()),
+        "/orchestrate" => send_command(stdin, &HarnessCommand::Orchestrate { goal: argument.into() }).await?,
+        "/agents" | "/trace" | "/attempts" | "/routing" | "/events" | "/artifacts" | "/why" => {
+            send_command(stdin, &HarnessCommand::InspectOrchestration { session_id: state.orchestration_session_id.clone() }).await?;
+        }
+        "/replay" => send_command(stdin, &HarnessCommand::ReplayOrchestration { session_id: state.orchestration_session_id.clone() }).await?,
+        "/break" if argument.is_empty() => state.logs.push("usage: /break <node-id>".into()),
+        "/pause" | "/resume" | "/cancel" | "/step" | "/break" => {
+            let action = command.trim_start_matches('/').to_owned();
+            send_command(stdin, &HarnessCommand::OrchestrationAction {
+                session_id: state.orchestration_session_id.clone(), action,
+                node_id: if command == "/break" { argument.into() } else { String::new() }, provider: String::new(),
+            }).await?;
+        }
+        "/settings" => {
+            send_command(stdin, &HarnessCommand::OpenSettings).await?;
+            state.mode = AppMode::Settings;
+            state.prompt_active = false;
+            state.settings_field = 0;
+            state.logs.push("opening secure provider settings…".into());
+        }
+        "/mode" if argument.is_empty() => state.logs.push("usage: /mode default|accept_edits|plan|dont_ask".into()),
+        "/mode" => send_command(stdin, &HarnessCommand::SetPermissionMode { mode: argument.into() }).await?,
+        "/cost" if !matches!(argument, "approve" | "deny") => state.logs.push("usage: /cost approve|deny".into()),
+        "/cost" => send_command(stdin, &HarnessCommand::CostCapApproval { approved: argument == "approve" }).await?,
+        "/clear" => send_command(stdin, &HarnessCommand::ClearContext).await?,
+        "/compact" => send_command(stdin, &HarnessCommand::CompactContext { instructions: argument.into() }).await?,
+        "/context" => send_command(stdin, &HarnessCommand::ContextStatus).await?,
+        "/checkpoints" => send_command(stdin, &HarnessCommand::ListCheckpoints).await?,
+        "/rewind" if argument.is_empty() => state.logs.push("usage: /rewind <checkpoint-id> [code|conversation|both]".into()),
+        "/rewind" => {
+            let mut parts = argument.split_whitespace();
+            let checkpoint_id = parts.next().unwrap_or_default().to_owned();
+            let scope = parts.next().unwrap_or("both").to_owned();
+            send_command(stdin, &HarnessCommand::Rewind { checkpoint_id, scope }).await?;
+        }
+        "/branch" if argument.is_empty() => state.logs.push("usage: /branch <checkpoint-id>".into()),
+        "/branch" => send_command(stdin, &HarnessCommand::BranchCheckpoint { checkpoint_id: argument.into() }).await?,
+        "/extensions" => send_command(stdin, &HarnessCommand::ExtensionsStatus).await?,
+        "/mcp" => send_command(stdin, &HarnessCommand::McpStatus).await?,
         "/readme" if argument.is_empty() => match fs::read_to_string(repo_root.join("README.md")) {
             Ok(text) => {
                 state.mode = AppMode::ReadmeView {
@@ -1309,8 +1586,9 @@ async fn send_prompt_command(
         "/tools" => {
             send_command(
                 stdin,
-                &HarnessCommand::Chat {
+                &HarnessCommand::ToolTask {
                     text: argument.to_owned(),
+                    provider: "auto".to_owned(),
                 },
             )
             .await?;
@@ -1377,6 +1655,9 @@ fn draw(frame: &mut ratatui::Frame, state: &AppState) {
     if let AppMode::ReadmeView { text, path } = &state.mode {
         draw_readme_view(frame, state, text, path);
     }
+    if state.mode == AppMode::Settings {
+        draw_settings(frame, state);
+    }
 
     if state.mode == AppMode::Questionnaire {
         draw_questionnaire(frame, state, content[1]);
@@ -1423,6 +1704,11 @@ fn draw_status_row(frame: &mut ratatui::Frame, state: &AppState, area: Rect) {
         Span::styled(
             state.local_context_summary(),
             Style::default().fg(theme_cyan()),
+        ),
+        Span::styled("  ·  ", Style::default().fg(theme_muted())),
+        Span::styled(
+            format!("mode {}", state.permission_mode),
+            Style::default().fg(theme_ready()),
         ),
         Span::styled("  ·  ", Style::default().fg(theme_muted())),
         Span::styled(
@@ -1630,7 +1916,7 @@ fn draw_composer(frame: &mut ratatui::Frame, state: &AppState, area: Rect) {
     let active = state.prompt_active
         || matches!(
             state.mode,
-            AppMode::ActionApproval { .. } | AppMode::ToolDiffReview { .. }
+            AppMode::ActionApproval { .. } | AppMode::ToolDiffReview { .. } | AppMode::GraphApproval { .. }
         );
     let block = Block::default()
         .borders(Borders::ALL)
@@ -1740,6 +2026,12 @@ fn composer_text(state: &AppState) -> Text<'static> {
         return Text::from(Line::styled(
             "Reviewed change awaiting approval.",
             Style::default().fg(Color::LightCyan),
+        ));
+    }
+    if matches!(state.mode, AppMode::GraphApproval { .. }) {
+        return Text::from(Line::styled(
+            "Review graph in the context panel · y approve · n reject.",
+            Style::default().fg(Color::Yellow),
         ));
     }
     if state.prompt.is_empty() {
@@ -2245,6 +2537,68 @@ fn draw_validated_source(frame: &mut ratatui::Frame, state: &AppState) {
         Paragraph::new(Text::from(source_lines)).scroll((scroll_y, scroll_x)),
         inner,
     );
+}
+
+fn draw_settings(frame: &mut ratatui::Frame, state: &AppState) {
+    let area = centered_rect(78, 72, frame.area());
+    frame.render_widget(Clear, area);
+    frame.render_widget(
+        pane_block(
+            " Secure provider settings · Tab fields · Ctrl-S save · Ctrl-T test · Ctrl-X clear · Esc cancel ",
+            true,
+        ),
+        area,
+    );
+    let masked = if state.settings_reveal {
+        state.settings_credential.clone()
+    } else {
+        "•".repeat(state.settings_credential.chars().count())
+    };
+    let values = [
+        format!("Provider: {}", state.settings_provider),
+        format!("Endpoint: {}", state.settings_endpoint),
+        format!("Model: {}", state.settings_model),
+        format!("Credential: {masked}"),
+        format!("API cost cap: ${:.2}", state.settings_cost_cap_usd),
+        format!(
+            "Qwen: {}%    API: {}%",
+            state.contribution_qwen, state.contribution_api
+        ),
+        format!(
+            "Local development confirmed: {}",
+            if state.settings_local_confirmed {
+                "yes"
+            } else {
+                "no"
+            }
+        ),
+    ];
+    let lines = values
+        .into_iter()
+        .enumerate()
+        .map(|(index, value)| {
+            Line::from(Span::styled(
+                format!("{} {value}", if index == state.settings_field { "›" } else { " " }),
+                Style::default()
+                    .fg(if index == state.settings_field { theme_cyan() } else { theme_foreground() })
+                    .add_modifier(if index == state.settings_field { Modifier::BOLD } else { Modifier::empty() }),
+            ))
+        })
+        .chain([
+            Line::from(""),
+            Line::from(Span::styled(
+                "Credential input is private, masked, and never echoed by the bridge. Hold r to reveal while this panel is active.",
+                Style::default().fg(theme_muted()),
+            )),
+        ])
+        .collect::<Vec<_>>();
+    let inner = Rect {
+        x: area.x + 2,
+        y: area.y + 2,
+        width: area.width.saturating_sub(4),
+        height: area.height.saturating_sub(4),
+    };
+    frame.render_widget(Paragraph::new(lines).wrap(Wrap { trim: false }), inner);
 }
 
 fn draw_spec_review(frame: &mut ratatui::Frame, state: &AppState, spec_text: &str, area: Rect) {
@@ -2775,6 +3129,17 @@ mod tests {
         }
         assert_eq!(state.logs.len(), MAX_LOG_ENTRIES);
         assert_eq!(state.logs.last().unwrap(), "[info] event-2499");
+    }
+
+    #[test]
+    fn context_journal_redacts_provider_credentials_and_bearer_tokens() {
+        let redacted = redact_context(
+            "OPENAI_API_KEY=sk-secret Authorization: token Bearer bearer-secret api_key: direct-secret",
+        );
+        for secret in ["sk-secret", "token", "bearer-secret", "direct-secret"] {
+            assert!(!redacted.contains(secret), "secret leaked: {secret}");
+        }
+        assert!(redacted.contains("[redacted]"));
     }
 
     #[test]

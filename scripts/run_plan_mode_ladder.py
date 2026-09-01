@@ -13,7 +13,7 @@ if str(ROOT) not in sys.path:
 from agents.plan_mode import PlanModeAgent
 
 
-DEFAULT_TASKS = Path("tests/plan_mode/tasks.json")
+DEFAULT_TASKS = ROOT / "tests/plan_mode/tasks.json"
 
 
 def _keep_first_break(

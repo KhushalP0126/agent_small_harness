@@ -29,6 +29,7 @@ from harness_kernel.tool_handlers import (
 from harness_kernel.tool_registry import ToolRegistry
 from harness_kernel.profiling import ProfileResult
 from harness_kernel.event_stream import event_sink_from_env
+from harness_kernel.contribution import ContributionSplit, ContributionTelemetry, WeightedSchedule
 from prompt.architect_builder import build_state_machine_architect_prompt
 from prompt.backend_failure_builder import build_backend_failure_architect_prompt
 from prompt.budget import PromptSummarizer, budget_prompt
@@ -143,6 +144,7 @@ class GenerationSession:
     final_status: str = "manual_review_required"
     termination_reason: str = ""
     human_review: HumanReviewPayload | None = None
+    contribution: dict = field(default_factory=dict)
 
 
 class GenerationController(BaseAgent):
@@ -179,6 +181,7 @@ class GenerationController(BaseAgent):
         event_sink: EventSink | None = None,
         repository_root: Path | str | None = None,
         session_id: str = "",
+        contribution_split: ContributionSplit | None = None,
     ) -> None:
         self.max_retries = max_retries
         self.draft_supplier = draft_supplier or (lambda prompt: prompt)
@@ -206,6 +209,11 @@ class GenerationController(BaseAgent):
         self.event_sink = event_sink or event_sink_from_env()
         self.repository_root = Path(repository_root or Path.cwd()).resolve()
         self.session_id = session_id.strip()
+        self.contribution_split = contribution_split
+        self._contribution = ContributionTelemetry(contribution_split or ContributionSplit())
+        self._provider_schedule = WeightedSchedule(
+            contribution_split or ContributionSplit(), self.session_id or "generation-session"
+        )
         self.execution_agent = execution_agent or (
             ExecutionAgent() if (enable_execution_trace or enable_debugger_hints) else None
         )
@@ -216,6 +224,43 @@ class GenerationController(BaseAgent):
         self.engine_registry = engine_registry or EngineRegistry.default(
             tool_registry=self.tool_registry
         )
+
+    def _session_payload(self, session: GenerationSession) -> dict:
+        session.contribution = self._contribution.snapshot() if self.contribution_split else {}
+        return asdict(session)
+
+    def _scheduled_provider(self) -> str:
+        return self._provider_schedule.provider_at(len(self._contribution.scheduled))
+
+    def _weighted_initial_draft(self, prompt: str) -> tuple[str, str]:
+        if self.contribution_split is None:
+            return self.draft_supplier(prompt), "draft_supplier"
+        provider = self._scheduled_provider()
+        if provider == "api":
+            if self.architect_supplier is None:
+                self._contribution.provider_failures["api"] += 1
+                raise RuntimeError("scheduled API provider is unavailable; user routing decision required")
+            result = self.architect_supplier("", prompt)
+            worker = "architect_llm"
+        else:
+            result = self.draft_supplier(prompt)
+            worker = "small_worker"
+        self._contribution.record(provider, provider)
+        return result, worker
+
+    def _weighted_repair(self, draft: str, prompt: str) -> tuple[str, str]:
+        provider = self._scheduled_provider()
+        if provider == "api":
+            if self.architect_supplier is None:
+                self._contribution.provider_failures["api"] += 1
+                raise RuntimeError("scheduled API provider is unavailable; user routing decision required")
+            result = self.architect_supplier(draft, prompt)
+            worker = "architect_llm"
+        else:
+            result = self.repair_supplier(draft, prompt)
+            worker = "small_worker"
+        self._contribution.record(provider, provider)
+        return result, worker
 
     def _emit_event(self, event: dict) -> None:
         if self.event_sink is not None:
@@ -1148,7 +1193,7 @@ class GenerationController(BaseAgent):
             session.attempts.append(attempt)
             session.final_status = "manual_review_required"
             session.human_review = self._human_review_payload(reason, attempt)
-            return AgentResult(agent=self.name, payload=asdict(session))
+            return AgentResult(agent=self.name, payload=self._session_payload(session))
         try:
             architect_draft = self.architect_supplier("", retry_prompt)
         except Exception as architect_exc:
@@ -1164,7 +1209,7 @@ class GenerationController(BaseAgent):
             session.attempts.append(attempt)
             session.final_status = "manual_review_required"
             session.human_review = self._human_review_payload("architect_after_backend_failure_failed", attempt)
-            return AgentResult(agent=self.name, payload=asdict(session))
+            return AgentResult(agent=self.name, payload=self._session_payload(session))
         backend_attempt = self._backend_failure_attempt(
             target,
             initial_prompt,
@@ -1235,7 +1280,7 @@ class GenerationController(BaseAgent):
                         architect_repair_retry_used=architect_repair_retry_used,
                         phase="terminal",
                     )
-                    return AgentResult(agent=self.name, payload=asdict(session))
+                    return AgentResult(agent=self.name, payload=self._session_payload(session))
                 if not last_attempt.repair_worker:
                     session.final_status = "manual_review_required"
                     session.termination_reason = "repair_strategy_manual_review"
@@ -1252,7 +1297,7 @@ class GenerationController(BaseAgent):
                         architect_repair_retry_used=architect_repair_retry_used,
                         phase="terminal",
                     )
-                    return AgentResult(agent=self.name, payload=asdict(session))
+                    return AgentResult(agent=self.name, payload=self._session_payload(session))
                 draft, draft_source_worker = self._resume_attempt_draft(last_attempt)
                 previous_draft = last_attempt.draft
             if not draft:
@@ -1260,7 +1305,7 @@ class GenerationController(BaseAgent):
             pending_findings: list[EngineFinding] | None = None
         elif draft_override is None:
             try:
-                initial_draft = self.draft_supplier(initial_prompt)
+                initial_draft, initial_worker = self._weighted_initial_draft(initial_prompt)
             except Exception as exc:
                 return self._handle_initial_backend_failure(target, initial_prompt, exc)
             initial_findings = self._scan(initial_draft)
@@ -1269,7 +1314,7 @@ class GenerationController(BaseAgent):
             failed_attempts = list(pre_attempts or [])
             session.attempts.extend(failed_attempts)
             draft = initial_draft
-            draft_source_worker = "draft_supplier"
+            draft_source_worker = initial_worker
             previous_draft = ""
             architect_repair_retry_used = False
             start_attempt = len(failed_attempts)
@@ -1773,7 +1818,11 @@ class GenerationController(BaseAgent):
                     else:
                         if supplier is None:
                             raise ValueError("No repair supplier is configured")
-                        next_draft = supplier(draft, retry_prompt)
+                        if self.contribution_split is not None and worker_name == "small_worker":
+                            next_draft, worker_name = self._weighted_repair(draft, retry_prompt)
+                            attempt.repair_worker = worker_name
+                        else:
+                            next_draft = supplier(draft, retry_prompt)
                 except Exception as exc:
                     attempt.repair_error = f"{exc.__class__.__name__}: {exc}"
                     if worker_name in {DETERMINISTIC_TRANSFORM, JSON_PATCH}:
@@ -1947,7 +1996,7 @@ class GenerationController(BaseAgent):
             phase="terminal",
         )
 
-        return AgentResult(agent=self.name, payload=asdict(session))
+        return AgentResult(agent=self.name, payload=self._session_payload(session))
 
     def _feedback_context(
         self,

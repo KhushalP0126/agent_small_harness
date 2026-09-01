@@ -22,10 +22,10 @@ from backends.ollama_client import DEFAULT_OLLAMA_MODEL, OllamaModelSupplier
 from validation.behavior import BehaviorCase, FunctionBehaviorSpec, format_behavior_spec
 
 
-DEFAULT_TASKS = Path("tests/coding_capability/tasks.json")
-DEFAULT_RUNS = Path("data/runs.jsonl")
-DEFAULT_HISTORY = Path("history.json")
-DEFAULT_ARTIFACT_ROOT = Path("artifacts/runs")
+DEFAULT_TASKS = ROOT / "tests/coding_capability/tasks.json"
+DEFAULT_RUNS = ROOT / "data/runs.jsonl"
+DEFAULT_HISTORY = ROOT / "history.json"
+DEFAULT_ARTIFACT_ROOT = ROOT / "artifacts/runs"
 
 FIXTURE_SOLUTIONS = {
     "matrix_scoring": """

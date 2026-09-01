@@ -19,7 +19,7 @@ from harness_kernel.provenance import collect_provenance
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--tasks", type=Path, default=Path("data/compute_shield_tasks_10.json"))
+    parser.add_argument("--tasks", type=Path, default=ROOT / "data/compute_shield_tasks_10.json")
     parser.add_argument(
         "--baseline-command",
         default="python3 scripts/run_ollama_benchmark_agent.py --mode baseline --model qwen2.5-coder:1.5b",
@@ -28,7 +28,7 @@ def main() -> int:
         "--shielded-command",
         default="python3 scripts/run_ollama_benchmark_agent.py --mode shielded --model qwen2.5-coder:1.5b",
     )
-    parser.add_argument("--output", type=Path, default=Path("docs/results/raw/compute-shield-10-current.json"))
+    parser.add_argument("--output", type=Path, default=ROOT / "docs/results/raw/compute-shield-10-current.json")
     args = parser.parse_args()
     tasks = load_tasks(args.tasks)
     if len(tasks) != 10:

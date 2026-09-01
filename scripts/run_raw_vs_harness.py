@@ -22,7 +22,7 @@ from scripts.run_coding_capability import _behavior_spec, _build_prompt, _final_
 from validation.behavior import serialize_behavior_result, validate_function_behavior
 
 
-DEFAULT_TASKS = Path("tests/worker_limit/tasks.json")
+DEFAULT_TASKS = ROOT / "tests/worker_limit/tasks.json"
 
 
 def _load_tasks(path: Path) -> list[dict[str, Any]]:
@@ -446,7 +446,7 @@ def main() -> int:
         help="Add one behavior-only repair call without harness diagnostics or escalation.",
     )
     parser.add_argument("--save-artifacts", action="store_true")
-    parser.add_argument("--artifact-root", type=Path, default=Path("artifacts/runs"))
+    parser.add_argument("--artifact-root", type=Path, default=ROOT / "artifacts/runs")
     args = parser.parse_args()
     config = load_config(args.config)
     return run_raw_vs_harness(

@@ -32,6 +32,7 @@ from harness_kernel.tui_bridge import (
     _should_start_planning,
     _validated_args,
 )
+from harness_kernel.provider_settings import SessionCredentialStore
 
 
 def completed_spec_sheet() -> str:
@@ -82,6 +83,66 @@ class TuiBridgeTests(unittest.TestCase):
         self.bridge.handle({"cmd": "missing"})
         self.assertEqual(self.events()[0]["type"], "log")
         self.assertEqual(self.events()[0]["level"], "error")
+
+    def test_settings_commands_execute_on_bridge_without_secret_echo(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = SessionCredentialStore()
+            bridge = Bridge(
+                EventWriter(self.output),
+                credential_store=store,
+                memory_path=Path(tmpdir) / "memory.json",
+            )
+            bridge.handle({
+                "cmd": "save_provider_settings", "provider": "deepseek",
+                "endpoint": "https://api.example.com/chat/completions", "model": "model",
+                "credential": "super-secret-value", "cost_cap_usd": 2.0,
+            })
+            bridge.handle({"cmd": "set_contribution_split", "qwen": 40, "api": 60})
+            self.assertNotIn("super-secret-value", self.output.getvalue())
+            self.assertTrue(any(event["type"] == "settings_state" for event in self.events()))
+            self.assertEqual(bridge._child_environment()["DEEPSEEK_API_KEY"], "super-secret-value")
+
+    def test_repo_map_rejects_roots_outside_selected_repository(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            bridge = Bridge(EventWriter(self.output), tool_repository_root=tmpdir)
+            bridge.repo_map(str(Path(tmpdir).parent), "")
+        event = self.events()[-1]
+        self.assertEqual(event["type"], "log")
+        self.assertIn("escapes repository", event["msg"])
+
+    def test_provider_connection_uses_http_and_never_emits_key(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            store = SessionCredentialStore()
+            store.set("deepseek", "connection-secret")
+            bridge = Bridge(
+                EventWriter(self.output),
+                credential_store=store,
+                memory_path=Path(tmpdir) / "memory.json",
+            )
+            with patch("harness_kernel.tui_bridge.httpx.get") as get:
+                get.return_value.status_code = 200
+                bridge.test_provider_connection()
+        self.assertEqual(self.events()[-1]["type"], "provider_connection_result")
+        self.assertTrue(self.events()[-1]["ok"])
+        self.assertNotIn("connection-secret", self.output.getvalue())
+        self.assertEqual(get.call_args.args[0], "https://api.deepseek.com/models")
+
+    def test_permission_context_checkpoint_and_extension_commands_are_structured(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            bridge = Bridge(EventWriter(self.output), tool_repository_root=root)
+            bridge.handle({"cmd": "set_permission_mode", "mode": "plan"})
+            bridge.handle({"cmd": "context_status"})
+            bridge.handle({"cmd": "list_checkpoints"})
+            bridge.handle({"cmd": "extensions_status"})
+            bridge.start_tool_task("Delete file old.py", approved=True)
+        types = [event["type"] for event in self.events()]
+        self.assertIn("permission_mode_state", types)
+        self.assertIn("context_state", types)
+        self.assertIn("checkpoint_list", types)
+        self.assertIn("extensions_state", types)
+        denial = next(event for event in self.events() if event.get("stage") == "permission")
+        self.assertIn("read-only", denial["message"])
 
     def test_tool_task_streams_calls_and_answer(self) -> None:
         responses = iter(
@@ -425,7 +486,11 @@ class TuiBridgeTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             env_file = Path(tmpdir) / ".env"
             env_file.write_text("DEEPSEEK_API_KEY=secret-value\n", encoding="utf-8")
-            bridge = Bridge(EventWriter(self.output), env_file=env_file)
+            bridge = Bridge(
+                EventWriter(self.output),
+                env_file=env_file,
+                memory_path=Path(tmpdir) / "memory.json",
+            )
             with patch.object(bridge, "_deepseek_reachable", side_effect=lambda: release_check.wait(2)):
                 started = time.monotonic()
                 bridge.emit_startup_status()
@@ -854,7 +919,11 @@ class TuiBridgeTests(unittest.TestCase):
                 "DEEPSEEK_API_KEY=from-dotenv\nARCHITECT_MODEL=from-file\n",
                 encoding="utf-8",
             )
-            bridge = Bridge(EventWriter(self.output), env_file=env_file)
+            bridge = Bridge(
+                EventWriter(self.output),
+                env_file=env_file,
+                memory_path=Path(tmpdir) / "memory.json",
+            )
             with patch.dict(
                 os.environ,
                 {"DEEPSEEK_API_KEY": "from-shell"},

@@ -129,6 +129,7 @@ class ArchitectConfig:
     contract_profile: ArchitectProfile = field(default_factory=lambda: CONTRACT_PROFILE)
     model_override: str | None = None
     base_url_override: str | None = None
+    api_key_override: str | None = field(default=None, repr=False)
 
     @property
     def api_key_configured(self) -> bool:
@@ -136,6 +137,8 @@ class ArchitectConfig:
 
     @property
     def api_key_source_env(self) -> str:
+        if self.api_key_override:
+            return "credential_store"
         if self._config_value(self.api_key_env):
             return self.api_key_env
         if self._config_value(self.fallback_api_key_env):
@@ -145,7 +148,8 @@ class ArchitectConfig:
     @property
     def api_key(self) -> str:
         return (
-            self._config_value(self.api_key_env)
+            self.api_key_override
+            or self._config_value(self.api_key_env)
             or self._config_value(self.fallback_api_key_env)
         )
 
