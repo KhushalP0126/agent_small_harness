@@ -66,6 +66,46 @@ Important guarantees:
 - Events and artifacts are redacted before persistence; replay verifies hashes
   and performs no external actions.
 
+### Bounded peer consultation
+
+When the local `small_worker` makes no semantic or diagnostic progress, an
+explicitly configured peer can provide one advisory memo before the next retry:
+
+```bash
+python3 scripts/run_coding_capability.py --peer-consultation --peer-provider architect
+```
+
+The peer is a diagnostician, not an implementation worker: it receives a
+redacted source excerpt capped at **3,200 characters**, may return at most
+**3,000 characters**, and is asked for no more than **three** repair
+hypotheses. Code-like replies are rejected, the peer receives no repository
+tools, and the original worker remains responsible for any subsequent change.
+The consultation record is included in the attempt journal so a reviewer can
+inspect why the retry changed direction.
+
+### What I learned building this
+
+- A second opinion helps only when its authority is bounded: keeping the peer
+  advisory preserves one accountable worker and the existing approval path.
+- Stagnation needs observable evidence. The controller triggers consultation
+  only after diagnostic or semantic progress stops, rather than on every
+  failed attempt.
+- Safety claims need executable checks. The feature has **4 focused boundary
+  tests** and **2 controller-flow tests** covering packet limits, credential
+  redaction, code-response rejection, and a successful advice-guided retry.
+
+This is a mechanism-level result, not a claim of model-quality improvement.
+Any resume statement should describe the implemented, tested controls rather
+than an unmeasured increase in repair success.
+
+## Verified result
+
+The current local acceptance run passed **633 automated tests**: **601 Python**
+tests (`make test`) and **32 Rust** terminal-protocol/UI tests (`make
+test-rust`). The peer-consultation addition is covered by the six tests noted
+above; this count is a reproducible engineering-quality metric, not a benchmark
+claim about a provider's coding ability.
+
 ## Language support
 
 `LanguageProfile` is the shared registry for aliases, file types, project

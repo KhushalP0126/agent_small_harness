@@ -1544,6 +1544,76 @@ def analyze(value):
         self.assertTrue(result.payload["attempts"][1]["diagnostic_stagnant"])
         self.assertEqual(result.payload["attempts"][1]["repair_worker"], "architect_llm")
 
+    def test_stagnant_worker_receives_bounded_peer_advice(self) -> None:
+        bad_v1 = """
+def analyze(value):
+    if value == 0:
+        return 0
+    if value == 1:
+        return 1
+    if value == 2:
+        return 2
+    if value == 3:
+        return 3
+    if value == 4:
+        return 4
+    if value == 5:
+        return 5
+    if value == 6:
+        return 6
+    return 7
+"""
+        cosmetic_repair = bad_v1.replace("return 7", "return value")
+        repaired = LINEAR.read_text(encoding="utf-8")
+        peer_packets = []
+        repair_prompts = []
+
+        def peer(packet: str) -> str:
+            peer_packets.append(packet)
+            self.assertIn("ADVICE ONLY", packet)
+            self.assertNotIn("Return only complete Python code", packet)
+            return "Option 1: extract the decision table into a lookup, then re-check the branch limit."
+
+        def repair_supplier(_draft: str, prompt: str) -> str:
+            repair_prompts.append(prompt)
+            return repaired if "PEER CONSULTATION" in prompt else cosmetic_repair
+
+        controller = GenerationController(
+            max_retries=2,
+            draft_supplier=lambda _prompt: bad_v1,
+            repair_supplier=repair_supplier,
+            architect_after_repair_attempts=99,
+            peer_consultant=peer,
+        )
+        result = controller.run(target="peer-consultation", initial_prompt="generate")
+
+        self.assertEqual(result.payload["final_status"], "completed")
+        self.assertEqual(len(peer_packets), 1)
+        self.assertEqual(len(repair_prompts), 2)
+        self.assertIn("PEER CONSULTATION", repair_prompts[1])
+        self.assertEqual(
+            result.payload["attempts"][1]["peer_consultations"][0]["trigger"],
+            "diagnostic_stagnation",
+        )
+
+    def test_peer_code_response_is_rejected_before_worker_retry(self) -> None:
+        bad_v1 = "def analyze(value):\n    return value\n"
+        events = []
+        controller = GenerationController(
+            max_retries=1,
+            draft_supplier=lambda _prompt: bad_v1,
+            repair_supplier=lambda draft, _prompt: draft,
+            peer_consultant=lambda _packet: "def analyze(value):\n    return value * 2\n",
+            behavior_spec=FunctionBehaviorSpec(
+                function_name="analyze",
+                cases=[BehaviorCase(name="double", args=(3,), kwargs={}, expected=6)],
+            ),
+            event_sink=events.append,
+        )
+        result = controller.run(target="reject-peer-code", initial_prompt="generate")
+        self.assertEqual(result.payload.get("peer_consultations", []), [])
+        self.assertTrue(any(event["type"] == "peer_consultation_rejected" for event in events))
+
     def test_diagnostic_stagnation_stops_cosmetic_worker_repair(self) -> None:
         bad_v1 = """
 def analyze(value):

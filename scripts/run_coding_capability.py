@@ -403,6 +403,8 @@ def run_tasks(
     save_artifacts: bool,
     config: HarnessConfig | None = None,
     architect_after_repair_attempts: int | None = None,
+    peer_consultation: bool = False,
+    peer_provider: str = "architect",
     resume_run_id: str | None = None,
 ) -> int:
     config = config or HarnessConfig()
@@ -450,14 +452,24 @@ def run_tasks(
         architect_supplier = (
             ArchitectModelSupplier()
             if architect_after_repair_attempts is not None
+            or (peer_consultation and peer_provider == "architect")
             else None
         )
+        peer_consultant = None
+        if peer_consultation:
+            if peer_provider == "qwen":
+                peer_consultant = lambda packet, supplier=repair_supplier: supplier("", packet)
+            elif architect_supplier is not None:
+                peer_consultant = lambda packet, supplier=architect_supplier: supplier.repair_draft("", packet)
+            else:
+                raise ValueError(f"unsupported peer provider: {peer_provider}")
         controller = GenerationController(
             max_retries=max_retries,
             draft_supplier=draft_supplier,
             repair_supplier=repair_supplier,
             architect_supplier=architect_supplier.repair_draft if architect_supplier else None,
             architect_after_repair_attempts=architect_after_repair_attempts,
+            peer_consultant=peer_consultant,
             policy=policy,
             behavior_spec=active_behavior_spec,
             behavior_timeout_seconds=behavior_timeout_seconds,
@@ -513,6 +525,8 @@ def run_tasks(
                     "contribution": contribution,
                     "supplier_mode": supplier_mode,
                     "architect_after_repair_attempts": architect_after_repair_attempts,
+                    "peer_consultation": peer_consultation,
+                    "peer_provider": peer_provider if peer_consultation else "",
                     "model_telemetry": model_telemetry,
                 },
             )
@@ -597,6 +611,20 @@ def main() -> int:
             "Reads DEEPSEEK_API_KEY or ARCHITECT_API_KEY. Defaults to ARCHITECT_MODEL=deepseek-v4-pro."
         ),
     )
+    parser.add_argument(
+        "--peer-consultation",
+        action="store_true",
+        help=(
+            "On detected repair stagnation, ask the explicitly selected peer provider for "
+            "one bounded advisory memo before the local worker retries. The peer cannot edit code."
+        ),
+    )
+    parser.add_argument(
+        "--peer-provider",
+        choices=("qwen", "architect"),
+        default="architect",
+        help="Provider for the advisory peer; only used with --peer-consultation.",
+    )
     args = parser.parse_args()
     config = load_config(args.config)
     worker_model = args.model or config.execution.models.resolve_worker_model(args.model_profile)
@@ -616,6 +644,8 @@ def main() -> int:
         save_artifacts=args.save_artifacts,
         config=config,
         architect_after_repair_attempts=args.architect_after_repair_attempts,
+        peer_consultation=args.peer_consultation,
+        peer_provider=args.peer_provider,
         resume_run_id=args.resume_run,
     )
 

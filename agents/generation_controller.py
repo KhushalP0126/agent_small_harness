@@ -11,6 +11,12 @@ from agents.engine_registry import EngineRegistry
 from agents.execution_agent import ExecutionAgent
 from agents.historian import DEFAULT_HISTORY_PATH, HistorianAgent
 from agents.parse_contract import ParseContractAgent, ParseFailure
+from agents.peer_consultation import (
+    PeerConsultation,
+    bounded_peer_memo,
+    build_peer_consultation_prompt,
+    is_advisory_memo,
+)
 from agents.repair_strategy import (
     DETERMINISTIC_TRANSFORM,
     JSON_PATCH,
@@ -61,6 +67,7 @@ RepairSupplier = Callable[[str, str], str]
 CheckpointWriter = Callable[[dict], None]
 EventSink = Callable[[dict], None]
 ProfilingRunner = Callable[[str], tuple[list[ProfileResult], list[EngineFinding]]]
+PeerConsultant = Callable[[str], str]
 
 SEVERITY_RANK = {
     "info": 0,
@@ -105,6 +112,7 @@ class GenerationAttempt:
             "issues": [],
         }
     )
+    peer_consultations: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -145,6 +153,7 @@ class GenerationSession:
     termination_reason: str = ""
     human_review: HumanReviewPayload | None = None
     contribution: dict = field(default_factory=dict)
+    peer_consultations: list[dict] = field(default_factory=list)
 
 
 class GenerationController(BaseAgent):
@@ -182,6 +191,8 @@ class GenerationController(BaseAgent):
         repository_root: Path | str | None = None,
         session_id: str = "",
         contribution_split: ContributionSplit | None = None,
+        peer_consultant: PeerConsultant | None = None,
+        peer_consultation_limit: int = 1,
     ) -> None:
         self.max_retries = max_retries
         self.draft_supplier = draft_supplier or (lambda prompt: prompt)
@@ -210,6 +221,8 @@ class GenerationController(BaseAgent):
         self.repository_root = Path(repository_root or Path.cwd()).resolve()
         self.session_id = session_id.strip()
         self.contribution_split = contribution_split
+        self.peer_consultant = peer_consultant
+        self.peer_consultation_limit = max(0, peer_consultation_limit)
         self._contribution = ContributionTelemetry(contribution_split or ContributionSplit())
         self._provider_schedule = WeightedSchedule(
             contribution_split or ContributionSplit(), self.session_id or "generation-session"
@@ -958,6 +971,66 @@ class GenerationController(BaseAgent):
             "- Return a complete coherent repair; it will be applied in memory and must pass every gate before review."
         )
 
+    def _request_peer_consultation(
+        self,
+        *,
+        session: GenerationSession,
+        target: str,
+        attempt: int,
+        failure_signature: str,
+        violation: Violation | None,
+        diagnostic_deltas: list[dict],
+        source: str,
+        trigger: str,
+    ) -> PeerConsultation | None:
+        """Ask an advisory peer once the normal worker is demonstrably stuck."""
+        if self.peer_consultant is None or len(session.peer_consultations) >= self.peer_consultation_limit:
+            return None
+        violation_payload = asdict(violation) if violation is not None else {}
+        packet = build_peer_consultation_prompt(
+            target=target,
+            attempt=attempt,
+            failure_signature=failure_signature,
+            violation=violation_payload,
+            diagnostic_deltas=diagnostic_deltas,
+            source=source,
+        )
+        try:
+            memo = bounded_peer_memo(self.peer_consultant(packet))
+        except Exception as exc:
+            self._emit_event(
+                {
+                    "type": "peer_consultation_failed",
+                    "session_id": self.session_id or session.target,
+                    "attempt": attempt,
+                    "trigger": trigger,
+                    "error": f"{type(exc).__name__}: {exc}",
+                }
+            )
+            return None
+        if not memo or not is_advisory_memo(memo):
+            self._emit_event(
+                {
+                    "type": "peer_consultation_rejected",
+                    "session_id": self.session_id or session.target,
+                    "attempt": attempt,
+                    "trigger": trigger,
+                    "reason": "peer_response_was_not_advisory",
+                }
+            )
+            return None
+        consultation = PeerConsultation(trigger, attempt, failure_signature, memo)
+        payload = consultation.to_dict()
+        session.peer_consultations.append(payload)
+        self._emit_event(
+            {
+                "type": "peer_consultation_completed",
+                "session_id": self.session_id or session.target,
+                **payload,
+            }
+        )
+        return consultation
+
     def _write_checkpoint(
         self,
         session: GenerationSession,
@@ -1447,6 +1520,7 @@ class GenerationController(BaseAgent):
             retry_prompt = ""
             repair_worker = ""
             next_repair_supplier: RepairSupplier | None = None
+            peer_consultations: list[dict] = []
             force_manual_review = False
             manual_review_reason = "repair_strategy_manual_review"
             if any(violation.kind == "lint_skipped" for violation in validation_result.violations):
@@ -1633,6 +1707,31 @@ class GenerationController(BaseAgent):
                     initial_prompt=initial_prompt,
                     failed_attempts=failed_attempts,
                 )
+                peer_trigger = (
+                    "diagnostic_stagnation"
+                    if diagnostic_stagnant
+                    else "semantic_stagnation"
+                    if semantic_stagnant
+                    else ""
+                )
+                if peer_trigger and repair_worker == "small_worker":
+                    consultation = self._request_peer_consultation(
+                        session=session,
+                        target=target,
+                        attempt=attempt_index,
+                        failure_signature=failure_signature,
+                        violation=primary_violation,
+                        diagnostic_deltas=diagnostic_deltas,
+                        source=draft,
+                        trigger=peer_trigger,
+                    )
+                    if consultation is not None:
+                        peer_consultations.append(consultation.to_dict())
+                        retry_prompt = budget_prompt(
+                            f"{retry_prompt}\n\nPEER CONSULTATION (advisory; choose only a compatible approach):\n"
+                            f"{consultation.memo}",
+                            summarizer=self.prompt_summarizer,
+                        ).text
                 if repair_worker == "architect_llm" and (
                     diagnostic_stagnant
                     or semantic_stagnant
@@ -1731,6 +1830,7 @@ class GenerationController(BaseAgent):
                 selected_strategy=selected_strategy,
                 execution_trace=execution_trace_payload,
                 profiling_validation=profiling_validation,
+                peer_consultations=peer_consultations,
             )
             attempt.branch_state_signature = build_branch_state_signature(target, attempt).to_dict()
             session.attempts.append(attempt)
@@ -1873,7 +1973,45 @@ class GenerationController(BaseAgent):
                 )
                 if (
                     (stagnant_repair or diagnostic_stagnant_repair)
+                    and worker_name == "small_worker"
+                    and not peer_consultations
+                ):
+                    consultation = self._request_peer_consultation(
+                        session=session,
+                        target=target,
+                        attempt=attempt_index,
+                        failure_signature=failure_signature,
+                        violation=primary_violation,
+                        diagnostic_deltas=diagnostic_deltas,
+                        source=draft,
+                        trigger="no_progress_repair",
+                    )
+                    if consultation is not None:
+                        peer_consultations.append(consultation.to_dict())
+                        retry_prompt = budget_prompt(
+                            f"{attempt.retry_prompt}\n\n"
+                            "PEER CONSULTATION (advisory; choose only a compatible approach):\n"
+                            f"{consultation.memo}",
+                            summarizer=self.prompt_summarizer,
+                        ).text
+                        attempt.retry_prompt = retry_prompt
+                        attempt.peer_consultations = peer_consultations
+                        try:
+                            next_draft = supplier(draft, retry_prompt)
+                        except Exception as exc:
+                            attempt.repair_error = f"{exc.__class__.__name__}: {exc}"
+                            session.final_status = "manual_review_required"
+                            session.termination_reason = "repair_supplier_error"
+                            session.human_review = self._human_review_payload(
+                                "repair_supplier_error", attempt
+                            )
+                            break
+                        stagnant_repair = self._is_stagnant(draft, next_draft)
+                        diagnostic_stagnant_repair = False
+                if (
+                    (stagnant_repair or diagnostic_stagnant_repair)
                     and worker_name not in {DETERMINISTIC_TRANSFORM, JSON_PATCH}
+                    and not peer_consultations
                 ):
                     if worker_name != "architect_llm":
                         fallback_worker, fallback_supplier = self._repair_worker_for(len(failed_attempts))
