@@ -34,7 +34,9 @@ Useful commands:
 | `make help` | Show the maintained command surface. |
 | `make start` | Build and open the Rust terminal UI. |
 | `make test` | Run the Python test suite. |
+| `make test-peer-consultation` | Run unit and controller tests for bounded peer consultation. |
 | `make test-rust` | Run Rust protocol and rendering tests. |
+| `make test-coding-capability-peer PEER_PROVIDER=architect` | Run a capability experiment with one advisory peer. |
 | `make check FILE=path` | Validate one source or project path. |
 | `make clean-cache` | Remove generated local caches and fixture builds. |
 
@@ -72,7 +74,7 @@ When the local `small_worker` makes no semantic or diagnostic progress, an
 explicitly configured peer can provide one advisory memo before the next retry:
 
 ```bash
-python3 scripts/run_coding_capability.py --peer-consultation --peer-provider architect
+make test-coding-capability-peer PEER_PROVIDER=architect
 ```
 
 The peer is a diagnostician, not an implementation worker: it receives a

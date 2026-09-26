@@ -15,6 +15,7 @@ RUN ?=
 RESUME_RUN ?=
 ARCHITECT_AFTER ?= 1
 ARCHITECT_MAX_RETRIES ?= 2
+PEER_PROVIDER ?= architect
 SPEC_PATH ?=
 REPO_ROOT ?= .
 REPO_MAP_FORMAT ?= context
@@ -52,7 +53,7 @@ IMAGE ?= agent-small-harness:local
 ARTIFACT_ARGS = $(if $(filter 1 true yes,$(SAVE_ARTIFACTS)),--save-artifacts --artifact-root "$(ARTIFACT_ROOT)",)
 DOC_ARGS = --doc-agent "$(DOC_AGENT)" $(if $(DOC_MODEL),--doc-model "$(DOC_MODEL)",) $(if $(DOC_OUTPUT),--doc-output "$(DOC_OUTPUT)",)
 
-.PHONY: help bootstrap setup setup-formal setup-browser setup-all install install-formal install-kernel env-path init-env api-dev tui rust-tui start test-rust check research-check research-readiness research-readiness-record research-agent-benchmark research-fixture-deepseek research-fixture-qwen research-formal-repair research-formal-repair-diverse research-formal-repair-general research-formal-nonnegative research-formal-repair-routed routing-report research-report research-model-comparison record-live-session verify-live-sessions research-compute-shield docker-build sandbox-run agent-benchmark test test-engine-expansion compute-shield test-claude-fixes test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-fixture resume-coding-capability test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-worker-limit-architect resume-worker-limit test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-python-ladder-stateful test-plan-mode-ladder test-raw-vs-harness test-raw-vs-harness-architect test-raw-vs-harness-repeated test-raw-vs-harness-ablation test-formal-experiment formal-counterexample-smoke structured-spec structured-spec-plan resume-structured-spec repo-map review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library tool-agent ollama-smoke inference-smoke live-repair clean-history clean-cache clean-generated
+.PHONY: help bootstrap setup setup-formal setup-browser setup-all install install-formal install-kernel env-path init-env api-dev tui rust-tui start test-rust check research-check research-readiness research-readiness-record research-agent-benchmark research-fixture-deepseek research-fixture-qwen research-formal-repair research-formal-repair-diverse research-formal-repair-general research-formal-nonnegative research-formal-repair-routed routing-report research-report research-model-comparison record-live-session verify-live-sessions research-compute-shield docker-build sandbox-run agent-benchmark test test-peer-consultation test-engine-expansion compute-shield test-claude-fixes test-behavior test-engine-edge-cases test-lint-engine test-adversarial test-coding-capability test-coding-capability-architect test-coding-capability-peer test-coding-capability-fixture resume-coding-capability test-worker-limit test-worker-limit-auto test-worker-limit-decompose test-worker-limit-architect resume-worker-limit test-python-ladder-parsing test-python-ladder-data test-python-ladder-algorithmic test-python-ladder-stateful test-plan-mode-ladder test-raw-vs-harness test-raw-vs-harness-architect test-raw-vs-harness-repeated test-raw-vs-harness-ablation test-formal-experiment formal-counterexample-smoke structured-spec structured-spec-plan resume-structured-spec repo-map review-run test-treesitter benchmark evaluate-engines aggregate-history discover-library approve-library tool-agent ollama-smoke inference-smoke live-repair clean-history clean-cache clean-generated
 
 help:
 	@printf "agent-coder_structure\n\n"
@@ -74,7 +75,9 @@ help:
 	@printf "  make review-run RUN=<id>                 Review a saved run\n"
 	@printf "\nValidation and maintenance:\n"
 	@printf "  make test                        Run the full Python test suite\n"
+	@printf "  make test-peer-consultation      Run bounded-peer unit and controller tests\n"
 	@printf "  make test-rust                   Run Rust protocol, UI-state, and renderer tests\n"
+	@printf "  make test-coding-capability-peer Run a capability pass with one advisory peer\n"
 	@printf "  make docker-build                Build the isolated execution image\n"
 	@printf "  make sandbox-run SOURCE=... LANGUAGE=python  Run source without network\n"
 	@printf "  make clean-cache                 Remove Python test caches (keeps artifacts and Rust build cache)\n"
@@ -178,6 +181,9 @@ docker-build:
 test:
 	$(PYTHON) -m unittest discover -s tests
 
+test-peer-consultation:
+	$(PYTHON) -m unittest tests.test_peer_consultation tests.test_agents_pipeline
+
 test-engine-expansion:
 	$(PYTHON) -m unittest tests.test_engine_expansion tests.test_tui_bridge
 
@@ -204,6 +210,9 @@ test-coding-capability:
 
 test-coding-capability-architect:
 	$(PYTHON) scripts/run_coding_capability.py --config "$(CONFIG_PATH)" --model "$(MODEL)" --runs "$(RUNS_PATH)" --record-runs --max-retries "$(ARCHITECT_MAX_RETRIES)" --architect-after-repair-attempts "$(ARCHITECT_AFTER)" $(ARTIFACT_ARGS)
+
+test-coding-capability-peer:
+	$(PYTHON) scripts/run_coding_capability.py --config "$(CONFIG_PATH)" --model "$(MODEL)" --runs "$(RUNS_PATH)" --record-runs --peer-consultation --peer-provider "$(PEER_PROVIDER)" $(ARTIFACT_ARGS)
 
 test-coding-capability-fixture:
 	$(PYTHON) scripts/run_coding_capability.py --config "$(CONFIG_PATH)" --supplier fixture --runs "$(RUNS_PATH)" $(ARTIFACT_ARGS)
