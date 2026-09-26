@@ -50,6 +50,7 @@ to same-named JSON under `docs/results/raw/`.
 | `agents/library_discovery.py` | Identifies candidate third-party libraries for a task. |
 | `agents/library_doc_search.py` | Retrieves library documentation for registered/discovered libraries. |
 | `agents/parse_contract.py` | Parses drafted source into language-aware contract information. |
+| `agents/peer_consultation.py` | Builds redacted, bounded advisory packets and rejects code-like peer memos. |
 | `agents/plan_mode.py` | Builds structured plans, questionnaires, and contract queues. |
 | `agents/postprocessor.py` | Normalizes generated output after model generation. |
 | `agents/preprocessor.py` | Normalizes task input before planning/generation. |

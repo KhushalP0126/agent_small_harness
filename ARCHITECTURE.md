@@ -29,7 +29,7 @@ Every graph revision is immutable and must be approved by hash before dispatch.
 | Terminal protocol | `harness_kernel/tui_bridge.py`, `terminal_bridge/commands.py` | JSONL events and readable command dispatch |
 | Public integration | `routing/` | Stable lazy bridge/tool imports without circular dependencies |
 | Terminal client | `rust_tui/` | Input/state loop, protocol models, presentation helpers |
-| Generation/repair | `agents/` | Planning, bounded worker attempts, diagnostics, artifacts |
+| Generation/repair | `agents/` | Planning, bounded worker attempts, diagnostics, artifacts, and advisory peer consultation |
 | Deterministic analysis | `engines/`, `validation/` | Parsing, compilation, lint, behavior, formal and policy gates |
 
 ## Mutation boundary
@@ -59,6 +59,15 @@ existing scripts. Legacy `TaskIR` becomes a one-node graph, and the Rust decoder
 continues to accept protocol-v6 events. `TUI/`, `benchmarker.py`, and
 `history.json` are retained compatibility surfaces rather than new extension
 points.
+
+## Repair escalation boundary
+
+The normal repair worker remains the only component that proposes a code
+change. If its diagnostics show no meaningful progress, it may receive one
+bounded peer memo with alternative hypotheses. The peer has no repository tools
+or write path, its packet and memo are redacted and size-limited, and code-like
+responses are rejected. This keeps peer consultation reviewable and advisory
+rather than introducing an untracked second implementation path.
 
 Generated caches and private `.env` data are ignored. Historical benchmark
 evidence remains under `docs/results/` with raw provenance and is not used as a

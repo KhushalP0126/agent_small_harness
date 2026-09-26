@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### Added
+
+- Added one bounded, advisory peer-consultation path for a demonstrably stalled
+  local repair worker. Consultation packets and memos are capped and redacted;
+  code-like peer replies are rejected before a retry can consume them.
+- Added `make test-peer-consultation` for focused boundary/controller coverage
+  and `make test-coding-capability-peer PEER_PROVIDER=...` for an explicitly
+  selected advisory-peer capability run.
+
 ### Changed
 
 - Made the Makefile the supported setup interface for core, formal-verification,
